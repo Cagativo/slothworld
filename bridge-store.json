@@ -1,0 +1,527 @@
+{
+  "nextEventId": 15,
+  "tasks": {
+    "1776027854220-47b4e9d4a2795": {
+      "id": "1776027854220-47b4e9d4a2795",
+      "type": "discord",
+      "title": "Reply test",
+      "priority": 2,
+      "progress": 0,
+      "required": 147.7959023204988,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "123456789",
+        "messageId": "987654321",
+        "content": "Hello from your agents 👀"
+      },
+      "retries": 1,
+      "maxRetries": 3,
+      "createdAt": 1776027854220,
+      "startedAt": 1776027899771,
+      "completedAt": 1776028054893,
+      "failedAt": null,
+      "executionResult": {
+        "success": false,
+        "error": "Unknown Channel"
+      }
+    },
+    "discord-message-1492997646682689608": {
+      "id": "discord-message-1492997646682689608",
+      "type": "discord",
+      "title": "Discord Command: !order 123",
+      "priority": 2,
+      "progress": 0,
+      "required": 129.16251646921734,
+      "status": "done",
+      "action": "fetch_order",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1492997646682689608",
+        "content": "!order 123",
+        "command": "order",
+        "args": [
+          "123"
+        ],
+        "raw": "!order 123"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776028777685,
+      "startedAt": 1776028820375,
+      "completedAt": 1776029225738,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "action": "fetch_order",
+        "note": "Action received and queued for downstream commerce worker."
+      },
+      "executionStartedAt": 1776029225728,
+      "executionCompletedAt": 1776029225728,
+      "executionDurationMs": 0,
+      "durationMs": 405363
+    },
+    "discord-message-1492997752206921882": {
+      "id": "discord-message-1492997752206921882",
+      "type": "discord",
+      "title": "Discord Command: !reply hello world",
+      "priority": 2,
+      "progress": 0,
+      "required": 95.77020827548507,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1492997752206921882",
+        "content": "!reply hello world",
+        "command": "reply",
+        "args": [
+          "hello",
+          "world"
+        ],
+        "raw": "!reply hello world"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776028802855,
+      "startedAt": 1776028819363,
+      "completedAt": 1776028820961,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      },
+      "executionStartedAt": 1776028820000,
+      "executionCompletedAt": 1776028820941,
+      "executionDurationMs": 941,
+      "durationMs": 1598
+    },
+    "discord-message-1492997961385250926": {
+      "id": "discord-message-1492997961385250926",
+      "type": "discord",
+      "title": "Discord Mention: <@1492987757981732864> hey can you help?",
+      "priority": 2,
+      "progress": 0,
+      "required": 90.30087512373797,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1492997961385250926",
+        "content": "<@1492987757981732864> hey can you help?",
+        "command": null,
+        "args": [],
+        "raw": "<@1492987757981732864> hey can you help?"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776028852641,
+      "startedAt": 1776029228294,
+      "completedAt": 1776029229348,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      },
+      "executionStartedAt": 1776029228891,
+      "executionCompletedAt": 1776029229341,
+      "executionDurationMs": 450,
+      "durationMs": 1054
+    },
+    "discord-message-1492999300567924929": {
+      "id": "discord-message-1492999300567924929",
+      "type": "discord",
+      "title": "Discord Command: !reply hello seal",
+      "priority": 2,
+      "progress": 0,
+      "required": 182.97655492758022,
+      "status": "processing",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1492999300567924929",
+        "content": "!reply hello seal",
+        "command": "reply",
+        "args": [
+          "hello",
+          "seal"
+        ],
+        "raw": "!reply hello seal"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776029171968,
+      "startedAt": 1776029902290,
+      "completedAt": null,
+      "failedAt": null
+    },
+    "discord-message-1493002458455081041": {
+      "id": "discord-message-1493002458455081041",
+      "type": "discord",
+      "title": "Discord Command: !product",
+      "priority": 2,
+      "progress": 0,
+      "required": 80.24711810907706,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1493002458455081041",
+        "content": "!product",
+        "command": "product",
+        "args": [],
+        "raw": "!product"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776029924859,
+      "startedAt": 1776029929152,
+      "completedAt": 1776029930094,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      },
+      "executionStartedAt": 1776029929676,
+      "executionCompletedAt": 1776029930083,
+      "executionDurationMs": 407,
+      "durationMs": 942
+    },
+    "discord-message-1493002623996002444": {
+      "id": "discord-message-1493002623996002444",
+      "type": "discord",
+      "title": "Discord Command: !product cat hat",
+      "priority": 2,
+      "progress": 0,
+      "required": 141.09122776328266,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1493002623996002444",
+        "content": "!product cat hat",
+        "command": "product",
+        "args": [
+          "cat",
+          "hat"
+        ],
+        "raw": "!product cat hat"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776029964385,
+      "startedAt": 1776029989719,
+      "completedAt": 1776029990919,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      },
+      "executionStartedAt": 1776029990583,
+      "executionCompletedAt": 1776029990909,
+      "executionDurationMs": 326,
+      "durationMs": 1200
+    },
+    "discord-message-1493002820931158188": {
+      "id": "discord-message-1493002820931158188",
+      "type": "discord",
+      "title": "Discord Command: !reply seal",
+      "priority": 2,
+      "progress": 0,
+      "required": 90.40313122188248,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1493002820931158188",
+        "content": "!reply seal",
+        "command": "reply",
+        "args": [
+          "seal"
+        ],
+        "raw": "!reply seal"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776030011486,
+      "startedAt": 1776030039986,
+      "completedAt": 1776030041243,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      },
+      "executionStartedAt": 1776030040769,
+      "executionCompletedAt": 1776030041227,
+      "executionDurationMs": 458,
+      "durationMs": 1257
+    },
+    "discord-message-1493008311367237672": {
+      "id": "discord-message-1493008311367237672",
+      "type": "discord",
+      "title": "Discord Command: !product cat hat",
+      "priority": 2,
+      "progress": 0,
+      "required": 124.72393693663851,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1493008311367237672",
+        "content": "!product cat hat",
+        "command": "product",
+        "args": [
+          "cat",
+          "hat"
+        ],
+        "raw": "!product cat hat"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776031320281,
+      "startedAt": 1776031618328,
+      "completedAt": 1776031620240,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      },
+      "executionStartedAt": 1776031619549,
+      "executionCompletedAt": 1776031620220,
+      "executionDurationMs": 671,
+      "durationMs": 1912
+    },
+    "discord-message-1493009705054765129": {
+      "id": "discord-message-1493009705054765129",
+      "type": "discord",
+      "title": "Discord Command: !reply seal ❤️",
+      "priority": 2,
+      "progress": 0,
+      "required": 89.98756669701407,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1493009705054765129",
+        "content": "!reply seal ❤️",
+        "command": "reply",
+        "args": [
+          "seal",
+          "❤️"
+        ],
+        "raw": "!reply seal ❤️"
+      },
+      "retries": 1,
+      "maxRetries": 3,
+      "createdAt": 1776031652608,
+      "startedAt": 1776031657315,
+      "completedAt": 1776031659753,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      },
+      "executionStartedAt": 1776031659347,
+      "executionCompletedAt": 1776031659733,
+      "executionDurationMs": 386,
+      "durationMs": 2438
+    },
+    "discord-message-1493015755653124368": {
+      "id": "discord-message-1493015755653124368",
+      "type": "discord",
+      "title": "Discord Command: !reply seal ❤️",
+      "priority": 2,
+      "progress": 0,
+      "required": 92.27456022785802,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1493015755653124368",
+        "content": "!reply seal ❤️",
+        "command": "reply",
+        "args": [
+          "seal",
+          "❤️"
+        ],
+        "raw": "!reply seal ❤️"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776033095180,
+      "startedAt": 1776033097564,
+      "completedAt": 1776033099408,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      },
+      "executionStartedAt": 1776033099027,
+      "executionCompletedAt": 1776033099402,
+      "executionDurationMs": 375,
+      "durationMs": 1844
+    },
+    "discord-message-1493015825404137552": {
+      "id": "discord-message-1493015825404137552",
+      "type": "discord",
+      "title": "Discord Command: !reply seal ❤️",
+      "priority": 2,
+      "progress": 0,
+      "required": 101.63589177891598,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1493015825404137552",
+        "content": "!reply seal ❤️",
+        "command": "reply",
+        "args": [
+          "seal",
+          "❤️"
+        ],
+        "raw": "!reply seal ❤️"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776033111740,
+      "startedAt": 1776033114117,
+      "completedAt": 1776033115814,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      },
+      "executionStartedAt": 1776033115382,
+      "executionCompletedAt": 1776033115808,
+      "executionDurationMs": 426,
+      "durationMs": 1697
+    },
+    "discord-message-1493015932115882077": {
+      "id": "discord-message-1493015932115882077",
+      "type": "discord",
+      "title": "Discord Command: !product seal bennie",
+      "priority": 2,
+      "progress": 0,
+      "required": 98.79570641310058,
+      "status": "done",
+      "action": "start_product_workflow",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1493015932115882077",
+        "content": "!product seal bennie",
+        "command": "product",
+        "args": [
+          "seal",
+          "bennie"
+        ],
+        "raw": "!product seal bennie"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776033137272,
+      "startedAt": 1776033137288,
+      "completedAt": 1776033137288,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "workflowId": "workflow-product-discord-message-1493015932115882077",
+        "note": "Converted command task into workflow"
+      }
+    },
+    "discord-message-1493016692199133325": {
+      "id": "discord-message-1493016692199133325",
+      "type": "discord",
+      "title": "Discord Command: !product seal pushie",
+      "priority": 2,
+      "progress": 0,
+      "required": 90.0786983048663,
+      "status": "done",
+      "action": "start_product_workflow",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "messageId": "1493016692199133325",
+        "content": "!product seal pushie",
+        "command": "product",
+        "args": [
+          "seal",
+          "pushie"
+        ],
+        "raw": "!product seal pushie"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776033318419,
+      "startedAt": 1776033318786,
+      "completedAt": 1776033318786,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "workflowId": "workflow-product-discord-message-1493016692199133325",
+        "note": "Converted command task into workflow"
+      }
+    }
+  },
+  "events": [
+    {
+      "id": 1,
+      "timestamp": 1776027854223,
+      "taskId": "1776027854220-47b4e9d4a2795"
+    },
+    {
+      "id": 2,
+      "timestamp": 1776028777686,
+      "taskId": "discord-message-1492997646682689608"
+    },
+    {
+      "id": 3,
+      "timestamp": 1776028802858,
+      "taskId": "discord-message-1492997752206921882"
+    },
+    {
+      "id": 4,
+      "timestamp": 1776028852643,
+      "taskId": "discord-message-1492997961385250926"
+    },
+    {
+      "id": 5,
+      "timestamp": 1776029171969,
+      "taskId": "discord-message-1492999300567924929"
+    },
+    {
+      "id": 6,
+      "timestamp": 1776029924859,
+      "taskId": "discord-message-1493002458455081041"
+    },
+    {
+      "id": 7,
+      "timestamp": 1776029964387,
+      "taskId": "discord-message-1493002623996002444"
+    },
+    {
+      "id": 8,
+      "timestamp": 1776030011488,
+      "taskId": "discord-message-1493002820931158188"
+    },
+    {
+      "id": 9,
+      "timestamp": 1776031320284,
+      "taskId": "discord-message-1493008311367237672"
+    },
+    {
+      "id": 10,
+      "timestamp": 1776031652609,
+      "taskId": "discord-message-1493009705054765129"
+    },
+    {
+      "id": 11,
+      "timestamp": 1776033095188,
+      "taskId": "discord-message-1493015755653124368"
+    },
+    {
+      "id": 12,
+      "timestamp": 1776033111740,
+      "taskId": "discord-message-1493015825404137552"
+    },
+    {
+      "id": 13,
+      "timestamp": 1776033137272,
+      "taskId": "discord-message-1493015932115882077"
+    },
+    {
+      "id": 14,
+      "timestamp": 1776033318420,
+      "taskId": "discord-message-1493016692199133325"
+    }
+  ]
+}

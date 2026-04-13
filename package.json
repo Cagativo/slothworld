@@ -1,0 +1,13 @@
+{
+  "name": "slothworld-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lightweight event bridge for slothworld task ingestion",
+  "scripts": {
+    "start": "node bridge-server.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  }
+}
