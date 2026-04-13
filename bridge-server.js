@@ -1,8 +1,14 @@
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
-require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+import http from 'http';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+import { Client, GatewayIntentBits } from 'discord.js';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const HOST = process.env.HOST || '0.0.0.0';
 const PORT = Number(process.env.PORT || 3000);
