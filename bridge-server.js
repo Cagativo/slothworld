@@ -369,6 +369,62 @@ function readJsonBody(req) {
   });
 }
 
+async function sendDiscordCompletionNotification(task, discordClient) {
+  const { channelId, messageId, content: taskContent } = task.payload || {};
+
+  if (!channelId || !discordClient || !discordClient.isReady || !discordClient.isReady()) {
+    console.log('[DISCORD]', 'completion_notification_skipped', {
+      taskId: task && task.id,
+      hasChannelId: !!channelId,
+      clientReady: !!(discordClient && discordClient.isReady && discordClient.isReady())
+    });
+    return null;
+  }
+
+  try {
+    const channel = await discordClient.channels.fetch(channelId);
+    const completionMsg = {
+      taskId: task.id,
+      type: task.type,
+      title: task.title,
+      status: task.status,
+      durationMs: task.durationMs || 0,
+      error: task.lastError || null,
+      content: typeof taskContent === 'string' ? taskContent : null
+    };
+    const content = `**Task Completed**\n\`\`\`json\n${JSON.stringify(completionMsg, null, 2).slice(0, 1800)}\n\`\`\``;
+
+    if (messageId) {
+      try {
+        const originalMessage = await channel.messages.fetch(messageId);
+        const sent = await originalMessage.reply(content);
+        console.log('[DISCORD]', 'completion_notification_sent', {
+          taskId: task.id,
+          mode: 'reply',
+          channelId,
+          messageId,
+          sentMessageId: sent && sent.id ? sent.id : null
+        });
+        return true;
+      } catch (replyError) {
+        console.warn('[DISCORD]', 'completion_reply_failed_fallback_send', task.id, replyError.message);
+      }
+    }
+
+    const sent = await channel.send(content);
+    console.log('[DISCORD]', 'completion_notification_sent', {
+      taskId: task.id,
+      mode: 'channel',
+      channelId,
+      sentMessageId: sent && sent.id ? sent.id : null
+    });
+    return true;
+  } catch (error) {
+    console.warn('[DISCORD]', 'completion_notification_failed', task.id, error.message);
+    return false;
+  }
+}
+
 async function executeDiscordTask(task) {
   const { channelId, messageId, content } = task.payload || {};
 
@@ -557,16 +613,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const updatedTask = {
-        ...existing,
-        status: 'processing',
-        startedAt: existing.startedAt || Date.now()
-      };
+      existing.status = 'processing';
+      existing.startedAt = existing.startedAt || Date.now();
 
-      taskStore[taskId] = updatedTask;
       saveStore();
       logTaskStatus(taskId, 'processing');
-      writeJson(res, 200, { ok: true, task: updatedTask });
+      writeJson(res, 200, { ok: true, task: existing });
     } catch (error) {
       writeJson(res, 400, { error: error.message || 'Request failed' });
     }
@@ -597,25 +649,33 @@ const server = http.createServer(async (req, res) => {
       const failedAt = body.status === 'failed' ? now : existing.failedAt;
       const finishedAt = body.status === 'done' ? completedAt : failedAt;
       const durationMs = existing.startedAt && finishedAt ? Math.max(0, finishedAt - existing.startedAt) : existing.durationMs;
-      const updatedTask = {
-        ...existing,
-        status: body.status,
-        retries: typeof body.retries === 'number' ? body.retries : existing.retries,
-        executionResult: body.executionResult !== undefined ? body.executionResult : existing.executionResult,
-        startedAt: existing.startedAt || now,
-        completedAt,
-        failedAt,
-        durationMs,
-        lastError: body.executionResult && body.executionResult.error ? body.executionResult.error : existing.lastError
-      };
+      const task = existing;
+      task.status = body.status;
+      task.retries = typeof body.retries === 'number' ? body.retries : task.retries;
+      task.executionResult = body.executionResult !== undefined ? body.executionResult : task.executionResult;
+      if (body.payload && typeof body.payload === 'object') {
+        if (!task.payload || typeof task.payload !== 'object') {
+          task.payload = {};
+        }
+        Object.assign(task.payload, body.payload);
+      }
+      task.startedAt = task.startedAt || now;
+      task.completedAt = completedAt;
+      task.failedAt = failedAt;
+      task.durationMs = durationMs;
+      task.lastError = body.executionResult && body.executionResult.error ? body.executionResult.error : task.lastError;
 
-      taskStore[taskId] = updatedTask;
+      console.log('[ACK DEBUG]', task.id, task.payload);
+
       saveStore();
       logTaskStatus(taskId, body.status, {
-        durationMs: updatedTask.durationMs,
-        error: updatedTask.lastError || null
+        durationMs: task.durationMs,
+        error: task.lastError || null,
+        hasPayload: !!task.payload,
+        channelId: task.payload && task.payload.channelId ? task.payload.channelId : null
       });
-      writeJson(res, 200, { ok: true, task: updatedTask });
+      sendDiscordCompletionNotification(task, discordClient);
+      writeJson(res, 200, { ok: true, task });
     } catch (error) {
       writeJson(res, 400, { error: error.message || 'Request failed' });
     }
@@ -638,22 +698,18 @@ const server = http.createServer(async (req, res) => {
       const executionStartedAt = Date.now();
       const result = await executeTask(existing);
       const executionCompletedAt = Date.now();
-      const updatedTask = {
-        ...existing,
-        executionResult: result,
-        executionStartedAt,
-        executionCompletedAt,
-        executionDurationMs: executionCompletedAt - executionStartedAt,
-        lastError: result && result.error ? result.error : existing.lastError
-      };
+      existing.executionResult = result;
+      existing.executionStartedAt = executionStartedAt;
+      existing.executionCompletedAt = executionCompletedAt;
+      existing.executionDurationMs = executionCompletedAt - executionStartedAt;
+      existing.lastError = result && result.error ? result.error : existing.lastError;
 
-      taskStore[taskId] = updatedTask;
       saveStore();
       logTaskStatus(taskId, result && result.success ? 'executed' : 'execute_failed', {
-        durationMs: updatedTask.executionDurationMs,
-        error: updatedTask.lastError || null
+        durationMs: existing.executionDurationMs,
+        error: existing.lastError || null
       });
-      writeJson(res, 200, { ok: true, result, durationMs: updatedTask.executionDurationMs });
+      writeJson(res, 200, { ok: true, result, durationMs: existing.executionDurationMs });
     } catch (error) {
       writeJson(res, 400, { error: error.message || 'Request failed' });
     }

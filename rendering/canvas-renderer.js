@@ -13,7 +13,6 @@ import {
   drawPendingWorkflowsOverlay,
   drawWorkflowOverlay
 } from './overlays.js';
-import { drawDebugConsole } from '../ui/debug-console.js';
 
 // --- Low-level sprite helpers ---
 function drawSprite(ctx, image, x, y, config) {
@@ -140,5 +139,4 @@ export function render() {
   drawGlobalHud(ctx);
   drawPendingWorkflowsOverlay(ctx);
   drawWorkflowOverlay(ctx);
-  drawDebugConsole(ctx);
 }

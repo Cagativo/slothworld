@@ -1,5 +1,5 @@
 {
-  "nextEventId": 15,
+  "nextEventId": 27,
   "tasks": {
     "1776027854220-47b4e9d4a2795": {
       "id": "1776027854220-47b4e9d4a2795",
@@ -450,6 +450,310 @@
         "workflowId": "workflow-product-discord-message-1493016692199133325",
         "note": "Converted command task into workflow"
       }
+    },
+    "1776085092223-2ea3f1c043fd": {
+      "id": "1776085092223-2ea3f1c043fd",
+      "type": "discord",
+      "title": "Test task",
+      "priority": 1,
+      "progress": 0,
+      "required": 186.87214814322738,
+      "status": "processing",
+      "action": "reply_to_message",
+      "payload": {
+        "test": true
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776085092223,
+      "startedAt": 1776085168875,
+      "completedAt": null,
+      "failedAt": null
+    },
+    "manual-inject-test-1": {
+      "id": "manual-inject-test-1",
+      "type": "discord",
+      "title": "Manual Inject",
+      "priority": 1,
+      "progress": 0,
+      "required": 170.48231631131878,
+      "status": "failed",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "demo",
+        "messageId": "demo",
+        "content": "hello"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776086175658,
+      "startedAt": 1776086177632,
+      "completedAt": null,
+      "failedAt": 1776086179913,
+      "executionResult": {
+        "success": false,
+        "error": "Invalid Form Body\nchannel_id[NUMBER_TYPE_COERCE]: Value \"demo\" is not snowflake."
+      },
+      "executionStartedAt": 1776086179672,
+      "executionCompletedAt": 1776086179889,
+      "executionDurationMs": 217,
+      "lastError": "Invalid Form Body\nchannel_id[NUMBER_TYPE_COERCE]: Value \"demo\" is not snowflake.",
+      "durationMs": 2281
+    },
+    "1776089869400-0942a53eaaf2b8": {
+      "id": "1776089869400-0942a53eaaf2b8",
+      "type": "discord",
+      "title": "Injected task",
+      "priority": 1,
+      "progress": 0,
+      "required": 179.05441510755912,
+      "status": "failed",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "unknown-channel",
+        "messageId": "1776089869400-efeb6fc721d92",
+        "content": "ola"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776086293423,
+      "startedAt": 1776086293706,
+      "completedAt": null,
+      "failedAt": 1776086293706,
+      "executionResult": {
+        "success": false,
+        "error": "Invalid Form Body\nchannel_id[NUMBER_TYPE_COERCE]: Value \"unknown-channel\" is not snowflake."
+      },
+      "executionStartedAt": 1776086293440,
+      "executionCompletedAt": 1776086293689,
+      "executionDurationMs": 249,
+      "lastError": "Invalid Form Body\nchannel_id[NUMBER_TYPE_COERCE]: Value \"unknown-channel\" is not snowflake."
+    },
+    "1776089983690-bb6b579d8c5558": {
+      "id": "1776089983690-bb6b579d8c5558",
+      "type": "discord",
+      "title": "Injected task",
+      "priority": 1,
+      "progress": 0,
+      "required": 88.44656946097471,
+      "status": "failed",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "unknown-channel",
+        "messageId": "1776089983690-ce52a72311e9e",
+        "content": "message"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776086408772,
+      "startedAt": 1776086409101,
+      "completedAt": null,
+      "failedAt": 1776086414019,
+      "executionResult": {
+        "success": false,
+        "error": "Invalid Form Body\nchannel_id[NUMBER_TYPE_COERCE]: Value \"unknown-channel\" is not snowflake."
+      },
+      "executionStartedAt": 1776086413745,
+      "executionCompletedAt": 1776086414005,
+      "executionDurationMs": 260,
+      "lastError": "Invalid Form Body\nchannel_id[NUMBER_TYPE_COERCE]: Value \"unknown-channel\" is not snowflake.",
+      "durationMs": 4918
+    },
+    "diag-discord-1": {
+      "id": "diag-discord-1",
+      "type": "discord",
+      "title": "Diag completion ping",
+      "priority": 1,
+      "progress": 0,
+      "required": 131.69281004905332,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "diag content"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776097649481,
+      "startedAt": 1776097658915,
+      "completedAt": 1776097690946,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      },
+      "durationMs": 32031
+    },
+    "diag-discord-2": {
+      "id": "diag-discord-2",
+      "type": "discord",
+      "title": "Diag completion ping 2",
+      "priority": 1,
+      "progress": 0,
+      "required": 102.1206167334881,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "diag content 2"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776097733866,
+      "startedAt": 1776097733975,
+      "completedAt": 1776097733975,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      }
+    },
+    "diag-ui-flow-1": {
+      "id": "diag-ui-flow-1",
+      "type": "discord",
+      "title": "UI Flow Check",
+      "priority": 1,
+      "progress": 0,
+      "required": 108.89264226883454,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "UI flow diag"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776098069192,
+      "startedAt": 1776098069299,
+      "completedAt": 1776098069299,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      }
+    },
+    "diag-ack-mut-1": {
+      "id": "diag-ack-mut-1",
+      "type": "discord",
+      "title": "Ack mutation check",
+      "priority": 1,
+      "progress": 0,
+      "required": 194.836266456257,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "ack payload check"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776098755587,
+      "startedAt": 1776098755844,
+      "completedAt": 1776098755844,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      }
+    },
+    "diag-unified-1": {
+      "id": "diag-unified-1",
+      "type": "discord",
+      "title": "Unified completion path",
+      "priority": 1,
+      "progress": 0,
+      "required": 107.52946771979725,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "unified flow"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776099145015,
+      "startedAt": 1776099145295,
+      "completedAt": 1776099145295,
+      "failedAt": null,
+      "executionResult": {
+        "success": true
+      }
+    },
+    "manual-1776102783993-2e9f47fd6c11a": {
+      "id": "manual-1776102783993-2e9f47fd6c11a",
+      "type": "discord",
+      "title": "test",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "test",
+        "messageId": null
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776099208601,
+      "startedAt": 1776099208614,
+      "completedAt": 1776099208614,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
+    },
+    "manual-1776102807191-77c1a1ff271eb": {
+      "id": "manual-1776102807191-77c1a1ff271eb",
+      "type": "discord",
+      "title": "task sealiana",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "seal",
+        "messageId": null
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776099232710,
+      "startedAt": 1776099232731,
+      "completedAt": 1776099232731,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
+    },
+    "manual-1776102855676-d465a71959d818": {
+      "id": "manual-1776102855676-d465a71959d818",
+      "type": "discord",
+      "title": "test",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "(•⩊• っ)3",
+        "messageId": null
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776099278593,
+      "startedAt": 1776099278607,
+      "completedAt": 1776099278607,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
     }
   },
   "events": [
@@ -522,6 +826,66 @@
       "id": 14,
       "timestamp": 1776033318420,
       "taskId": "discord-message-1493016692199133325"
+    },
+    {
+      "id": 15,
+      "timestamp": 1776085092229,
+      "taskId": "1776085092223-2ea3f1c043fd"
+    },
+    {
+      "id": 16,
+      "timestamp": 1776086175660,
+      "taskId": "manual-inject-test-1"
+    },
+    {
+      "id": 17,
+      "timestamp": 1776086293424,
+      "taskId": "1776089869400-0942a53eaaf2b8"
+    },
+    {
+      "id": 18,
+      "timestamp": 1776086408773,
+      "taskId": "1776089983690-bb6b579d8c5558"
+    },
+    {
+      "id": 19,
+      "timestamp": 1776097649482,
+      "taskId": "diag-discord-1"
+    },
+    {
+      "id": 20,
+      "timestamp": 1776097733868,
+      "taskId": "diag-discord-2"
+    },
+    {
+      "id": 21,
+      "timestamp": 1776098069193,
+      "taskId": "diag-ui-flow-1"
+    },
+    {
+      "id": 22,
+      "timestamp": 1776098755593,
+      "taskId": "diag-ack-mut-1"
+    },
+    {
+      "id": 23,
+      "timestamp": 1776099145018,
+      "taskId": "diag-unified-1"
+    },
+    {
+      "id": 24,
+      "timestamp": 1776099208603,
+      "taskId": "manual-1776102783993-2e9f47fd6c11a"
+    },
+    {
+      "id": 25,
+      "timestamp": 1776099232713,
+      "taskId": "manual-1776102807191-77c1a1ff271eb"
+    },
+    {
+      "id": 26,
+      "timestamp": 1776099278598,
+      "taskId": "manual-1776102855676-d465a71959d818"
     }
   ]
 }

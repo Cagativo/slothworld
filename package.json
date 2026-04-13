@@ -1,6 +1,7 @@
 {
   "name": "slothworld-bridge",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "description": "Lightweight event bridge for slothworld task ingestion",
   "scripts": {

@@ -374,10 +374,15 @@ export function createProductWorkflowFromTask(task) {
   });
 
   // Mark the command trigger task as resolved so polling does not re-deliver it.
-  sendTaskAck(task.id, 'done', task.retries || 0, {
-    success: true,
-    workflowId: workflow.id,
-    note: 'Converted command task into workflow'
+  sendTaskAck(task, {
+    status: 'done',
+    retries: task.retries || 0,
+    executionResult: {
+      success: true,
+      workflowId: workflow.id,
+      note: 'Converted command task into workflow'
+    },
+    payload: task.payload
   });
 
   return workflow;

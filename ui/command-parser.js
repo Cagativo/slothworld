@@ -4,13 +4,15 @@ export function parseCommandInput(inputString) {
     return { success: false, error: 'empty_command' };
   }
 
-  const injectMatch = input.match(/^inject\s+(discord|shopify)\s+"([\s\S]+)"$/i);
+  const injectMatch = input.match(/^inject\s+(discord|shopify)\s+"([\s\S]+?)"(?:\s+channel\s+(\d{17,20}))?(?:\s+message\s+(\d{17,20}))?$/i);
   if (injectMatch) {
     return {
       success: true,
       command: 'inject',
       type: injectMatch[1].toLowerCase(),
-      message: injectMatch[2]
+      message: injectMatch[2],
+      channelId: injectMatch[3] || null,
+      messageId: injectMatch[4] || null
     };
   }
 

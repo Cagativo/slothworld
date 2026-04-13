@@ -12,9 +12,12 @@ import { update } from './core/agent-logic.js';
 import { render } from './rendering/canvas-renderer.js';
 import { controlAPI, dispatchCommand, inspectAgent, inspectDesk, inspectWorkflow } from './ui/control-api.js';
 import { bindKeyboard } from './ui/keyboard-input.js';
+import { initOperatorControlPanel } from './ui/operator-control-panel.js';
+import { initTaskCreatorPanel } from './ui/task-creator-panel.js';
 
 // DEV_MODE flag — set before any module reads it via window.DEV_MODE
 window.DEV_MODE = false;
+window.__DEBUG_MODE__ = false;
 
 // Preserve the original window debug API surface exactly
 window.addTaskToDesk  = addTaskToDesk;
@@ -39,6 +42,8 @@ if (window.DEV_MODE) {
 }
 
 bindKeyboard();
+initOperatorControlPanel();
+initTaskCreatorPanel();
 
 // --- Game loop ---
 function loop() {

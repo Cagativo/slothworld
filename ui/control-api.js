@@ -152,10 +152,47 @@ function injectTask(task) {
     return { success: false, error: 'invalid_task' };
   }
 
+  console.log('[UI][TASK_INJECT]', 'incoming_task', task);
+
   const mergedTask = {
+    ...task,
     id: task.id || `manual-${generateId()}`,
-    ...task
+    payload: task && typeof task.payload === 'object' && task.payload !== null
+      ? { ...task.payload }
+      : {}
   };
+
+  if (mergedTask.type === 'discord') {
+    if (!mergedTask.payload.channelId && task.channelId) {
+      mergedTask.payload.channelId = String(task.channelId).trim();
+    }
+
+    if ((mergedTask.payload.content === undefined || mergedTask.payload.content === null || mergedTask.payload.content === '') && task.content) {
+      mergedTask.payload.content = String(task.content);
+    }
+
+    if (!mergedTask.payload.messageId && task.messageId) {
+      mergedTask.payload.messageId = String(task.messageId).trim();
+    }
+
+    mergedTask.payload = {
+      channelId: mergedTask.payload.channelId || null,
+      content: typeof mergedTask.payload.content === 'string' ? mergedTask.payload.content : '',
+      messageId: mergedTask.payload.messageId || null,
+      ...mergedTask.payload
+    };
+
+    if (!mergedTask.payload.channelId) {
+      console.warn('Missing channelId for Discord task', {
+        taskId: mergedTask.id,
+        type: mergedTask.type,
+        payload: mergedTask.payload
+      });
+    }
+  }
+
+  console.log('[UI][TASK_INJECT]', 'normalized_task', mergedTask);
+  console.log('[UI][TASK_INJECT]', 'before_addTaskToDesk', mergedTask);
 
   const desk = addTaskToDesk(mergedTask);
   if (!desk) {
@@ -316,7 +353,13 @@ export function dispatchCommand(inputString) {
     if (parsed.type === 'discord') {
       result = {
         command: 'inject',
-        ...controlAPI.injectTask(createDiscordTask({ title: 'Manual inject', type: 'command', content: parsed.message }))
+        ...controlAPI.injectTask(createDiscordTask({
+          title: 'Manual inject',
+          type: 'command',
+          content: parsed.message,
+          channelId: parsed.channelId || undefined,
+          messageId: parsed.messageId || undefined
+        }))
       };
       affectedEntities = {
         tasks: result && result.data && result.data.id ? [result.data.id] : []

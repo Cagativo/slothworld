@@ -55,6 +55,11 @@ export function claimNextTask(desk) {
   nextTask.status = 'processing';
   syncTaskStart(nextTask);
   desk.currentTask = nextTask;
+  console.log('[TASK][CURRENT]', nextTask.id, {
+    hasPayload: !!nextTask.payload,
+    channelId: nextTask.payload && nextTask.payload.channelId ? nextTask.payload.channelId : null,
+    content: nextTask.payload && typeof nextTask.payload.content === 'string' ? nextTask.payload.content : null
+  });
   console.log('[TASK]', 'started', nextTask.type, nextTask.title);
   emitEvent('TASK_STARTED', {
     taskId: nextTask.id,
