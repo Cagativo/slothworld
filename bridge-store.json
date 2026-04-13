@@ -1,5 +1,5 @@
 {
-  "nextEventId": 27,
+  "nextEventId": 33,
   "tasks": {
     "1776027854220-47b4e9d4a2795": {
       "id": "1776027854220-47b4e9d4a2795",
@@ -754,6 +754,162 @@
         "skipped": true,
         "note": "discord_target_unavailable"
       }
+    },
+    "manual-1776105096848-487a374e2772d": {
+      "id": "manual-1776105096848-487a374e2772d",
+      "type": "discord",
+      "title": "test",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "seal",
+        "messageId": null
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776101520156,
+      "startedAt": 1776101520187,
+      "completedAt": 1776101520187,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
+    },
+    "manual-1776105627267-ec59a020c62e28": {
+      "id": "manual-1776105627267-ec59a020c62e28",
+      "type": "discord",
+      "title": "seal",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "seal",
+        "messageId": null
+      },
+      "retries": 1,
+      "maxRetries": 3,
+      "createdAt": 1776102051358,
+      "startedAt": 1776102051375,
+      "completedAt": 1776102051375,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
+    },
+    "manual-1776105640921-d354382f0a8908": {
+      "id": "manual-1776105640921-d354382f0a8908",
+      "type": "discord",
+      "title": "test",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "seal",
+        "messageId": null
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776102063497,
+      "startedAt": 1776102063513,
+      "completedAt": 1776102063513,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
+    },
+    "manual-1776106033741-dac11f3e19b47": {
+      "id": "manual-1776106033741-dac11f3e19b47",
+      "type": "discord",
+      "title": "seal",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "seal",
+        "messageId": null
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776102458643,
+      "startedAt": 1776102458659,
+      "completedAt": 1776102458659,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
+    },
+    "manual-1776106049137-bc37d80c5d00d8": {
+      "id": "manual-1776106049137-bc37d80c5d00d8",
+      "type": "discord",
+      "title": "seal",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "seal",
+        "messageId": null
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776102472602,
+      "startedAt": 1776102472623,
+      "completedAt": 1776102472623,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
+    },
+    "manual-1776106315049-3ccd624645f3f": {
+      "id": "manual-1776106315049-3ccd624645f3f",
+      "type": "discord",
+      "title": "test",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "test",
+        "messageId": null
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776102740659,
+      "startedAt": 1776102740679,
+      "completedAt": 1776102740679,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
     }
   },
   "events": [
@@ -886,6 +1042,36 @@
       "id": 26,
       "timestamp": 1776099278598,
       "taskId": "manual-1776102855676-d465a71959d818"
+    },
+    {
+      "id": 27,
+      "timestamp": 1776101520167,
+      "taskId": "manual-1776105096848-487a374e2772d"
+    },
+    {
+      "id": 28,
+      "timestamp": 1776102051360,
+      "taskId": "manual-1776105627267-ec59a020c62e28"
+    },
+    {
+      "id": 29,
+      "timestamp": 1776102063499,
+      "taskId": "manual-1776105640921-d354382f0a8908"
+    },
+    {
+      "id": 30,
+      "timestamp": 1776102458645,
+      "taskId": "manual-1776106033741-dac11f3e19b47"
+    },
+    {
+      "id": 31,
+      "timestamp": 1776102472609,
+      "taskId": "manual-1776106049137-bc37d80c5d00d8"
+    },
+    {
+      "id": 32,
+      "timestamp": 1776102740665,
+      "taskId": "manual-1776106315049-3ccd624645f3f"
     }
   ]
 }

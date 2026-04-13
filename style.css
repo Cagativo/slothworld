@@ -3,11 +3,53 @@ body {
   background: #111;
   color: #ddd;
   font-family: monospace;
+  overflow: hidden;
+}
+
+#app-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+#left-sidebar {
+  width: 760px;
+  max-width: 56vw;
+  box-sizing: border-box;
+  background: rgba(12, 14, 18, 0.96);
+  border-right: 1px solid #2f343d;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+#control-panels-header {
+  font-size: 13px;
+  font-weight: 700;
+  color: #cbd5e1;
+  margin: 2px 0 10px;
+  letter-spacing: 0.02em;
+}
+
+#control-panels-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+#main-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow: auto;
+  padding: 12px;
 }
 
 canvas {
   display: block;
-  margin: 0;
+  margin: 0 auto;
   image-rendering: pixelated;
   position: relative;
   z-index: 1;
@@ -15,18 +57,12 @@ canvas {
 }
 
 #operator-control-panel {
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 360px;
-  height: 100vh;
-  overflow-y: auto;
+  width: 100%;
   box-sizing: border-box;
-  background: rgba(12, 14, 18, 0.96);
-  border-left: 1px solid #2f343d;
+  background: rgba(18, 22, 30, 0.72);
+  border: 1px solid #2f343d;
+  border-radius: 4px;
   padding: 10px;
-  z-index: 1000;
-  pointer-events: auto;
 }
 
 .ocp-header h2 {
@@ -106,33 +142,13 @@ canvas {
   overflow: auto;
 }
 
-@media (min-width: 1080px) {
-  canvas {
-    margin-right: 360px;
-  }
-}
-
-@media (max-width: 1079px) {
-  #operator-control-panel {
-    position: static;
-    width: 100%;
-    height: auto;
-    border-left: none;
-    border-top: 1px solid #2f343d;
-  }
-}
-
 #task-creator-panel {
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  width: 340px;
-  background: rgba(12, 14, 18, 0.96);
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(18, 22, 30, 0.72);
   border: 1px solid #2f343d;
   border-radius: 4px;
   padding: 12px;
-  z-index: 1100;
-  pointer-events: auto;
 }
 
 .tcp-container h3 {
@@ -204,4 +220,25 @@ canvas {
   background: rgba(239, 68, 68, 0.2);
   color: #fca5a5;
   border: 1px solid #ef4444;
+}
+
+@media (max-width: 1200px) {
+  #left-sidebar {
+    width: 100%;
+    max-width: none;
+    border-right: none;
+    border-bottom: 1px solid #2f343d;
+  }
+
+  #app-layout {
+    flex-direction: column;
+  }
+
+  #control-panels-stack {
+    grid-template-columns: 1fr;
+  }
+
+  body {
+    overflow: auto;
+  }
 }

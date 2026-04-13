@@ -1,4 +1,4 @@
-import { canvas, agents, desks, workflows } from '../core/app-state.js';
+import { canvas, agents, desks, workflows, eventStream } from '../core/app-state.js';
 import { spriteConfigs } from '../core/constants.js';
 
 // --- Shared rendering state ---
@@ -7,8 +7,90 @@ export const uiFxState = {
   knownTasks: new Map(),
   creationPops: [],
   completionFlashes: [],
-  particles: []
+  particles: [],
+  speechEventCursor: 0
 };
+
+function setAgentSpeechBubble(agent, text, duration = 2000) {
+  if (!agent) {
+    return;
+  }
+
+  agent.speechBubble = {
+    text: String(text || ''),
+    timer: duration,
+    duration
+  };
+}
+
+function processSpeechEvents() {
+  while (uiFxState.speechEventCursor < eventStream.length) {
+    const event = eventStream[uiFxState.speechEventCursor];
+    uiFxState.speechEventCursor += 1;
+
+    if (!event || !event.payload) {
+      continue;
+    }
+
+    if (event.type === 'TASK_STARTED') {
+      const desk = desks[event.payload.deskIndex];
+      const agent = desk && desk.occupant ? desk.occupant : null;
+      const lines = ['got it!', 'on it', 'processing task'];
+      const text = lines[Math.floor(Math.random() * lines.length)];
+      setAgentSpeechBubble(agent, text, 1800);
+      continue;
+    }
+
+    if (event.type === 'TASK_CREATED') {
+      const candidates = agents.filter((agent) => agent.state === 'idle');
+      if (!candidates.length) {
+        continue;
+      }
+
+      const selected = candidates[Math.floor(Math.random() * candidates.length)];
+      const lines = ['on it', 'got it!'];
+      const text = lines[Math.floor(Math.random() * lines.length)];
+      setAgentSpeechBubble(selected, text, 1400);
+    }
+  }
+}
+
+export function drawSpeechBubbles(ctx) {
+  processSpeechEvents();
+
+  for (const agent of agents) {
+    if (!agent.speechBubble || !agent.speechBubble.text) {
+      continue;
+    }
+
+    agent.speechBubble.timer = Math.max(0, agent.speechBubble.timer - 16.67);
+    if (agent.speechBubble.timer <= 0) {
+      agent.speechBubble.text = '';
+      continue;
+    }
+
+    const duration = agent.speechBubble.duration || 2000;
+    const alpha = Math.max(0, Math.min(1, agent.speechBubble.timer / duration));
+    const text = agent.speechBubble.text;
+    const x = agent.x;
+    const y = agent.y - spriteConfigs.agent.height / 2 - 22;
+    const paddingX = 6;
+    const bubbleHeight = 14;
+
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    const textWidth = ctx.measureText(text).width;
+    const bubbleWidth = textWidth + paddingX * 2;
+
+    ctx.fillStyle = `rgba(10, 14, 24, ${0.78 * alpha})`;
+    ctx.fillRect(x - bubbleWidth / 2, y - bubbleHeight / 2, bubbleWidth, bubbleHeight);
+    ctx.strokeStyle = `rgba(186, 230, 253, ${0.55 * alpha})`;
+    ctx.strokeRect(x - bubbleWidth / 2, y - bubbleHeight / 2, bubbleWidth, bubbleHeight);
+
+    ctx.fillStyle = `rgba(247, 244, 223, ${0.95 * alpha})`;
+    ctx.fillText(text, x, y + 3);
+  }
+}
 
 // --- Color/label helpers ---
 export function getDeskPriorityColor(priority) {

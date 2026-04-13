@@ -1,17 +1,91 @@
 # Slothworld AI Office Simulation
 
-Slothworld is a modular, event-driven browser simulation that visualizes agent behavior and task workflows. AI-controlled workers process queued tasks—drawn from Discord and Shopify—through a deterministic simulation engine. The system is structured as a reusable workflow platform for AI-assisted product automation, with clear separation of concerns: core simulation logic, rendering pipeline, and user interface.
+Slothworld is a modular, event-driven browser simulation that visualizes agent behavior and task workflows. AI-controlled workers process queued tasks drawn from Discord and Shopify through a step-based execution loop. The system is structured with clear module boundaries across core simulation logic, rendering, UI controls, and a bridge server.
 
 ## Features
 
 - **Modular architecture**: Core simulation, rendering, and UI logic cleanly separated into independent modules.
 - **Event-driven**: Decoupled event system (event stream, emissions) enables observability and extensibility without cross-module coupling.
 - **Agent simulation**: Four AI agents with role-based skills (researcher, executor, other) that autonomously claim tasks, move, work, and retry.
-- **Deterministic workflows**: Multi-step workflows with approval gates, retry logic, and context propagation for reliable AI automation.
+- **Step-based workflows**: Multi-step workflows with approval gates, retries, and context propagation.
 - **Real-time canvas rendering**: Pixel art office with animated agents, desk queues, task progress bars, and workflow overlays.
+- **Operator Control Panel**: Read-only runtime dashboard for task queues, agent state, workflows, and event stream.
+- **Task Creator panel**: Form-driven task creation UI for Discord/Shopify intents (no manual in-canvas console input required).
 - **Task bridge server**: HTTP endpoints for task ingestion, polling, execution, and acknowledgement. Persistent storage in `bridge-store.json`.
 - **Optional Discord integration**: Listen for mentions and commands; ingest tasks via event polling.
-- **Debug console**: In-game command interface for inspection, workflow control, and manual task injection.
+- **Unified completion pipeline**: All tasks (UI, API, workflows, Discord) complete exclusively through ACK-based lifecycle handling ensuring consistent state transitions and reliable external side effects.
+- **Discord completion notifications**: Completed tasks can notify Discord via channel post or message reply (when `messageId` is available).
+
+## System Architecture Flow
+
+The runtime follows an ACK-centered task lifecycle:
+
+```text
+Task Creator UI
+→ controlAPI.injectTask
+→ Task Normalization (core/task-handling)
+→ Desk Queue Assignment
+→ Agent Execution Loop
+→ Task Completion (status = done | failed)
+→ ACK Handler (bridge-server)
+→ External Side Effects (Discord / integrations)
+```
+
+All task completions must pass through ACK — no exceptions.
+
+## Key Design Principles
+
+### Single Completion Pipeline
+All tasks must complete through `POST /task/:id/ack`.
+
+### Bridge Store Lifecycle Mutation
+Bridge lifecycle endpoints (`/start`, `/execute`, `/ack`) update existing stored task references in place.
+
+### Payload Continuity
+Task payload is carried end-to-end and used for integration behavior.
+For Discord tasks, `channelId`, `messageId`, and `content` are the operational fields.
+
+### Event-driven execution
+State changes emit events; no direct side-effect coupling in core.
+
+### UI only emits intent
+UI only calls `window.controlAPI.injectTask()`.
+
+## System Behavior (Verified)
+
+The following behavior is verified against runtime code in `core/`, `ui/`, `rendering/`, and `bridge-server.js`.
+
+### Runtime task flow
+
+1. UI task creation calls `window.controlAPI.injectTask(task)`.
+2. `core/task-handling.normalizeTask` enforces task defaults and normalizes payload shape.
+3. `addTaskToDesk` assigns the task to the least-loaded eligible desk and emits `TASK_CREATED`.
+4. Agent loop (`core/agent-logic.update`) claims queued work (`TASK_STARTED`), progresses work, and triggers execution.
+5. Task execution runs via tool mapping in `core/task-handling.executeTask`.
+6. Completion always routes through `sendTaskAck(...)` to `POST /task/:id/ack` with status `done` or `failed`.
+7. Bridge ACK handler persists final status, merges optional ACK payload updates, records timing/error fields, and triggers completion notifications.
+
+### Payload and persistence rules
+
+- Bridge normalization requires `type` (`discord` or `shopify`) and stores payload as an object.
+- In simulation, payload is normalized before queueing; Discord payload is shaped around `channelId`, `content`, and optional `messageId`.
+- ACK payload is merged into the stored task payload (not replaced) by the bridge.
+- Bridge polling endpoint `GET /events?after=n` only returns tasks currently in `pending` status.
+
+### Discord integration behavior
+
+- Discord bot integration is enabled only when `DISCORD_BOT_TOKEN` is configured and client login succeeds.
+- Listener ingests mentions and prefix commands (`!`) into bridge tasks, with optional channel gating via `ALLOWED_CHANNELS`.
+- Bridge task execution for Discord replies fetches channel/message and replies; some actions (`fetch_order`, `refund_order`) return success notes for downstream handling.
+- On ACK completion, bridge attempts completion notification:
+  - reply to original message when `messageId` exists and fetch succeeds
+  - fallback to channel send when reply is unavailable
+
+### Control API behavior
+
+- `window.controlAPI.injectTask(...)` is the primary UI/task-intent entrypoint and enqueues tasks in simulation.
+- `window.dispatchCommand(...)` parses command strings and routes to inject/spawn/inspect/pause/resume/workflow actions.
+- Keyboard debug-console interception is disabled; command APIs remain callable programmatically.
 
 ## Project Structure
 
@@ -32,9 +106,10 @@ The codebase is organized into modular components by responsibility:
 
 ### UI (`ui/`)
 - **command-parser.js** – Pure command parsing (8+ commands: inject, spawn, inspect, approve, etc.)
-- **debug-console.js** – In-game console state and rendering
+- **operator-control-panel.js** – Read-only runtime observer panel (queues, agents, workflows, events)
+- **task-creator-panel.js** – Form-based task injection UI with structured payload creation
 - **control-api.js** – Control command handlers (agent inspection, movement, role assignment, workflow actions)
-- **keyboard-input.js** – Keyboard binding and console input capture
+- **keyboard-input.js** – Keyboard binding shim (debug console interception retired)
 
 ### Root
 - **main.js** – Thin orchestrator: imports all modules, exposes window API, starts simulation loop and bridge polling
@@ -128,16 +203,29 @@ Health check:
 curl http://localhost:3000/health
 ```
 
-### 4. In-simulation debug commands
+### 4. Task Creator and Runtime Panels
 
-Type in the on-screen debug console and press Enter:
+Use the in-app Task Creator panel to create tasks with structured payloads:
 
-- `inject discord "Help with order #42"`
-- `inject shopify "Process order #42"`
-- `spawn workflow product vintage mug`
-- `inspect agent 0`
-- `inspect desk 2`
-- `approve workflow workflow-id`
+- Select task type (`discord` or `shopify`)
+- Enter task title/content
+- Submit task directly through `window.controlAPI.injectTask(...)`
+
+Use the Operator Control Panel to inspect:
+
+- Pending/running/completed/failed task queues
+- Agent assignment and state
+- Workflow progress and history
+- Live event stream
+
+### 5. Command API (without in-game console UI)
+
+The keyboard-driven in-canvas debug console has been removed. Command execution APIs remain available programmatically:
+
+- `window.dispatchCommand('inject discord "Help with order #42"')`
+- `window.dispatchCommand('spawn workflow product vintage mug')`
+- `window.dispatchCommand('inspect agent 0')`
+- `window.dispatchCommand('approve workflow workflow-id')`
 
 ## Tech Stack
 
@@ -157,3 +245,10 @@ Type in the on-screen debug console and press Enter:
 - Add HTTP authentication and rate limiting for public deployments
 - Add persistence for agent role preferences and desk configurations
 - Add real-time metrics panel (throughput, error rates, workflow SLAs)
+
+## System Classification
+
+- Event-driven job queue simulator
+- Workflow execution engine
+- Agent orchestration sandbox
+- External integration control plane

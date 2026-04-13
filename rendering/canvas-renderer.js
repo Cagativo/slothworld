@@ -8,6 +8,7 @@ import {
   drawDeskQueueStack,
   drawDeskTaskOverlay,
   drawTaskFx,
+  drawSpeechBubbles,
   drawAgentIdentityLayer,
   drawGlobalHud,
   drawPendingWorkflowsOverlay,
@@ -100,16 +101,17 @@ export function render() {
     right: loadedAssets['Julia_walk_Rigth.png']
   };
   const idleSprite = loadedAssets['Julia-Idle.png'];
+  const coffeeIdleSprite = loadedAssets['Julia_Drinking_Coffee.png'];
 
-  function drawAnimatedSprite(image, frame, x, y) {
+  function drawAnimatedSprite(image, frame, x, y, frameCount = 4) {
     if (!image) {
       return;
     }
 
-    const hasFourFrames = image.width >= 4 && image.width % 4 === 0;
-    if (hasFourFrames) {
-      const frameWidth = image.width / 4;
-      const frameX = (frame % 4) * frameWidth;
+    const hasFrameSheet = image.width >= frameCount && image.width % frameCount === 0;
+    if (hasFrameSheet) {
+      const frameWidth = image.width / frameCount;
+      const frameX = (frame % frameCount) * frameWidth;
       drawSprite(ctx, image, x, y, {
         ...spriteConfigs.agent,
         sourceX: frameX,
@@ -124,17 +126,34 @@ export function render() {
   }
 
   for (const agent of agents) {
-    const isMoving = agent.state === 'moving' || agent.state === 'idle';
+    const isMoving = agent.state === 'moving';
     const isSitting = agent.state === 'sitting';
-    const sprite = isMoving ? walkSprites[agent.direction] : idleSprite;
-    const frame = isMoving ? agent.animationFrame : 0;
+    const isIdle = agent.state === 'idle';
+    const sprite = isMoving
+      ? walkSprites[agent.direction]
+      : (isIdle ? (coffeeIdleSprite || idleSprite) : idleSprite);
+    const coffeeFrame = agent.coffeeAnim && typeof agent.coffeeAnim.frame === 'number'
+      ? agent.coffeeAnim.frame
+      : 0;
+    const frame = isMoving ? agent.animationFrame : (isIdle ? coffeeFrame : 0);
+    const frameCount = isIdle && coffeeIdleSprite ? 3 : 4;
     const renderX = isSitting ? agent.x + SITTING_OFFSET.x : agent.x;
     const renderY = isSitting ? agent.y + SITTING_OFFSET.y : agent.y;
-    drawAnimatedSprite(sprite, frame, renderX, renderY);
+    drawAnimatedSprite(sprite, frame, renderX, renderY, frameCount);
+
+    if (isIdle && agent.coffeeAnim && agent.coffeeAnim.phase !== 'idle') {
+      const sipPulse = 0.35 + 0.65 * Math.sin(uiFxState.frame * 0.25);
+      ctx.fillStyle = `rgba(255, 247, 210, ${0.25 + sipPulse * 0.25})`;
+      ctx.beginPath();
+      ctx.arc(renderX + 9, renderY - 16, 2 + sipPulse * 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     drawAgentIdentityLayer(ctx, agent);
     drawLogicalPoint(ctx, agent.x, agent.y);
   }
 
+  drawSpeechBubbles(ctx);
   drawTaskFx(ctx);
   drawGlobalHud(ctx);
   drawPendingWorkflowsOverlay(ctx);

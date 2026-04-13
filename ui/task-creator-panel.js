@@ -37,7 +37,12 @@ export function initTaskCreatorPanel() {
     </div>
   `;
 
-  document.body.appendChild(panel);
+  const panelStack = document.getElementById('control-panels-stack');
+  if (panelStack) {
+    panelStack.appendChild(panel);
+  } else {
+    document.body.appendChild(panel);
+  }
 
   const form = panel.querySelector('#tcp-form');
   const typeSelect = panel.querySelector('#tcp-type');

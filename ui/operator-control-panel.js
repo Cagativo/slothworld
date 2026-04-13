@@ -201,7 +201,12 @@ function renderTaskList(listElement, items, labelBuilder) {
 
 export function initOperatorControlPanel() {
   const panel = createPanelRoot();
-  document.body.appendChild(panel);
+  const panelStack = document.getElementById('control-panels-stack');
+  if (panelStack) {
+    panelStack.appendChild(panel);
+  } else {
+    document.body.appendChild(panel);
+  }
 
   const pendingList = panel.querySelector('[data-list="pending"]');
   const runningList = panel.querySelector('[data-list="running"]');
