@@ -1,5 +1,5 @@
 {
-  "nextEventId": 69,
+  "nextEventId": 97,
   "tasks": {
     "1776027854220-47b4e9d4a2795": {
       "id": "1776027854220-47b4e9d4a2795",
@@ -2188,6 +2188,844 @@
         "imageUrl": "/assets/generated/product_1776174755621/asset-1776174807738-03e11acdae27b8.png"
       },
       "durationMs": 48682
+    },
+    "manual-1776179127686-9121762812938": {
+      "id": "manual-1776179127686-9121762812938",
+      "type": "discord",
+      "title": "test",
+      "priority": 1,
+      "progress": 0,
+      "required": 107.77343221470468,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "seal",
+        "messageId": null
+      },
+      "productId": null,
+      "provider": null,
+      "designIntent": null,
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776175549024,
+      "startedAt": 1776175549047,
+      "completedAt": 1776175550108,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      },
+      "durationMs": 1061
+    },
+    "manual-1776179194948-613a0374c9e3f8": {
+      "id": "manual-1776179194948-613a0374c9e3f8",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 173.23991560838527,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776179194947",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+          "prompt_hint": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776179194948-613a0374c9e3f8",
+        "content": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776179194947",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+        "prompt_hint": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+        "niche": "home decor"
+      },
+      "retries": 1,
+      "maxRetries": 3,
+      "createdAt": 1776175615788,
+      "startedAt": 1776175615810,
+      "completedAt": 1776179271308,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776179270981-1c5cc6db3fc81",
+        "productId": "product_1776179194947",
+        "url": "/assets/generated/product_1776179194947/asset-1776179270981-1c5cc6db3fc81.png",
+        "provider": "openai",
+        "prompt": "Product: pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776179271180,
+        "manifestUrl": "/assets/generated/product_1776179194947/asset-1776179270981-1c5cc6db3fc81.json",
+        "imageUrl": "/assets/generated/product_1776179194947/asset-1776179270981-1c5cc6db3fc81.png"
+      },
+      "durationMs": 3655498
+    },
+    "manual-1776179748574-b220f03a457ad8": {
+      "id": "manual-1776179748574-b220f03a457ad8",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 141.66901439352512,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776179748573",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+          "prompt_hint": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776179748574-b220f03a457ad8",
+        "content": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776179748573",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+        "prompt_hint": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776176170349,
+      "startedAt": 1776176170378,
+      "completedAt": 1776176247171,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776179827126-136250dfb6701",
+        "productId": "product_1776179748573",
+        "url": "/assets/generated/product_1776179748573/asset-1776179827126-136250dfb6701.png",
+        "provider": "openai",
+        "prompt": "Product: pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776176247080,
+        "manifestUrl": "/assets/generated/product_1776179748573/asset-1776179827126-136250dfb6701.json",
+        "imageUrl": "/assets/generated/product_1776179748573/asset-1776179827126-136250dfb6701.png"
+      },
+      "durationMs": 76793
+    },
+    "manual-1776179918263-355043075f14": {
+      "id": "manual-1776179918263-355043075f14",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 150.34926808570782,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776179918262",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+          "prompt_hint": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776179918263-355043075f14",
+        "content": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776179918262",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+        "prompt_hint": "pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776176340331,
+      "startedAt": 1776176340346,
+      "completedAt": 1776176438362,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776180018300-8f9cea6ac4ae3",
+        "productId": "product_1776179918262",
+        "url": "/assets/generated/product_1776179918262/asset-1776180018300-8f9cea6ac4ae3.png",
+        "provider": "openai",
+        "prompt": "Product: pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776176438235,
+        "manifestUrl": "/assets/generated/product_1776179918262/asset-1776180018300-8f9cea6ac4ae3.json",
+        "imageUrl": "/assets/generated/product_1776179918262/asset-1776180018300-8f9cea6ac4ae3.png"
+      },
+      "durationMs": 98016
+    },
+    "manual-1776183185051-059b49cfc30ad": {
+      "id": "manual-1776183185051-059b49cfc30ad",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 101.72165861108499,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776183185050",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "Create a pixel art sprite sheet with exactly 4 frames in a single horizontal row. Each frame shows a cute seal walking to the right in a smooth looping animation. The seal is side-facing (right), with consistent size and alignment in every frame.\n\nEach frame should look like a 32x32 retro game sprite, with clean outlines, minimal colors, and clear silhouette. Ensure even spacing between frames and no vertical stacking. Transparent background only. No additional objects, no text, no borders.",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "Create a pixel art sprite sheet with exactly 4 frames in a single horizontal row. Each frame shows a cute seal walking to the right in a smooth looping animation. The seal is side-facing (right), with consistent size and alignment in every frame.\n\nEach frame should look like a 32x32 retro game sprite, with clean outlines, minimal colors, and clear silhouette. Ensure even spacing between frames and no vertical stacking. Transparent background only. No additional objects, no text, no borders.",
+          "prompt_hint": "Create a pixel art sprite sheet with exactly 4 frames in a single horizontal row. Each frame shows a cute seal walking to the right in a smooth looping animation. The seal is side-facing (right), with consistent size and alignment in every frame.\n\nEach frame should look like a 32x32 retro game sprite, with clean outlines, minimal colors, and clear silhouette. Ensure even spacing between frames and no vertical stacking. Transparent background only. No additional objects, no text, no borders.",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776183185051-059b49cfc30ad",
+        "content": "Create a pixel art sprite sheet with exactly 4 frames in a single horizontal row. Each frame shows a cute seal walking to the right in a smooth looping animation. The seal is side-facing (right), with consistent size and alignment in every frame.\n\nEach frame should look like a 32x32 retro game sprite, with clean outlines, minimal colors, and clear silhouette. Ensure even spacing between frames and no vertical stacking. Transparent background only. No additional objects, no text, no borders.",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776183185050",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "Create a pixel art sprite sheet with exactly 4 frames in a single horizontal row. Each frame shows a cute seal walking to the right in a smooth looping animation. The seal is side-facing (right), with consistent size and alignment in every frame.\n\nEach frame should look like a 32x32 retro game sprite, with clean outlines, minimal colors, and clear silhouette. Ensure even spacing between frames and no vertical stacking. Transparent background only. No additional objects, no text, no borders.",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "Create a pixel art sprite sheet with exactly 4 frames in a single horizontal row. Each frame shows a cute seal walking to the right in a smooth looping animation. The seal is side-facing (right), with consistent size and alignment in every frame.\n\nEach frame should look like a 32x32 retro game sprite, with clean outlines, minimal colors, and clear silhouette. Ensure even spacing between frames and no vertical stacking. Transparent background only. No additional objects, no text, no borders.",
+        "prompt_hint": "Create a pixel art sprite sheet with exactly 4 frames in a single horizontal row. Each frame shows a cute seal walking to the right in a smooth looping animation. The seal is side-facing (right), with consistent size and alignment in every frame.\n\nEach frame should look like a 32x32 retro game sprite, with clean outlines, minimal colors, and clear silhouette. Ensure even spacing between frames and no vertical stacking. Transparent background only. No additional objects, no text, no borders.",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776179609799,
+      "startedAt": 1776179609845,
+      "completedAt": 1776179695672,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776183275676-2a11efeb501d1",
+        "productId": "product_1776183185050",
+        "url": "/assets/generated/product_1776183185050/asset-1776183275676-2a11efeb501d1.png",
+        "provider": "openai",
+        "prompt": "Product: Create a pixel art sprite sheet with exactly 4 frames in a single horizontal row. Each frame shows a cute seal walking to the right in a smooth looping animation. The seal is side-facing (right), with consistent size and alignment in every frame.\n\nEach frame should look like a 32x32 retro game sprite, with clean outlines, minimal colors, and clear silhouette. Ensure even spacing between frames and no vertical stacking. Transparent background only. No additional objects, no text, no borders. | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: Create a pixel art sprite sheet with exactly 4 frames in a single horizontal row. Each frame shows a cute seal walking to the right in a smooth looping animation. The seal is side-facing (right), with consistent size and alignment in every frame.\n\nEach frame should look like a 32x32 retro game sprite, with clean outlines, minimal colors, and clear silhouette. Ensure even spacing between frames and no vertical stacking. Transparent background only. No additional objects, no text, no borders.. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776179695530,
+        "manifestUrl": "/assets/generated/product_1776183185050/asset-1776183275676-2a11efeb501d1.json",
+        "imageUrl": "/assets/generated/product_1776183185050/asset-1776183275676-2a11efeb501d1.png"
+      },
+      "durationMs": 85827
+    },
+    "manual-1776184097904-a2c9725a4af19": {
+      "id": "manual-1776184097904-a2c9725a4af19",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 144.1327777498979,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776184097904",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776184097904-a2c9725a4af19",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776184097904",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776180518988,
+      "startedAt": 1776180519003,
+      "completedAt": 1776180581925,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776184162004-7a407d98aff8f",
+        "productId": "product_1776184097904",
+        "url": "/assets/generated/product_1776184097904/asset-1776184162004-7a407d98aff8f.png",
+        "provider": "openai",
+        "prompt": "Product: cat | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: cat. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776180581815,
+        "manifestUrl": "/assets/generated/product_1776184097904/asset-1776184162004-7a407d98aff8f.json",
+        "imageUrl": "/assets/generated/product_1776184097904/asset-1776184162004-7a407d98aff8f.png"
+      },
+      "durationMs": 62922
+    },
+    "manual-1776184262899-16e4fb535ec8e8": {
+      "id": "manual-1776184262899-16e4fb535ec8e8",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 128.97501795844596,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776184262899",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776184262899-16e4fb535ec8e8",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776184262899",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776180683596,
+      "startedAt": 1776180683611,
+      "completedAt": 1776180741881,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776184321995-174fd0ccecea08",
+        "productId": "product_1776184262899",
+        "url": "/assets/generated/product_1776184262899/asset-1776184321995-174fd0ccecea08.png",
+        "provider": "openai",
+        "prompt": "Product: cat | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: cat. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776180741762,
+        "manifestUrl": "/assets/generated/product_1776184262899/asset-1776184321995-174fd0ccecea08.json",
+        "imageUrl": "/assets/generated/product_1776184262899/asset-1776184321995-174fd0ccecea08.png"
+      },
+      "durationMs": 58270
+    },
+    "manual-1776184646646-e469c874635da8": {
+      "id": "manual-1776184646646-e469c874635da8",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 131.98221262591662,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776184646645",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776184646646-e469c874635da8",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776184646645",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776181068888,
+      "startedAt": 1776181068903,
+      "completedAt": 1776181107533,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776184687646-f493da4fc45ff",
+        "productId": "product_1776184646645",
+        "url": "/assets/generated/product_1776184646645/asset-1776184687646-f493da4fc45ff.png",
+        "provider": "openai",
+        "prompt": "Product: cat | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: cat. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776181107418,
+        "manifestUrl": "/assets/generated/product_1776184646645/asset-1776184687646-f493da4fc45ff.json",
+        "imageUrl": "/assets/generated/product_1776184646645/asset-1776184687646-f493da4fc45ff.png"
+      },
+      "durationMs": 38630
+    },
+    "manual-1776184956473-571e777d358fe": {
+      "id": "manual-1776184956473-571e777d358fe",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 155.5861403590166,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776184956473",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776184956473-571e777d358fe",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776184956473",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776181377291,
+      "startedAt": 1776181377307,
+      "completedAt": 1776181476374,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776185056462-fe0231d300d45",
+        "productId": "product_1776184956473",
+        "url": "/assets/generated/product_1776184956473/asset-1776185056462-fe0231d300d45.png",
+        "provider": "openai",
+        "prompt": "Product: cat | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: cat. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776181476257,
+        "manifestUrl": "/assets/generated/product_1776184956473/asset-1776185056462-fe0231d300d45.json",
+        "imageUrl": "/assets/generated/product_1776184956473/asset-1776185056462-fe0231d300d45.png"
+      },
+      "durationMs": 99067
+    },
+    "manual-1776186166835-be7b73858931d": {
+      "id": "manual-1776186166835-be7b73858931d",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 129.70128910300093,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776186166835",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cag",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cag",
+          "prompt_hint": "cag",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776186166835-be7b73858931d",
+        "content": "cag",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776186166835",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cag",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cag",
+        "prompt_hint": "cag",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776182588219,
+      "startedAt": 1776182588238,
+      "completedAt": 1776182679034,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776186259164-a1a2a1f16461e",
+        "productId": "product_1776186166835",
+        "url": "/assets/generated/product_1776186166835/asset-1776186259164-a1a2a1f16461e.png",
+        "provider": "openai",
+        "prompt": "Product: cag | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: cag. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776182678923,
+        "manifestUrl": "/assets/generated/product_1776186166835/asset-1776186259164-a1a2a1f16461e.json",
+        "imageUrl": "/assets/generated/product_1776186166835/asset-1776186259164-a1a2a1f16461e.png"
+      },
+      "durationMs": 90796
+    },
+    "manual-1776186607375-ab83d35e15ece8": {
+      "id": "manual-1776186607375-ab83d35e15ece8",
+      "type": "discord",
+      "title": "test",
+      "priority": 1,
+      "progress": 0,
+      "required": 128.5860424432297,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "test",
+        "messageId": null
+      },
+      "productId": null,
+      "provider": null,
+      "designIntent": null,
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776183027737,
+      "startedAt": 1776183027753,
+      "completedAt": 1776183028781,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      },
+      "durationMs": 1028
+    },
+    "manual-1776186616649-97d9e73993f5a8": {
+      "id": "manual-1776186616649-97d9e73993f5a8",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 149.0388367508582,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776186616649",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776186616649-97d9e73993f5a8",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776186616649",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776183038178,
+      "startedAt": 1776183038188,
+      "completedAt": 1776183112039,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776186692153-1b022b0a543f7",
+        "productId": "product_1776186616649",
+        "url": "/assets/generated/product_1776186616649/asset-1776186692153-1b022b0a543f7.png",
+        "provider": "openai",
+        "prompt": "Product: cat | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: cat. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776183111911,
+        "manifestUrl": "/assets/generated/product_1776186616649/asset-1776186692153-1b022b0a543f7.json",
+        "imageUrl": "/assets/generated/product_1776186616649/asset-1776186692153-1b022b0a543f7.png"
+      },
+      "durationMs": 73851
+    },
+    "manual-1776204035321-1d7dada0cf105": {
+      "id": "manual-1776204035321-1d7dada0cf105",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 161.99722255550986,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776204035321",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "2d seal",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "2d seal",
+          "prompt_hint": "2d seal",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776204035321-1d7dada0cf105",
+        "content": "2d seal",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776204035321",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "2d seal",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "2d seal",
+        "prompt_hint": "2d seal",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776200456861,
+      "startedAt": 1776200456895,
+      "completedAt": 1776200492316,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776204072125-18278a8e04e0e8",
+        "productId": "product_1776204035321",
+        "url": "/assets/generated/product_1776204035321/asset-1776204072125-18278a8e04e0e8.png",
+        "provider": "openai",
+        "prompt": "Product: 2d seal | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: 2d seal. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776200492188,
+        "manifestUrl": "/assets/generated/product_1776204035321/asset-1776204072125-18278a8e04e0e8.json",
+        "imageUrl": "/assets/generated/product_1776204035321/asset-1776204072125-18278a8e04e0e8.png"
+      },
+      "durationMs": 35421
+    },
+    "manual-1776204303086-f76878a4f93e18": {
+      "id": "manual-1776204303086-f76878a4f93e18",
+      "type": "discord",
+      "title": "seal task",
+      "priority": 1,
+      "progress": 0,
+      "required": 155.7424978529653,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "to disc",
+        "messageId": null
+      },
+      "productId": null,
+      "provider": null,
+      "designIntent": null,
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776200726957,
+      "startedAt": 1776200726989,
+      "completedAt": 1776200727647,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      },
+      "durationMs": 658
     }
   },
   "events": [
@@ -2530,6 +3368,146 @@
       "id": 68,
       "timestamp": 1776171227832,
       "taskId": "manual-1776174755622-55cbeb28ab09f"
+    },
+    {
+      "id": 69,
+      "timestamp": 1776175549034,
+      "taskId": "manual-1776179127686-9121762812938"
+    },
+    {
+      "id": 70,
+      "timestamp": 1776175550094,
+      "taskId": "manual-1776179127686-9121762812938"
+    },
+    {
+      "id": 71,
+      "timestamp": 1776175615792,
+      "taskId": "manual-1776179194948-613a0374c9e3f8"
+    },
+    {
+      "id": 72,
+      "timestamp": 1776179271254,
+      "taskId": "manual-1776179194948-613a0374c9e3f8"
+    },
+    {
+      "id": 73,
+      "timestamp": 1776176170361,
+      "taskId": "manual-1776179748574-b220f03a457ad8"
+    },
+    {
+      "id": 74,
+      "timestamp": 1776176247115,
+      "taskId": "manual-1776179748574-b220f03a457ad8"
+    },
+    {
+      "id": 75,
+      "timestamp": 1776176340334,
+      "taskId": "manual-1776179918263-355043075f14"
+    },
+    {
+      "id": 76,
+      "timestamp": 1776176438300,
+      "taskId": "manual-1776179918263-355043075f14"
+    },
+    {
+      "id": 77,
+      "timestamp": 1776179609816,
+      "taskId": "manual-1776183185051-059b49cfc30ad"
+    },
+    {
+      "id": 78,
+      "timestamp": 1776179695610,
+      "taskId": "manual-1776183185051-059b49cfc30ad"
+    },
+    {
+      "id": 79,
+      "timestamp": 1776180518991,
+      "taskId": "manual-1776184097904-a2c9725a4af19"
+    },
+    {
+      "id": 80,
+      "timestamp": 1776180581875,
+      "taskId": "manual-1776184097904-a2c9725a4af19"
+    },
+    {
+      "id": 81,
+      "timestamp": 1776180683600,
+      "taskId": "manual-1776184262899-16e4fb535ec8e8"
+    },
+    {
+      "id": 82,
+      "timestamp": 1776180741828,
+      "taskId": "manual-1776184262899-16e4fb535ec8e8"
+    },
+    {
+      "id": 83,
+      "timestamp": 1776181068891,
+      "taskId": "manual-1776184646646-e469c874635da8"
+    },
+    {
+      "id": 84,
+      "timestamp": 1776181107482,
+      "taskId": "manual-1776184646646-e469c874635da8"
+    },
+    {
+      "id": 85,
+      "timestamp": 1776181377295,
+      "taskId": "manual-1776184956473-571e777d358fe"
+    },
+    {
+      "id": 86,
+      "timestamp": 1776181476317,
+      "taskId": "manual-1776184956473-571e777d358fe"
+    },
+    {
+      "id": 87,
+      "timestamp": 1776182588230,
+      "taskId": "manual-1776186166835-be7b73858931d"
+    },
+    {
+      "id": 88,
+      "timestamp": 1776182678981,
+      "taskId": "manual-1776186166835-be7b73858931d"
+    },
+    {
+      "id": 89,
+      "timestamp": 1776183027745,
+      "taskId": "manual-1776186607375-ab83d35e15ece8"
+    },
+    {
+      "id": 90,
+      "timestamp": 1776183028772,
+      "taskId": "manual-1776186607375-ab83d35e15ece8"
+    },
+    {
+      "id": 91,
+      "timestamp": 1776183038181,
+      "taskId": "manual-1776186616649-97d9e73993f5a8"
+    },
+    {
+      "id": 92,
+      "timestamp": 1776183111987,
+      "taskId": "manual-1776186616649-97d9e73993f5a8"
+    },
+    {
+      "id": 93,
+      "timestamp": 1776200456874,
+      "taskId": "manual-1776204035321-1d7dada0cf105"
+    },
+    {
+      "id": 94,
+      "timestamp": 1776200492258,
+      "taskId": "manual-1776204035321-1d7dada0cf105"
+    },
+    {
+      "id": 95,
+      "timestamp": 1776200726968,
+      "taskId": "manual-1776204303086-f76878a4f93e18"
+    },
+    {
+      "id": 96,
+      "timestamp": 1776200727628,
+      "taskId": "manual-1776204303086-f76878a4f93e18"
     }
   ]
 }

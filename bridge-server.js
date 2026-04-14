@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { AttachmentBuilder, Client, GatewayIntentBits } from 'discord.js';
-import { generateImage as generateOpenAIProviderImage } from './integrations/rendering/providers/openaiImageProvider.js';
+import { runImageRenderWorker } from './core/workers/imageRenderWorker.js';
 
 dotenv.config();
 
@@ -162,26 +162,28 @@ async function generateOpenAIImage(renderRequest) {
   const productId = typeof (renderRequest && renderRequest.productId) === 'string'
     ? renderRequest.productId
     : 'product';
+  const taskContext = renderRequest && typeof renderRequest.taskContext === 'object' && renderRequest.taskContext !== null
+    ? renderRequest.taskContext
+    : {};
 
   if (!prompt) {
     throw new Error('missing_prompt');
   }
 
-  const asset = await generateOpenAIProviderImage({
-    prompt,
-    productId
-  });
-
-  const assetPath = path.join(PUBLIC_DIR, asset.url.replace(/^\//, ''));
-  const imageBase64 = fs.readFileSync(assetPath).toString('base64');
-
-  return {
+  return runImageRenderWorker({
     provider: 'openai',
-    model: 'gpt-5',
-    mimeType: 'image/png',
-    imageBase64,
-    asset
-  };
+    prompt,
+    productId,
+    context: {
+      ...taskContext,
+      metadata: {
+        ...(taskContext && typeof taskContext.metadata === 'object' && taskContext.metadata !== null
+          ? taskContext.metadata
+          : {}),
+        productId
+      }
+    }
+  });
 }
 
 function mapCommandToAction(command) {

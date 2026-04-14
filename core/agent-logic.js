@@ -1,8 +1,10 @@
-import { TARGET_RETRY_DELAY, SITTING_TO_WORKING_DELAY, IDLE_WANDER_REASSIGN_DELAY, WANDER_TARGET_INTERVAL } from './constants.js';
-import { canvas, agents, desks, agentStateTracker, emitEvent, isDeskAvailableForAgent, getDeskSlotPosition } from './app-state.js';
+import { TARGET_RETRY_DELAY, IDLE_WANDER_REASSIGN_DELAY, WANDER_TARGET_INTERVAL } from './constants.js';
+import { canvas, agents, desks, agentStateTracker, emitEvent, eventStream, isDeskAvailableForAgent, getDeskSlotPosition } from './app-state.js';
 import { syncTaskStart, handleTaskExecutionResult } from './task-handling.js';
 
 const FRAME_RATE = 60;
+const FRAME_TIME_MS = 1000 / FRAME_RATE;
+const COMPLETE_REACT_DURATION_MS = 1200;
 const IDLE_WAIT_MIN_FRAMES = 5 * FRAME_RATE;
 const IDLE_WAIT_MAX_FRAMES = 10 * FRAME_RATE;
 const IDLE_COOLDOWN_MIN_FRAMES = 5 * FRAME_RATE;
@@ -11,6 +13,8 @@ const ROAM_PAUSE_MIN_FRAMES = 40;
 const ROAM_PAUSE_MAX_FRAMES = 90;
 const ROAM_PADDING = 26;
 const ROAM_TARGET_MIN_DISTANCE = 58;
+let completionEventCursor = 0;
+const completionStatusByTaskId = new Map();
 
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -75,12 +79,56 @@ function ensureIdleStateFields(agent) {
     }
   }
 
-  if (!agent.speechBubble || typeof agent.speechBubble !== 'object') {
-    agent.speechBubble = {
-      text: '',
-      timer: 0,
-      duration: 2000
-    };
+  if (!agent.speech || typeof agent.speech !== 'object') {
+    agent.speech = null;
+  } else {
+    if (typeof agent.speech.text !== 'string') {
+      agent.speech.text = '';
+    }
+
+    if (typeof agent.speech.timer !== 'number') {
+      agent.speech.timer = 0;
+    }
+
+    if (typeof agent.speech.duration !== 'number') {
+      agent.speech.duration = 2000;
+    }
+  }
+
+  if (agent.visualState !== 'idle' && agent.visualState !== 'working' && agent.visualState !== 'waiting' && agent.visualState !== 'complete_react') {
+    agent.visualState = 'idle';
+  }
+
+  if (typeof agent.completeReactTimer !== 'number') {
+    agent.completeReactTimer = 0;
+  }
+
+  if (typeof agent.awaitingTaskCompletion !== 'boolean') {
+    agent.awaitingTaskCompletion = false;
+  }
+
+  if (agent.currentTask !== null && typeof agent.currentTask !== 'object') {
+    agent.currentTask = null;
+  }
+
+  if (agent.currentTaskId !== null && typeof agent.currentTaskId !== 'string') {
+    agent.currentTaskId = null;
+  }
+
+  if (agent.lastSpeechText !== null && typeof agent.lastSpeechText !== 'string') {
+    agent.lastSpeechText = null;
+  }
+
+  if (agent.lastProgressPhase !== null && typeof agent.lastProgressPhase !== 'string') {
+    agent.lastProgressPhase = null;
+  }
+
+  if (agent.lastTaskStatus !== null && typeof agent.lastTaskStatus !== 'string') {
+    agent.lastTaskStatus = null;
+  }
+
+  if (typeof agent.lastSpeechTime !== 'number') {
+    agent.lastSpeechTime = 0;
   }
 
   if (!agent.coffeeAnim || typeof agent.coffeeAnim !== 'object') {
@@ -106,6 +154,222 @@ function ensureIdleStateFields(agent) {
     if (agent.coffeeAnim.phase !== 'idle' && agent.coffeeAnim.phase !== 'sipping' && agent.coffeeAnim.phase !== 'returning') {
       agent.coffeeAnim.phase = 'idle';
     }
+  }
+}
+
+function setAgentSpeech(agent, text, duration = 7000, { force = false } = {}) {
+  if (!agent) {
+    return;
+  }
+
+  const normalized = String(text || '');
+  if (!force && normalized === agent.lastSpeechText) {
+    return;
+  }
+
+  agent.speech = {
+    text: normalized,
+    duration,
+    timer: duration
+  };
+  agent.lastSpeechText = normalized;
+  agent.lastSpeechTime = Date.now();
+}
+
+function canSpeak(agent, now = Date.now()) {
+  if (!agent) {
+    return false;
+  }
+
+  return (now - (agent.lastSpeechTime || 0)) > 7000;
+}
+
+function pickSpeechLine(lines, fallback) {
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return fallback;
+  }
+
+  const index = Math.floor(Math.random() * lines.length);
+  return lines[index] || fallback;
+}
+
+function getWorkingSpeechText(task) {
+  if (!task) {
+    return 'Working...';
+  }
+
+  const hasProgress = typeof task.progress === 'number' && typeof task.required === 'number' && task.required > 0;
+  if (hasProgress) {
+    const ratio = clamp(task.progress / task.required, 0, 1);
+    if (ratio < 0.3) {
+      return 'Starting...';
+    }
+
+    if (ratio < 0.8) {
+      return 'Working...';
+    }
+
+    return 'Finishing...';
+  }
+
+  if (task.type === 'image_render') {
+    return 'Generating image...';
+  }
+
+  if (task.type === 'discord') {
+    return 'Replying...';
+  }
+
+  if (task.type === 'shopify') {
+    return 'Processing order...';
+  }
+
+  return 'Working...';
+}
+
+function beginCompletionReaction(agent, text = 'Done!') {
+  agent.awaitingTaskCompletion = false;
+  agent.completeReactTimer = COMPLETE_REACT_DURATION_MS;
+  agent.visualState = 'complete_react';
+  agent.state = 'complete_react';
+  agent.stateTimer = 0;
+  agent.animationFrame = 0;
+  agent.animationTimer = 0;
+  setAgentSpeech(agent, text, 7000, { force: true });
+}
+
+function syncCompletionStatuses() {
+  while (completionEventCursor < eventStream.length) {
+    const event = eventStream[completionEventCursor];
+    completionEventCursor += 1;
+
+    if (!event || event.type !== 'TASK_COMPLETED' || !event.payload || !event.payload.taskId) {
+      continue;
+    }
+
+    completionStatusByTaskId.set(String(event.payload.taskId), event.payload.success === false ? 'failed' : 'done');
+  }
+}
+
+function syncAgentTaskStatus(agent) {
+  if (!agent || !agent.currentTask || !agent.currentTask.id) {
+    return;
+  }
+
+  const syncedStatus = completionStatusByTaskId.get(String(agent.currentTask.id));
+  if (syncedStatus && agent.currentTask.status !== syncedStatus) {
+    // Keep same object reference so status mutation propagates to lifecycle checks.
+    agent.currentTask.status = syncedStatus;
+  }
+}
+
+function shouldLogAgentStatus(agent, now) {
+  if (!agent) {
+    return false;
+  }
+
+  const isActive = !!agent.currentTask || agent.visualState !== 'idle';
+  if (!isActive) {
+    return false;
+  }
+
+  if (typeof agent.lastStatusLogTime !== 'number') {
+    agent.lastStatusLogTime = 0;
+  }
+
+  if (now - agent.lastStatusLogTime < 1000) {
+    return false;
+  }
+
+  agent.lastStatusLogTime = now;
+  return true;
+}
+
+function tickSpeech(agent) {
+  if (!agent || !agent.speech || agent.speech.timer <= 0) {
+    return;
+  }
+
+  agent.speech.timer = Math.max(0, agent.speech.timer - FRAME_TIME_MS);
+  if (agent.speech.timer <= 0) {
+    agent.speech = null;
+    agent.lastSpeechText = null;
+  }
+}
+
+function getTaskStatus(task) {
+  if (!task || typeof task.status !== 'string') {
+    return 'in_progress';
+  }
+
+  return task.status;
+}
+
+function deriveTaskProgressRatio(task) {
+  if (!task) {
+    return 0;
+  }
+
+  const status = getTaskStatus(task);
+  const rawRatio = typeof task.progress === 'number' && typeof task.required === 'number' && task.required > 0
+    ? clamp(task.progress / task.required, 0, 1)
+    : 0;
+
+  if (status === 'done' || status === 'failed') {
+    return 1;
+  }
+
+  if (status === 'awaiting_ack') {
+    return 0.95;
+  }
+
+  return Math.min(0.9, rawRatio);
+}
+
+function getProgressPhaseFromRatio(ratio) {
+  if (ratio < 0.3) {
+    return 'starting';
+  }
+
+  if (ratio < 0.8) {
+    return 'working';
+  }
+
+  return 'finishing';
+}
+
+function getPhaseSpeech(phase) {
+  if (phase === 'starting') {
+    return 'Starting...';
+  }
+
+  if (phase === 'working') {
+    return 'Working...';
+  }
+
+  return 'Finishing...';
+}
+
+function syncAgentTaskSpeech(agent, task) {
+  const status = getTaskStatus(task);
+  if (status !== agent.lastTaskStatus) {
+    agent.lastTaskStatus = status;
+  }
+
+  if (status === 'done' || status === 'failed') {
+    return;
+  }
+
+  if (status === 'awaiting_ack') {
+    agent.lastProgressPhase = 'finishing';
+    return;
+  }
+
+  const ratio = deriveTaskProgressRatio(task);
+  const phase = ratio < 0.3 ? 'starting' : 'working';
+  if (phase !== agent.lastProgressPhase) {
+    agent.lastProgressPhase = phase;
+    setAgentSpeech(agent, getPhaseSpeech(phase), 7000);
   }
 }
 
@@ -165,14 +429,6 @@ function startCoffeeSequence(agent) {
   agent.coffeeAnim.phase = 'sipping';
   agent.coffeeAnim.frame = 0;
   agent.coffeeAnim.timer = 0;
-
-  const coffeeLines = ['need coffee...', 'thinking...'];
-  const text = coffeeLines[Math.floor(Math.random() * coffeeLines.length)];
-  agent.speechBubble = {
-    text,
-    timer: 2000,
-    duration: 2000
-  };
 }
 
 function ensureIdleAnchor(agent) {
@@ -258,14 +514,6 @@ function startIdleRoam(agent) {
   agent.stateTimer = 0;
   agent.animationTimer = 0;
 
-  const idleLines = ['just vibing...', 'no tasks yet'];
-  const text = idleLines[Math.floor(Math.random() * idleLines.length)];
-  agent.speechBubble = {
-    text,
-    timer: 2000,
-    duration: 2000
-  };
-
   return true;
 }
 
@@ -330,6 +578,15 @@ export function claimNextTask(desk) {
   nextTask.status = 'processing';
   syncTaskStart(nextTask);
   desk.currentTask = nextTask;
+  if (desk.occupant) {
+    desk.occupant.currentTask = nextTask;
+    desk.occupant.currentTaskId = nextTask.id;
+    desk.occupant.awaitingTaskCompletion = false;
+    desk.occupant.lastProgressPhase = null;
+    desk.occupant.lastTaskStatus = getTaskStatus(nextTask);
+    desk.occupant.visualState = 'working';
+    syncAgentTaskSpeech(desk.occupant, nextTask);
+  }
   console.log('[TASK][CURRENT]', nextTask.id, {
     hasPayload: !!nextTask.payload,
     channelId: nextTask.payload && nextTask.payload.channelId ? nextTask.payload.channelId : null,
@@ -342,16 +599,6 @@ export function claimNextTask(desk) {
     deskIndex: desks.indexOf(desk),
     workflowId: nextTask.workflowId || null
   });
-
-  const workerLines = ['got it!', 'on it', 'processing task'];
-  const text = workerLines[Math.floor(Math.random() * workerLines.length)];
-  if (desk.occupant) {
-    desk.occupant.speechBubble = {
-      text,
-      timer: 2000,
-      duration: 2000
-    };
-  }
 
   return nextTask;
 }
@@ -450,28 +697,104 @@ export function assignAgentTarget(agent) {
 
 // --- Simulation update tick ---
 export function update() {
+  syncCompletionStatuses();
+
   for (const agent of agents) {
     ensureIdleStateFields(agent);
+    tickSpeech(agent);
+    syncAgentTaskStatus(agent);
+
+    const task = agent.currentTask;
+    if (shouldLogAgentStatus(agent, Date.now())) {
+      console.log('[Agent Status]', agent.id, task ? task.id : null, task ? task.status : null);
+    }
+    if (task && (task.status === 'done' || task.status === 'failed') && agent.state !== 'complete_react') {
+      beginCompletionReaction(agent, task.status === 'done' ? 'Done!' : 'Finished.');
+      continue;
+    }
+
+    if (agent.state === 'complete_react') {
+      resetIdleBehavior(agent);
+      agent.visualState = 'complete_react';
+      agent.completeReactTimer = Math.max(0, agent.completeReactTimer - FRAME_TIME_MS);
+      agent.stateTimer += 1;
+
+      agent.animationTimer += 1;
+      if (agent.animationTimer >= 10) {
+        agent.animationTimer = 0;
+        agent.animationFrame = (agent.animationFrame + 1) % 2;
+      }
+
+      if (agent.completeReactTimer <= 0) {
+        agent.currentTask = null;
+        agent.currentTaskId = null;
+        agent.state = 'idle';
+        agent.visualState = 'idle';
+        agent.stateTimer = 0;
+        agent.awaitingTaskCompletion = false;
+        agent.lastProgressPhase = null;
+        agent.lastTaskStatus = null;
+        agent.lastSpeechText = null;
+        clearAgentTarget(agent);
+      }
+      continue;
+    }
+
+    if (agent.state === 'waiting') {
+      resetIdleBehavior(agent);
+      agent.visualState = 'waiting';
+
+      const trackedTask = agent.currentTask;
+      if (!trackedTask) {
+        continue;
+      }
+
+      if (trackedTask.status === 'done' || trackedTask.status === 'failed') {
+        beginCompletionReaction(agent, trackedTask.status === 'done' ? 'Done!' : 'Finished.');
+        continue;
+      }
+
+      if (trackedTask.status !== 'awaiting_ack') {
+        trackedTask.status = 'awaiting_ack';
+      }
+
+      if (typeof trackedTask.required === 'number' && trackedTask.required > 0) {
+        trackedTask.progress = Math.max(trackedTask.progress || 0, trackedTask.required * 0.95);
+      }
+
+      if (trackedTask.status === 'awaiting_ack' && canSpeak(agent)) {
+        setAgentSpeech(agent, pickSpeechLine([
+          'Sending it off...',
+          'Almost done...',
+          'Waiting for confirmation...'
+        ], 'Waiting for confirmation...'), 7000);
+      }
+
+      syncAgentTaskSpeech(agent, trackedTask);
+      continue;
+    }
 
     if (agent.state === 'sitting') {
       resetIdleBehavior(agent);
+      agent.visualState = 'working';
       const desk = agent.targetDesk;
       if (desk && desk.occupant === agent && !desk.currentTask) {
         claimNextTask(desk);
       }
 
-      agent.animationFrame = 0;
-      agent.animationTimer = 0;
-      agent.stateTimer += 1;
-      if (agent.stateTimer >= SITTING_TO_WORKING_DELAY) {
+      if (desk && desk.currentTask) {
         agent.state = 'working';
         agent.stateTimer = 0;
       }
+
+      agent.animationFrame = 0;
+      agent.animationTimer = 0;
       continue;
     }
 
     if (agent.state === 'working') {
       resetIdleBehavior(agent);
+      agent.visualState = 'working';
       const desk = agent.targetDesk;
       if (!desk || desk.occupant !== agent) {
         scheduleTargetRetry(agent);
@@ -480,15 +803,46 @@ export function update() {
 
       const activeTask = claimNextTask(desk);
       if (!activeTask) {
+        if (agent.awaitingTaskCompletion && agent.currentTask) {
+          agent.state = 'waiting';
+          continue;
+        }
+
         scheduleTargetRetry(agent);
         continue;
       }
 
+      agent.currentTask = activeTask;
+      agent.currentTaskId = activeTask.id;
+      syncAgentTaskSpeech(agent, activeTask);
+
       const skill = agent.skills[activeTask.type] || 1;
       activeTask.progress += agent.productivity * skill;
       if (activeTask.progress >= activeTask.required) {
-        activeTask.progress = activeTask.required;
+        activeTask.status = 'awaiting_ack';
+        activeTask.progress = activeTask.required * 0.95;
+        agent.awaitingTaskCompletion = true;
         handleTaskExecutionResult(desk, activeTask);
+
+        if (activeTask.status === 'pending') {
+          agent.awaitingTaskCompletion = false;
+          agent.currentTask = null;
+          agent.currentTaskId = null;
+          agent.lastProgressPhase = null;
+          agent.lastTaskStatus = null;
+          agent.state = 'working';
+          continue;
+        }
+
+        if (activeTask.status === 'failed') {
+          beginCompletionReaction(agent, 'Finished.');
+          continue;
+        }
+
+        agent.state = 'waiting';
+        agent.stateTimer = 0;
+        syncAgentTaskSpeech(agent, activeTask);
+        continue;
       }
 
       agent.stateTimer += 1;
@@ -501,6 +855,16 @@ export function update() {
     }
 
     if (agent.state === 'idle') {
+      agent.visualState = 'idle';
+
+      if (!agent.currentTask && canSpeak(agent)) {
+        setAgentSpeech(agent, pickSpeechLine([
+          'Waiting for work...',
+          'Nothing to do right now.',
+          'Just relaxing.'
+        ], 'Waiting for work...'), 7000);
+      }
+
       updateCoffeeAnimation(agent);
 
       agent.idleTime += 1;

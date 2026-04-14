@@ -3,21 +3,38 @@ import { generateImage } from '../../../core/image-generation.js';
 export const openAIImageAdapter = {
   id: 'openai',
   async render(task, prompt) {
-    const result = await generateImage('openai', prompt);
+    const result = await generateImage({
+      provider: 'openai',
+      prompt,
+      context: {
+        taskId: task && task.id ? task.id : null,
+        workflowId: task && task.renderId ? task.renderId : undefined,
+        source: task && task.type === 'discord' ? 'discord' : 'api',
+        retryCount: task && typeof task.retries === 'number' ? task.retries : 0,
+        metadata: {
+          productId: task && task.productId ? task.productId : null,
+          provider: 'openai'
+        }
+      }
+    });
+
+    if (!result.contentBase64) {
+      throw new Error('openai_invalid_response_missing_content_base64');
+    }
 
     return {
       provider: this.id,
-      prompt,
-      contentBase64: result.imageBase64 || null,
+      prompt: result.prompt,
+      contentBase64: result.contentBase64,
       extension: 'png',
       mimeType: result.mimeType || 'image/png',
       metadata: {
         apiFamily: 'images',
         mode: 'openai_api',
-        model: result.model || 'gpt-image-1',
-        imageBytesApprox: result.imageBase64
-          ? Math.floor((result.imageBase64.length * 3) / 4)
-          : 0
+        model: result && result.metadata ? result.metadata.model || 'gpt-5' : 'gpt-5',
+        imageBytesApprox: Math.floor((result.contentBase64.length * 3) / 4),
+        path: result.path,
+        createdAt: result.createdAt
       }
     };
   }

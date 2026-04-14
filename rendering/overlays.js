@@ -1,4 +1,4 @@
-import { canvas, agents, desks, workflows, eventStream } from '../core/app-state.js';
+import { canvas, agents, desks, workflows } from '../core/app-state.js';
 import { spriteConfigs } from '../core/constants.js';
 
 // --- Shared rendering state ---
@@ -7,88 +7,62 @@ export const uiFxState = {
   knownTasks: new Map(),
   creationPops: [],
   completionFlashes: [],
-  particles: [],
-  speechEventCursor: 0
+  particles: []
 };
 
-function setAgentSpeechBubble(agent, text, duration = 2000) {
-  if (!agent) {
+function drawSpeechBubble(ctx, agent) {
+  if (!agent || !agent.speech || !agent.speech.text || agent.speech.timer <= 0) {
     return;
   }
 
-  agent.speechBubble = {
-    text: String(text || ''),
-    timer: duration,
-    duration
-  };
-}
+  const duration = agent.speech.duration || 2400;
+  const alpha = Math.max(0, Math.min(1, agent.speech.timer / duration));
+  const text = agent.speech.text;
+  const x = agent.x;
+  const y = agent.y - spriteConfigs.agent.height / 2 - 26;
+  const paddingX = 8;
+  const bubbleHeight = 18;
+  const tailSize = 5;
 
-function processSpeechEvents() {
-  while (uiFxState.speechEventCursor < eventStream.length) {
-    const event = eventStream[uiFxState.speechEventCursor];
-    uiFxState.speechEventCursor += 1;
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  const textWidth = ctx.measureText(text).width;
+  const bubbleWidth = textWidth + paddingX * 2;
+  const bubbleX = x - bubbleWidth / 2;
+  const bubbleY = y - bubbleHeight / 2;
+  const radius = 4;
 
-    if (!event || !event.payload) {
-      continue;
-    }
+  ctx.save();
+  ctx.globalAlpha = alpha;
 
-    if (event.type === 'TASK_STARTED') {
-      const desk = desks[event.payload.deskIndex];
-      const agent = desk && desk.occupant ? desk.occupant : null;
-      const lines = ['got it!', 'on it', 'processing task'];
-      const text = lines[Math.floor(Math.random() * lines.length)];
-      setAgentSpeechBubble(agent, text, 1800);
-      continue;
-    }
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(bubbleX + radius, bubbleY);
+  ctx.lineTo(bubbleX + bubbleWidth - radius, bubbleY);
+  ctx.quadraticCurveTo(bubbleX + bubbleWidth, bubbleY, bubbleX + bubbleWidth, bubbleY + radius);
+  ctx.lineTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight - radius);
+  ctx.quadraticCurveTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight, bubbleX + bubbleWidth - radius, bubbleY + bubbleHeight);
+  ctx.lineTo(x + tailSize, bubbleY + bubbleHeight);
+  ctx.lineTo(x, bubbleY + bubbleHeight + tailSize);
+  ctx.lineTo(x - tailSize, bubbleY + bubbleHeight);
+  ctx.lineTo(bubbleX + radius, bubbleY + bubbleHeight);
+  ctx.quadraticCurveTo(bubbleX, bubbleY + bubbleHeight, bubbleX, bubbleY + bubbleHeight - radius);
+  ctx.lineTo(bubbleX, bubbleY + radius);
+  ctx.quadraticCurveTo(bubbleX, bubbleY, bubbleX + radius, bubbleY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
 
-    if (event.type === 'TASK_CREATED') {
-      const candidates = agents.filter((agent) => agent.state === 'idle');
-      if (!candidates.length) {
-        continue;
-      }
-
-      const selected = candidates[Math.floor(Math.random() * candidates.length)];
-      const lines = ['on it', 'got it!'];
-      const text = lines[Math.floor(Math.random() * lines.length)];
-      setAgentSpeechBubble(selected, text, 1400);
-    }
-  }
+  ctx.fillStyle = '#000000';
+  ctx.fillText(text, x, bubbleY + 12);
+  ctx.restore();
 }
 
 export function drawSpeechBubbles(ctx) {
-  processSpeechEvents();
-
   for (const agent of agents) {
-    if (!agent.speechBubble || !agent.speechBubble.text) {
-      continue;
-    }
-
-    agent.speechBubble.timer = Math.max(0, agent.speechBubble.timer - 16.67);
-    if (agent.speechBubble.timer <= 0) {
-      agent.speechBubble.text = '';
-      continue;
-    }
-
-    const duration = agent.speechBubble.duration || 2000;
-    const alpha = Math.max(0, Math.min(1, agent.speechBubble.timer / duration));
-    const text = agent.speechBubble.text;
-    const x = agent.x;
-    const y = agent.y - spriteConfigs.agent.height / 2 - 22;
-    const paddingX = 6;
-    const bubbleHeight = 14;
-
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'center';
-    const textWidth = ctx.measureText(text).width;
-    const bubbleWidth = textWidth + paddingX * 2;
-
-    ctx.fillStyle = `rgba(10, 14, 24, ${0.78 * alpha})`;
-    ctx.fillRect(x - bubbleWidth / 2, y - bubbleHeight / 2, bubbleWidth, bubbleHeight);
-    ctx.strokeStyle = `rgba(186, 230, 253, ${0.55 * alpha})`;
-    ctx.strokeRect(x - bubbleWidth / 2, y - bubbleHeight / 2, bubbleWidth, bubbleHeight);
-
-    ctx.fillStyle = `rgba(247, 244, 223, ${0.95 * alpha})`;
-    ctx.fillText(text, x, y + 3);
+    drawSpeechBubble(ctx, agent);
   }
 }
 
@@ -130,6 +104,14 @@ export function getRoleTint(role) {
 }
 
 export function getAgentStateLabel(agent) {
+  if (agent.visualState === 'working' || agent.visualState === 'waiting') {
+    return 'WORK';
+  }
+
+  if (agent.visualState === 'complete_react') {
+    return 'DONE';
+  }
+
   if (agent.state === 'working') {
     return 'WORK';
   }
@@ -222,7 +204,22 @@ export function drawDeskTaskOverlay(ctx, desk) {
 
   const barWidth = 64;
   const barHeight = 6;
-  const progressRatio = Math.max(0, Math.min(1, desk.currentTask.progress / desk.currentTask.required));
+  const task = desk.currentTask;
+  const rawProgressRatio = task && typeof task.progress === 'number' && typeof task.required === 'number' && task.required > 0
+    ? Math.max(0, Math.min(1, task.progress / task.required))
+    : 0;
+  const status = task && typeof task.status === 'string' ? task.status : 'in_progress';
+  let progressRatio = 0;
+
+  if (status === 'done' || status === 'failed') {
+    progressRatio = 1;
+  } else if (status === 'awaiting_ack') {
+    progressRatio = 0.95;
+  } else if (status === 'in_progress' || status === 'running' || status === 'processing') {
+    progressRatio = Math.min(0.9, rawProgressRatio);
+  } else {
+    progressRatio = Math.min(0.9, rawProgressRatio);
+  }
   const barX = desk.x - barWidth / 2;
   const barY = labelY + 6;
   const pulse = 0.5 + 0.5 * Math.sin(uiFxState.frame * 0.16);

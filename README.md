@@ -15,7 +15,8 @@ Slothworld is a modular, event-driven browser simulation that visualizes agent b
 - **Optional Discord integration**: Listen for mentions and commands; ingest tasks via event polling.
 - **Unified completion pipeline**: All tasks (UI, API, workflows, Discord) complete exclusively through ACK-based lifecycle handling ensuring consistent state transitions and reliable external side effects.
 - **Discord completion notifications**: Completed tasks can notify Discord via channel post or message reply (when `messageId` is available).
-- **OpenAI image generation**: `image_render` tasks generate PNG assets through OpenAI Responses API (`gpt-5` + `image_generation`) and persist them under `assets/generated/`.
+- **Worker-based image generation**: `image_render` tasks run through a backend worker pipeline (provider -> worker persistence -> asset URL) with browser-safe UI calls.
+- **Agent lifecycle + speech system**: Agents remain seated while working/waiting, transition through explicit visual states, and use cooldown-gated speech bubbles.
 
 ## System Architecture Flow
 
@@ -87,16 +88,25 @@ The following behavior is verified against runtime code in `core/`, `ui/`, `rend
 ### Image generation behavior
 
 - The only supported image provider is OpenAI.
-- `core/image-generation.js` posts to `POST /render/openai/generate`.
-- `bridge-server.js` delegates image creation to `integrations/rendering/providers/openaiImageProvider.js`.
-- `openaiImageProvider.js` uses OpenAI Responses API with `model: "gpt-5"` and `tools: [{ type: "image_generation" }]`.
-- The provider extracts the image from `response.output` where `type === "image_generation_call"` and reads `output.result` as base64 PNG.
+- `core/image-generation.js` is a browser-safe bridge client that posts to `POST /render/openai/generate` and returns normalized image result metadata.
+- `bridge-server.js` delegates image execution to `core/workers/imageRenderWorker.js`.
+- `imageRenderWorker.js` is the Node-only layer responsible for filesystem writes to `assets/generated/<productId>/` and returning persisted asset metadata.
+- `openaiImageProvider.js` is provider logic only (OpenAI Responses API call + base64 extraction), with no filesystem writes.
+- The OpenAI provider extracts the image from `response.output` where `type === "image_generation_call"` and reads `output.result` as base64 PNG.
 - PNG-only output is enforced; SVG placeholder generation has been removed.
 - `POST /asset-store/render` persists generated images under `assets/generated/<productId>/`.
 - `/asset-store/render` accepts strict contract payloads only: `contentBase64` (PNG base64 string), `extension: "png"`, `mimeType: "image/png"`.
 - `/asset-store/render` request body limit is set to 25MB to support image base64 payloads.
 - `render.route` returns the persisted asset URL, and that URL is stored as `task.executionResult.imageUrl`.
 - Generated images are created through the API and stored locally by the bridge; they are not expected to appear in the OpenAI Playground image history.
+
+### Agent lifecycle + speech behavior
+
+- Agent visual lifecycle is explicit: `idle -> moving -> sitting -> working -> waiting -> complete_react -> idle`.
+- Agents stay seated for `working`, `waiting`, and `complete_react` rendering states.
+- Completion is status-driven (`done`/`failed`), synchronized from completion events and task status.
+- Speech bubbles are state-driven (`agent.speech`) with cooldown gating.
+- Speech duration/cooldown is currently 7000ms.
 
 ### Control API behavior
 
@@ -114,7 +124,10 @@ The codebase is organized into modular components by responsibility:
 - **app-state.js** – Shared state initialization: canvas, agents, desks, workflows, event emitter
 - **task-handling.js** – Task factories, execution, tool registry, bridge polling, retry logic
 - **workflow.js** – Workflow lifecycle: creation, step queueing, approval/rejection, context propagation
-- **agent-logic.js** – Agent simulation: state machine (sitting→working→idle), movement, task claiming
+- **agent-logic.js** – Agent simulation lifecycle, task claiming/execution, completion reactions, and speech state updates
+- **workers/imageRenderWorker.js** – Node worker for provider execution and file persistence to generated assets
+- **types/TaskContext.ts** – Shared task execution context contract for providers/workers
+- **types/ImageResult.ts** – Shared provider output contract with metadata/base64 fields
 
 ### Rendering (`rendering/`)
 - **assets.js** – Asset loader and sprite path registry (lazy-loaded into memory)
@@ -129,10 +142,12 @@ The codebase is organized into modular components by responsibility:
 - **keyboard-input.js** – Keyboard binding shim (debug console interception retired)
 
 ### Image pipeline modules
-- **core/image-generation.js** – Frontend bridge client for OpenAI image requests
+- **core/image-generation.js** – Frontend-safe bridge client for image generation requests and normalized image results
 - **integrations/rendering/render-router.js** – OpenAI-only render routing for `image_render` tasks
-- **integrations/rendering/providers/openAIImageAdapter.js** – OpenAI adapter that returns PNG/base64 PNG
-- **integrations/rendering/providers/openaiImageProvider.js** – Node provider using OpenAI Responses API image tool and writing PNG files to disk
+- **integrations/rendering/providers/openAIImageAdapter.js** – Render adapter that converts backend image results into the asset-store contract
+- **integrations/rendering/providers/openaiImageProvider.js** – OpenAI provider logic (Responses API -> base64 PNG extraction), no filesystem access
+- **integrations/rendering/providers/HuggingFaceImageProvider.ts** – Hugging Face provider implementation returning image payload metadata/base64
+- **integrations/rendering/providers/ImageProvider.ts** – Shared provider interface (`generate(prompt, context) => ImageResult`)
 - **integrations/rendering/asset-store.js** – Persists generated PNG assets through the bridge
 
 ### Root

@@ -1,0 +1,17 @@
+{
+  "assetId": "asset-1776186259164-a1a2a1f16461e",
+  "productId": "product_1776186166835",
+  "url": "/assets/generated/product_1776186166835/asset-1776186259164-a1a2a1f16461e.png",
+  "sourceUrl": null,
+  "provider": "openai",
+  "prompt": "Product: cag | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: cag. Generate a polished ecommerce-ready product image.",
+  "createdAt": 1776182678923,
+  "mimeType": "image/png",
+  "hasContentBase64": true,
+  "metadata": {
+    "apiFamily": "images",
+    "mode": "openai_api",
+    "model": "gpt-5",
+    "imageBytesApprox": 1465488
+  }
+}

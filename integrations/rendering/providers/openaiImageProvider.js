@@ -1,12 +1,4 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import OpenAI from 'openai';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const ROOT_DIR = path.resolve(__dirname, '../../../');
-const GENERATED_ASSETS_DIR = path.join(ROOT_DIR, 'assets', 'generated');
 
 function extractBase64Image(response) {
   if (!response || !Array.isArray(response.output)) {
@@ -40,14 +32,8 @@ export async function generateImage({ prompt, productId }) {
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const createdAt = Date.now();
-  const id = `${createdAt}-${Math.random().toString(16).slice(2, 10)}`;
-  const safeProductId = normalizedProductId
-    .replace(/[^a-zA-Z0-9-_]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '') || 'product';
-
   console.log('[OPENAI_IMAGE_REQUEST]', {
-    productId: safeProductId,
+    productId: normalizedProductId,
     promptLength: normalizedPrompt.length,
     model: 'gpt-5'
   });
@@ -63,29 +49,17 @@ export async function generateImage({ prompt, productId }) {
     throw new Error('OPENAI_IMAGE_FAILED_NO_OUTPUT');
   }
 
-  const targetDir = path.join(GENERATED_ASSETS_DIR, safeProductId);
-  fs.mkdirSync(targetDir, { recursive: true });
-
-  const assetId = `asset-${id}`;
-  const filename = `${assetId}.png`;
-  const assetPath = path.join(targetDir, filename);
-  fs.writeFileSync(assetPath, Buffer.from(base64Png, 'base64'));
-
   console.log('[OPENAI_IMAGE_SUCCESS]', {
-    productId: safeProductId,
-    assetId,
+    productId: normalizedProductId,
     base64Length: base64Png.length
   });
-  console.log('[OPENAI_IMAGE_SAVE_PATH]', assetPath);
 
   return {
-    assetId,
-    productId: safeProductId,
-    url: `/assets/generated/${safeProductId}/${filename}`,
     provider: 'openai',
     prompt: normalizedPrompt,
     createdAt,
     mimeType: 'image/png',
-    hasContentBase64: true
+    model: 'gpt-5',
+    contentBase64: base64Png
   };
 }

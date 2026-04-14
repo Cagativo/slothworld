@@ -1,0 +1,19 @@
+{
+  "assetId": "asset-1776204072125-18278a8e04e0e8",
+  "productId": "product_1776204035321",
+  "url": "/assets/generated/product_1776204035321/asset-1776204072125-18278a8e04e0e8.png",
+  "sourceUrl": null,
+  "provider": "openai",
+  "prompt": "Product: 2d seal | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: 2d seal. Generate a polished ecommerce-ready product image.",
+  "createdAt": 1776200492188,
+  "mimeType": "image/png",
+  "hasContentBase64": true,
+  "metadata": {
+    "apiFamily": "images",
+    "mode": "openai_api",
+    "model": "gpt-5",
+    "imageBytesApprox": 1202115,
+    "path": "/assets/generated/product_1776204035321/asset-1776204037735-d1dc4462.png",
+    "createdAt": 1776204037735
+  }
+}

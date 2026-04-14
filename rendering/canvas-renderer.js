@@ -127,7 +127,10 @@ export function render() {
 
   for (const agent of agents) {
     const isMoving = agent.state === 'moving';
-    const isSitting = agent.state === 'sitting';
+    const isSitting = agent.state === 'sitting'
+      || agent.state === 'working'
+      || agent.state === 'waiting'
+      || agent.state === 'complete_react';
     const isIdle = agent.state === 'idle';
     const sprite = isMoving
       ? walkSprites[agent.direction]
@@ -137,8 +140,9 @@ export function render() {
       : 0;
     const frame = isMoving ? agent.animationFrame : (isIdle ? coffeeFrame : 0);
     const frameCount = isIdle && coffeeIdleSprite ? 3 : 4;
+    const reactOffset = agent.state === 'complete_react' ? Math.sin((agent.stateTimer || 0) * 0.2) * 1.5 : 0;
     const renderX = isSitting ? agent.x + SITTING_OFFSET.x : agent.x;
-    const renderY = isSitting ? agent.y + SITTING_OFFSET.y : agent.y;
+    const renderY = isSitting ? agent.y + SITTING_OFFSET.y + reactOffset : agent.y;
     drawAnimatedSprite(sprite, frame, renderX, renderY, frameCount);
 
     if (isIdle && agent.coffeeAnim && agent.coffeeAnim.phase !== 'idle') {

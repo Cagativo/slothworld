@@ -1,0 +1,17 @@
+{
+  "assetId": "asset-1776179270981-1c5cc6db3fc81",
+  "productId": "product_1776179194947",
+  "url": "/assets/generated/product_1776179194947/asset-1776179270981-1c5cc6db3fc81.png",
+  "sourceUrl": null,
+  "provider": "openai",
+  "prompt": "Product: pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: pixel art seal sprite sheet, 4-frame walking animation moving to the right, horizontal row left-to-right sequence, cute chubby seal character, side view facing right, consistent proportions, smooth walking cycle (flipper push, body bob, tail sway), 16-bit retro game asset, crisp pixel clusters, limited color palette, clean silhouette, transparent background, evenly spaced frames, game-ready sprite sheet. Generate a polished ecommerce-ready product image.",
+  "createdAt": 1776179271180,
+  "mimeType": "image/png",
+  "hasContentBase64": true,
+  "metadata": {
+    "apiFamily": "images",
+    "mode": "openai_api",
+    "model": "gpt-5",
+    "imageBytesApprox": 1430007
+  }
+}

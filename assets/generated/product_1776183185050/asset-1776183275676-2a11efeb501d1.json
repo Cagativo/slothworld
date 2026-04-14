@@ -1,0 +1,17 @@
+{
+  "assetId": "asset-1776183275676-2a11efeb501d1",
+  "productId": "product_1776183185050",
+  "url": "/assets/generated/product_1776183185050/asset-1776183275676-2a11efeb501d1.png",
+  "sourceUrl": null,
+  "provider": "openai",
+  "prompt": "Product: Create a pixel art sprite sheet with exactly 4 frames in a single horizontal row. Each frame shows a cute seal walking to the right in a smooth looping animation. The seal is side-facing (right), with consistent size and alignment in every frame.\n\nEach frame should look like a 32x32 retro game sprite, with clean outlines, minimal colors, and clear silhouette. Ensure even spacing between frames and no vertical stacking. Transparent background only. No additional objects, no text, no borders. | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: Create a pixel art sprite sheet with exactly 4 frames in a single horizontal row. Each frame shows a cute seal walking to the right in a smooth looping animation. The seal is side-facing (right), with consistent size and alignment in every frame.\n\nEach frame should look like a 32x32 retro game sprite, with clean outlines, minimal colors, and clear silhouette. Ensure even spacing between frames and no vertical stacking. Transparent background only. No additional objects, no text, no borders.. Generate a polished ecommerce-ready product image.",
+  "createdAt": 1776179695530,
+  "mimeType": "image/png",
+  "hasContentBase64": true,
+  "metadata": {
+    "apiFamily": "images",
+    "mode": "openai_api",
+    "model": "gpt-5",
+    "imageBytesApprox": 2235891
+  }
+}
