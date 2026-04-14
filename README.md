@@ -15,6 +15,7 @@ Slothworld is a modular, event-driven browser simulation that visualizes agent b
 - **Optional Discord integration**: Listen for mentions and commands; ingest tasks via event polling.
 - **Unified completion pipeline**: All tasks (UI, API, workflows, Discord) complete exclusively through ACK-based lifecycle handling ensuring consistent state transitions and reliable external side effects.
 - **Discord completion notifications**: Completed tasks can notify Discord via channel post or message reply (when `messageId` is available).
+- **OpenAI image generation**: `image_render` tasks generate PNG assets through OpenAI Responses API (`gpt-5` + `image_generation`) and persist them under `assets/generated/`.
 
 ## System Architecture Flow
 
@@ -44,6 +45,8 @@ Bridge lifecycle endpoints (`/start`, `/execute`, `/ack`) update existing stored
 ### Payload Continuity
 Task payload is carried end-to-end and used for integration behavior.
 For Discord tasks, `channelId`, `messageId`, and `content` are the operational fields.
+
+For image-render tasks, the bridge persists the generated PNG and returns a local asset URL that becomes `task.executionResult.imageUrl`.
 
 ### Event-driven execution
 State changes emit events; no direct side-effect coupling in core.
@@ -81,6 +84,20 @@ The following behavior is verified against runtime code in `core/`, `ui/`, `rend
   - reply to original message when `messageId` exists and fetch succeeds
   - fallback to channel send when reply is unavailable
 
+### Image generation behavior
+
+- The only supported image provider is OpenAI.
+- `core/image-generation.js` posts to `POST /render/openai/generate`.
+- `bridge-server.js` delegates image creation to `integrations/rendering/providers/openaiImageProvider.js`.
+- `openaiImageProvider.js` uses OpenAI Responses API with `model: "gpt-5"` and `tools: [{ type: "image_generation" }]`.
+- The provider extracts the image from `response.output` where `type === "image_generation_call"` and reads `output.result` as base64 PNG.
+- PNG-only output is enforced; SVG placeholder generation has been removed.
+- `POST /asset-store/render` persists generated images under `assets/generated/<productId>/`.
+- `/asset-store/render` accepts strict contract payloads only: `contentBase64` (PNG base64 string), `extension: "png"`, `mimeType: "image/png"`.
+- `/asset-store/render` request body limit is set to 25MB to support image base64 payloads.
+- `render.route` returns the persisted asset URL, and that URL is stored as `task.executionResult.imageUrl`.
+- Generated images are created through the API and stored locally by the bridge; they are not expected to appear in the OpenAI Playground image history.
+
 ### Control API behavior
 
 - `window.controlAPI.injectTask(...)` is the primary UI/task-intent entrypoint and enqueues tasks in simulation.
@@ -111,6 +128,13 @@ The codebase is organized into modular components by responsibility:
 - **control-api.js** – Control command handlers (agent inspection, movement, role assignment, workflow actions)
 - **keyboard-input.js** – Keyboard binding shim (debug console interception retired)
 
+### Image pipeline modules
+- **core/image-generation.js** – Frontend bridge client for OpenAI image requests
+- **integrations/rendering/render-router.js** – OpenAI-only render routing for `image_render` tasks
+- **integrations/rendering/providers/openAIImageAdapter.js** – OpenAI adapter that returns PNG/base64 PNG
+- **integrations/rendering/providers/openaiImageProvider.js** – Node provider using OpenAI Responses API image tool and writing PNG files to disk
+- **integrations/rendering/asset-store.js** – Persists generated PNG assets through the bridge
+
 ### Root
 - **main.js** – Thin orchestrator: imports all modules, exposes window API, starts simulation loop and bridge polling
 - **index.html** – HTML entry point with canvas and ES module script loader
@@ -139,6 +163,7 @@ Create a `.env` file in the project root:
 ```env
 HOST=0.0.0.0
 PORT=3000
+OPENAI_API_KEY=your_openai_api_key_here
 DISCORD_BOT_TOKEN=your_token_here
 ALLOWED_CHANNELS=123456789012345678,987654321098765432
 ```
@@ -147,6 +172,8 @@ Notes:
 
 - If `DISCORD_BOT_TOKEN` is missing, Discord execution is disabled, but the app still runs.
 - `ALLOWED_CHANNELS` is optional. Leave it empty to allow all channels.
+- `OPENAI_API_KEY` is required for `image_render` tasks.
+- Image generation is executed via OpenAI Responses API (`gpt-5` + `image_generation` tool).
 
 ## Usage
 
@@ -185,6 +212,56 @@ curl -X POST http://localhost:3000/task \
   }'
 ```
 
+Create an image render task:
+
+```bash
+curl -X POST http://localhost:3000/task \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "image_render",
+    "title": "Generate Product Image",
+    "payload": {
+      "productId": "product-demo",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "Demo Mug",
+        "style": "clean ecommerce product illustration",
+        "mood": "commercial",
+        "colors": ["white", "blue"],
+        "composition": "centered hero composition",
+        "camera": "front-facing studio shot",
+        "background": "minimal plain backdrop",
+        "prompt": "ceramic mug with a minimal geometric print"
+      }
+    }
+  }'
+```
+
+Test the OpenAI image route directly:
+
+```bash
+curl -X POST http://localhost:3000/render/openai/generate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Minimal ecommerce product shot of a ceramic mug","productId":"product-demo"}'
+```
+
+Persist an image payload to asset store (strict contract):
+
+```bash
+curl -X POST http://localhost:3000/asset-store/render \
+  -H "Content-Type: application/json" \
+  -d '{
+    "assetId":"asset-demo",
+    "productId":"product-demo",
+    "provider":"openai",
+    "prompt":"demo",
+    "contentBase64":"<base64_png>",
+    "extension":"png",
+    "mimeType":"image/png",
+    "metadata":{}
+  }'
+```
+
 Fetch tasks:
 
 ```bash
@@ -207,9 +284,14 @@ curl http://localhost:3000/health
 
 Use the in-app Task Creator panel to create tasks with structured payloads:
 
-- Select task type (`discord` or `shopify`)
+- Select task type (`discord`, `shopify`, or `image_render`)
 - Enter task title/content
 - Submit task directly through `window.controlAPI.injectTask(...)`
+
+For image tasks:
+
+- The generated file is written to `assets/generated/<productId>/` as PNG.
+- The task result uses the local generated asset URL, not a Playground URL.
 
 Use the Operator Control Panel to inspect:
 
@@ -232,6 +314,7 @@ The keyboard-driven in-canvas debug console has been removed. Command execution 
 - **JavaScript (ES6 modules)** – Modular frontend with clean separation between core, rendering, and UI layers
 - **HTML5 Canvas** – Real-time pixel art rendering and simulation visualization
 - **Node.js HTTP server** – Lightweight backend (no framework dependencies)
+- **OpenAI Node SDK** – Responses API client for image generation (`gpt-5` + `image_generation`)
 - **discord.js** – Optional Discord bot integration for task ingestion
 - **dotenv** – Environment variable configuration
 - **JSON persistence** – `bridge-store.json` for task and event storage
@@ -245,6 +328,16 @@ The keyboard-driven in-canvas debug console has been removed. Command execution 
 - Add HTTP authentication and rate limiting for public deployments
 - Add persistence for agent role preferences and desk configurations
 - Add real-time metrics panel (throughput, error rates, workflow SLAs)
+
+## Recent Migration Summary
+
+- Removed the old stub image providers and SVG placeholder renderer.
+- Removed `provider_stub` image generation mode and the mock image fallback path.
+- Standardized image generation on OpenAI Responses API (`gpt-5` + `image_generation`).
+- Standardized persisted image assets on PNG with `image/png` MIME type.
+- Standardized asset-store contract on PNG base64 via `contentBase64` only.
+- Increased `/asset-store/render` request body limit to 25MB to support image payloads.
+- `task.executionResult.imageUrl` now points to the bridge-managed generated asset URL.
 
 ## System Classification
 

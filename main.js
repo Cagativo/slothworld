@@ -1,56 +1,33 @@
 // =============================================================================
 // main.js — Thin orchestrator.
-// All logic lives in core/, rendering/, and ui/. This file wires everything
-// together, exposes the window debug API (identical surface to the original),
-// and starts the game loop + bridge polling.
 // =============================================================================
 
-import { agents, desks, workflows, commandHistory, eventStream } from './core/app-state.js';
-import { addTaskToDesk, ingestTask, startBridgePolling } from './core/task-handling.js';
-import { createWorkflow, getWorkflow, listWorkflows } from './core/workflow.js';
-import { update } from './core/agent-logic.js';
-import { render } from './rendering/canvas-renderer.js';
-import { controlAPI, dispatchCommand, inspectAgent, inspectDesk, inspectWorkflow } from './ui/control-api.js';
-import { bindKeyboard } from './ui/keyboard-input.js';
-import { initOperatorControlPanel } from './ui/operator-control-panel.js';
-import { initTaskCreatorPanel } from './ui/task-creator-panel.js';
+import { startBridgePolling } from './core/task-handling.js';
+import { initSimulation, updateSimulation } from './core/simulation-runner.js';
+import { startRenderWorkers } from './integrations/rendering/render-queue.js';
+import { initRenderer, renderFrame } from './rendering/renderer-loop.js';
+import { initUI } from './ui/ui-bootstrap.js';
+import { exposeWindowAPI } from './ui/window-api.js';
 
-// DEV_MODE flag — set before any module reads it via window.DEV_MODE
-window.DEV_MODE = false;
-window.__DEBUG_MODE__ = false;
+function start() {
+  // DEV_MODE flag — set before runtime modules use window.DEV_MODE.
+  window.DEV_MODE = false;
+  window.__DEBUG_MODE__ = false;
 
-// Preserve the original window debug API surface exactly
-window.addTaskToDesk  = addTaskToDesk;
-window.ingestTask     = ingestTask;
-window.createWorkflow = createWorkflow;
-window.workflows      = workflows;
-window.getWorkflow    = getWorkflow;
-window.listWorkflows  = listWorkflows;
-window.inspectAgent   = inspectAgent;
-window.inspectDesk    = inspectDesk;
-window.inspectWorkflow = inspectWorkflow;
-window.controlAPI     = controlAPI;
-window.dispatchCommand = dispatchCommand;
-window.commandHistory = commandHistory;
-window.eventStream    = eventStream;
+  exposeWindowAPI();
+  initSimulation();
+  initRenderer();
+  initUI();
+  startRenderWorkers({ workerCount: 2 });
 
-// Dev-only seed tasks — disabled by default; enable with window.DEV_MODE = true
-if (window.DEV_MODE) {
-  addTaskToDesk({ id: 'discord-1', type: 'discord', title: 'Moderate alerts',  required: 140, progress: 0, status: 'pending' });
-  addTaskToDesk({ id: 'shopify-1', type: 'shopify', title: 'Sync order tags',   required: 180, progress: 0, status: 'pending' });
-  addTaskToDesk({ id: 'discord-2', type: 'discord', title: 'Ticket triage',     required: 120, progress: 0, status: 'pending' });
+  function loop() {
+    updateSimulation();
+    renderFrame();
+    requestAnimationFrame(loop);
+  }
+
+  loop();
+  startBridgePolling();
 }
 
-bindKeyboard();
-initOperatorControlPanel();
-initTaskCreatorPanel();
-
-// --- Game loop ---
-function loop() {
-  update();
-  render();
-  requestAnimationFrame(loop);
-}
-
-loop();
-startBridgePolling();
+start();

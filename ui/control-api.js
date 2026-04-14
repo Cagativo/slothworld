@@ -191,6 +191,17 @@ function injectTask(task) {
     }
   }
 
+  if (mergedTask.type === 'image_render') {
+    mergedTask.payload = {
+      ...(mergedTask.payload || {}),
+      designIntent: task.designIntent && typeof task.designIntent === 'object'
+        ? { ...task.designIntent }
+        : (mergedTask.payload && mergedTask.payload.designIntent && typeof mergedTask.payload.designIntent === 'object' ? { ...mergedTask.payload.designIntent } : {})
+    };
+
+    console.log('[RenderTaskInjected]', mergedTask);
+  }
+
   console.log('[UI][TASK_INJECT]', 'normalized_task', mergedTask);
   console.log('[UI][TASK_INJECT]', 'before_addTaskToDesk', mergedTask);
 

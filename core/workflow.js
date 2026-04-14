@@ -338,13 +338,26 @@ export function createProductWorkflowFromTask(task) {
         type: 'shopify'
       },
       {
-        tool: 'image.generate',
-        contextKey: 'generate_mock_image',
-        title: `Generate mock image: ${keyword}`,
-        description: `Generate a visual mockup of the product`,
+        action: 'render_product_image',
+        contextKey: 'render_product_image',
+        title: `Render product image: ${keyword}`,
+        description: `Render a product visual through the provider-agnostic image pipeline`,
         complexity: 'high',
         rolePreference: 'executor',
-        type: 'shopify'
+        type: 'image_render',
+        payload: {
+          productId: `product-${keyword.replace(/\s+/g, '-').toLowerCase()}`,
+          provider: 'openai',
+          designIntent: {
+            product_name: keyword,
+            style: 'ecommerce product illustration',
+            mood: 'confident and commercial',
+            colors: ['neutral', 'brand-accent'],
+            composition: 'centered hero shot',
+            camera: 'front-facing studio shot',
+            background: 'clean marketplace backdrop'
+          }
+        }
       },
       {
         tool: 'shopify.create_product_listing',

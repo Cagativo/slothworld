@@ -14,7 +14,7 @@ export const ACTION_TOOL_MAP = {
   process_order: 'shopify.process_order',
   research_product: 'research.query',
   generate_design_prompt: 'shopify.generate_design_prompt',
-  generate_mock_image: 'image.generate',
+  render_product_image: 'render.route',
   create_product_listing: 'shopify.create_product_listing'
 };
 

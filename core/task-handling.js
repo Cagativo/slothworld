@@ -1,6 +1,7 @@
 import { generateId, randomInRange, cloneContext } from './utils.js';
 import { ACTION_TOOL_MAP, TASK_EXECUTION_FAILURE_CHANCE, BRIDGE_POLL_INTERVAL_MS } from './constants.js';
 import { desks, emitEvent } from './app-state.js';
+import { enqueueRenderTask } from '../integrations/rendering/render-queue.js';
 // Circular with workflow — safe: only called at runtime, never at module init.
 import { applyWorkflowTaskCompletion, createProductWorkflowFromTask, inferDefaultPriority } from './workflow.js';
 
@@ -97,21 +98,39 @@ async function registerTaskInBridge(task) {
     content: task.payload && typeof task.payload.content === 'string' ? task.payload.content : null
   });
 
+  const normalizedPayload = task && task.payload && typeof task.payload === 'object' ? task.payload : {};
+  const bridgeTask = {
+    id: task.id,
+    type: task.type || 'discord',
+    title: task.title || 'Injected task',
+    status: 'pending',
+    payload: normalizedPayload,
+    ...(typeof task.action === 'string' ? { action: task.action } : {}),
+    ...([0, 1, 2].includes(task.priority) ? { priority: task.priority } : {}),
+    ...(typeof task.productId === 'string' ? { productId: task.productId } : {}),
+    ...(typeof task.provider === 'string' ? { provider: task.provider } : {}),
+    ...(task.designIntent && typeof task.designIntent === 'object' ? { designIntent: task.designIntent } : {})
+  };
+
   const response = await fetch('/task', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      ...task,
-      id: task.id,
-      type: task.type || 'discord',
-      title: task.title || 'Injected task',
-      status: 'pending',
-      action: task.action || null,
-      payload: task.payload && typeof task.payload === 'object' ? task.payload : {}
-    })
+    body: JSON.stringify(bridgeTask)
   });
+
+  if (!response.ok) {
+    let detail = null;
+    try {
+      const data = await response.json();
+      detail = data && data.error ? data.error : null;
+    } catch (_error) {
+      detail = null;
+    }
+
+    console.warn('[TASK]', 'bridge_register_non_ok', task.id, response.status, detail);
+  }
 
   return response.ok;
 }
@@ -219,7 +238,7 @@ export const tools = {
     create_product_listing(payload, context) {
       const keyword = (payload && payload.keyword) || (context && context.keyword) || 'unknown-product';
       const promptData = context && context.generate_design_prompt && context.generate_design_prompt.output;
-      const imageData = context && context.generate_mock_image && context.generate_mock_image.output;
+      const imageData = context && context.render_product_image && context.render_product_image.output;
 
       return {
         success: true,
@@ -227,19 +246,49 @@ export const tools = {
           listingId: `listing-${generateId()}`,
           title: `${keyword} - Automated Listing`,
           description: promptData ? promptData.prompt : `Automated listing for ${keyword}`,
-          imageUrl: imageData ? imageData.imageUrl : null
+          imageUrl: imageData ? (imageData.url || imageData.imageUrl || null) : null
         }
       };
     }
   },
-  image: {
-    generate(payload, context) {
-      const keyword = (payload && payload.keyword) || (context && context.keyword) || 'unknown-product';
+  render: {
+    async route(payload, context) {
+      const task = {
+        id: payload && payload.taskId ? payload.taskId : generateId(),
+        renderId: payload && payload.renderId ? payload.renderId : null,
+        type: 'image_render',
+        productId: payload && payload.productId ? payload.productId : (context && context.keyword ? `product-${context.keyword}` : null),
+        designIntent: payload && payload.designIntent ? payload.designIntent : {},
+        provider: payload && payload.provider ? payload.provider : 'openai',
+        payload: {
+          ...payload,
+          renderId: payload && payload.renderId ? payload.renderId : undefined,
+          context
+        },
+        status: 'pending',
+        priority: typeof payload.priority === 'number' ? payload.priority : 1
+      };
+
+      const result = await enqueueRenderTask(task);
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'image_render_failed',
+          data: result
+        };
+      }
+
       return {
         success: true,
         data: {
-          keyword,
-          imageUrl: `mock://${keyword.replace(/\s+/g, '-').toLowerCase()}-v1.png`
+          assetId: result.asset.assetId,
+          productId: result.asset.productId,
+          url: result.asset.url,
+          provider: result.asset.provider,
+          prompt: result.asset.prompt,
+          createdAt: result.asset.createdAt,
+          manifestUrl: result.asset.manifestUrl || null,
+          imageUrl: result.asset.url
         }
       };
     }
@@ -307,6 +356,10 @@ export function inferToolNameForTask(task) {
 
   if (task && task.type === 'shopify') {
     return 'shopify.process_order';
+  }
+
+  if (task && task.type === 'image_render') {
+    return 'render.route';
   }
 
   return null;
@@ -393,6 +446,7 @@ export function findBestDeskForTask(task) {
 
 export function normalizeTask(task) {
   const payload = task.payload && typeof task.payload === 'object' ? { ...task.payload } : {};
+  const fixedRenderChannelId = '1491500223288184964';
 
   if (task.workflowContextInput && payload.context === undefined) {
     payload.context = cloneContext(task.workflowContextInput);
@@ -429,6 +483,41 @@ export function normalizeTask(task) {
         type: normalizedTask.type,
         payload: normalizedTask.payload
       });
+    }
+  }
+
+  if (normalizedTask.type === 'image_render') {
+    normalizedTask.renderId = task.renderId ?? payload.renderId ?? normalizedTask.id;
+    normalizedTask.productId = task.productId ?? payload.productId ?? normalizedTask.id;
+    normalizedTask.provider = task.provider ?? payload.provider ?? 'openai';
+    normalizedTask.designIntent = task.designIntent && typeof task.designIntent === 'object'
+      ? { ...task.designIntent }
+      : (payload.designIntent && typeof payload.designIntent === 'object' ? { ...payload.designIntent } : {});
+
+    normalizedTask.designIntent = {
+      ...normalizedTask.designIntent,
+      prompt: typeof normalizedTask.designIntent.prompt === 'string'
+        ? normalizedTask.designIntent.prompt.trim()
+        : ''
+    };
+
+    normalizedTask.payload = {
+      ...normalizedTask.payload,
+      renderId: normalizedTask.renderId,
+      productId: normalizedTask.productId,
+      provider: normalizedTask.provider,
+      designIntent: normalizedTask.designIntent
+    };
+
+    normalizedTask.content = normalizedTask.designIntent.prompt || normalizedTask.content || '';
+    normalizedTask.channelId = fixedRenderChannelId;
+    normalizedTask.payload.content = normalizedTask.content;
+    normalizedTask.payload.channelId = fixedRenderChannelId;
+
+    console.log('[Normalize image_render]', normalizedTask);
+
+    if (!normalizedTask.content) {
+      throw new Error('missing_prompt');
     }
   }
 
@@ -480,7 +569,7 @@ export async function sendTaskAck(taskOrId, statusOrAck, retries, executionResul
   });
 
   try {
-    const response = await fetch(`/task/${encodeURIComponent(taskId)}/ack`, {
+    let response = await fetch(`/task/${encodeURIComponent(taskId)}/ack`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -492,6 +581,30 @@ export async function sendTaskAck(taskOrId, statusOrAck, retries, executionResul
         payload: ack.payload && typeof ack.payload === 'object' ? ack.payload : undefined
       })
     });
+
+    // UI/manual tasks can occasionally race bridge persistence and ACK.
+    // If ACK misses a task record, sync once and retry ACK.
+    if (response.status === 404 && task) {
+      const synced = await registerTaskInBridge({
+        ...task,
+        payload: task.payload && typeof task.payload === 'object' ? task.payload : {}
+      });
+
+      if (synced) {
+        response = await fetch(`/task/${encodeURIComponent(taskId)}/ack`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            status: ack.status,
+            retries: ack.retries,
+            executionResult: ack.executionResult,
+            payload: ack.payload && typeof ack.payload === 'object' ? ack.payload : undefined
+          })
+        });
+      }
+    }
 
     if (!response.ok) {
       console.warn('[TASK]', 'ack_non_ok', taskId, response.status);
@@ -533,21 +646,39 @@ function completeTaskThroughAck(task, ackStatus, executionResult) {
 }
 
 export function syncTaskStart(task, attempt = 0) {
-  if (!task || !task.id || task._startedSynced) {
+  if (!task || !task.id || task._startedSynced || task._startSyncInFlight || task._startSyncDisabled) {
     return;
   }
 
-  task._startedSynced = true;
+  task._startSyncInFlight = true;
 
-  fetch(`/task/${encodeURIComponent(task.id)}/start`, {
-    method: 'POST'
-  })
-    .then((response) => {
+  (async () => {
+    try {
+      if (task.type === 'image_render' || (typeof task.id === 'string' && task.id.startsWith('manual-'))) {
+        await registerTaskInBridge(task);
+      }
+
+      let response = await fetch(`/task/${encodeURIComponent(task.id)}/start`, {
+        method: 'POST'
+      });
+
+      // Manual/UI tasks may not exist in bridge yet when start sync runs.
+      // Register once and retry start.
+      if (response.status === 404) {
+        const synced = await registerTaskInBridge(task);
+        if (synced) {
+          response = await fetch(`/task/${encodeURIComponent(task.id)}/start`, {
+            method: 'POST'
+          });
+        }
+      }
+
       if (!response.ok) {
         throw new Error(`start_sync_${response.status}`);
       }
-    })
-    .catch((error) => {
+
+      task._startedSynced = true;
+    } catch (error) {
       task._startedSynced = false;
       console.warn('[TASK]', 'start_sync_error', task.id, error && error.message);
 
@@ -555,8 +686,14 @@ export function syncTaskStart(task, attempt = 0) {
         window.setTimeout(() => {
           syncTaskStart(task, attempt + 1);
         }, 500 * (attempt + 1));
+      } else {
+        // Start sync is observability only; avoid endless frame-level spam.
+        task._startSyncDisabled = true;
       }
-    });
+    } finally {
+      task._startSyncInFlight = false;
+    }
+  })();
 }
 
 export function hasTaskInSimulation(taskId) {
@@ -651,6 +788,10 @@ export function handleTaskExecutionResult(desk, task) {
 
 export function addTaskToDesk(task) {
   const normalizedTask = normalizeTask(task);
+  if (normalizedTask.type === 'image_render' && !normalizedTask.content) {
+    throw new Error('missing_prompt');
+  }
+
   if (hasTaskInSimulation(normalizedTask.id)) {
     return null;
   }
@@ -688,6 +829,15 @@ export function addTaskToDesk(task) {
     priority: queuedTask.priority,
     workflowId: queuedTask.workflowId || null
   });
+  if (queuedTask.type === 'image_render') {
+    emitEvent('RENDER_TASK_CREATED', {
+      taskId: queuedTask.id,
+      productId: queuedTask.productId || (queuedTask.payload && queuedTask.payload.productId) || queuedTask.id,
+      renderId: queuedTask.renderId || (queuedTask.payload && queuedTask.payload.renderId) || queuedTask.id,
+      provider: queuedTask.provider || (queuedTask.payload && queuedTask.payload.provider) || 'openai',
+      workflowId: queuedTask.workflowId || null
+    });
+  }
   return desk;
 }
 
@@ -739,6 +889,9 @@ export function sanitizeTaskForView(task) {
     required: task.required,
     action: task.action || null,
     tool: task.tool || null,
+    provider: task.provider || null,
+    productId: task.productId || null,
+    renderId: task.renderId || null,
     workflowId: task.workflowId || null,
     workflowStepIndex: typeof task.workflowStepIndex === 'number' ? task.workflowStepIndex : null
   };

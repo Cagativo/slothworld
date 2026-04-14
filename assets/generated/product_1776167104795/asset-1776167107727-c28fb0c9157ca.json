@@ -1,0 +1,14 @@
+{
+  "assetId": "asset-1776167107727-c28fb0c9157ca",
+  "productId": "product_1776167104795",
+  "url": "/assets/generated/product_1776167104795/asset-1776167107727-c28fb0c9157ca.svg",
+  "sourceUrl": null,
+  "provider": "sdxl",
+  "prompt": "Product: cat | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: cat. High detail product render, studio lighting, commercial mockup.",
+  "createdAt": 1776163527945,
+  "mimeType": "image/svg+xml",
+  "metadata": {
+    "runtime": "sdxl",
+    "mode": "provider_stub"
+  }
+}

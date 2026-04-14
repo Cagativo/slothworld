@@ -1,5 +1,5 @@
 {
-  "nextEventId": 33,
+  "nextEventId": 69,
   "tasks": {
     "1776027854220-47b4e9d4a2795": {
       "id": "1776027854220-47b4e9d4a2795",
@@ -910,6 +910,1284 @@
         "skipped": true,
         "note": "discord_target_unavailable"
       }
+    },
+    "manual-1776110494034-42c757bbda0938": {
+      "id": "manual-1776110494034-42c757bbda0938",
+      "type": "discord",
+      "title": "test",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "seal",
+        "messageId": null
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776106917384,
+      "startedAt": 1776106917401,
+      "completedAt": 1776106917401,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
+    },
+    "manual-1776114718546-faaa7ae9bc8ea": {
+      "id": "manual-1776114718546-faaa7ae9bc8ea",
+      "type": "discord",
+      "title": "test",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "test",
+        "messageId": null
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776111141075,
+      "startedAt": 1776111141083,
+      "completedAt": 1776111141083,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
+    },
+    "manual-1776118613311-5bf0dfaf76e7e8": {
+      "id": "manual-1776118613311-5bf0dfaf76e7e8",
+      "type": "discord",
+      "title": "test",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "test",
+        "messageId": null
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776115035992,
+      "startedAt": 1776115036015,
+      "completedAt": 1776115036015,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
+    },
+    "manual-1776162530669-f149109d9bc0b": {
+      "id": "manual-1776162530669-f149109d9bc0b",
+      "type": "discord",
+      "title": "test",
+      "priority": 1,
+      "progress": 100,
+      "required": 100,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "test",
+        "messageId": null
+      },
+      "productId": null,
+      "provider": null,
+      "designIntent": null,
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776158952923,
+      "startedAt": 1776158952932,
+      "completedAt": 1776158952932,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      }
+    },
+    "diag-image-sync-1": {
+      "id": "diag-image-sync-1",
+      "type": "image_render",
+      "title": "diag",
+      "priority": 1,
+      "progress": 0,
+      "required": 193.44751699970973,
+      "status": "failed",
+      "action": null,
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "cat",
+        "renderId": "diag-image-sync-1",
+        "productId": "p1",
+        "provider": "midjourney",
+        "designIntent": {
+          "prompt": "cat"
+        }
+      },
+      "productId": "p1",
+      "provider": "midjourney",
+      "designIntent": {
+        "prompt": "cat"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776159494691,
+      "startedAt": 1776159496385,
+      "completedAt": null,
+      "failedAt": 1776159500923,
+      "executionResult": {
+        "success": false,
+        "error": "midjourney_dispatch_400:missing_prompt"
+      },
+      "durationMs": 4538,
+      "lastError": "midjourney_dispatch_400:missing_prompt"
+    },
+    "manual-1776163495188-989824322bb4b": {
+      "id": "manual-1776163495188-989824322bb4b",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 117.16545708404578,
+      "status": "processing",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776163495188",
+        "provider": "midjourney",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776163495188-989824322bb4b",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776163495188",
+      "provider": "midjourney",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776159918045,
+      "startedAt": 1776159918056,
+      "completedAt": null,
+      "failedAt": null
+    },
+    "manual-1776163560249-8f3ceba512e89": {
+      "id": "manual-1776163560249-8f3ceba512e89",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 155.03063918886693,
+      "status": "processing",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776163560249",
+        "provider": "midjourney",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776163560249-8f3ceba512e89",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776163560249",
+      "provider": "midjourney",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776159984964,
+      "startedAt": 1776159984973,
+      "completedAt": null,
+      "failedAt": null
+    },
+    "manual-1776163709464-d2a8896b9bab78": {
+      "id": "manual-1776163709464-d2a8896b9bab78",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 115.98026994390561,
+      "status": "processing",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776163709463",
+        "provider": "midjourney",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776163709464-d2a8896b9bab78",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776163709463",
+      "provider": "midjourney",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776160131347,
+      "startedAt": 1776160131360,
+      "completedAt": null,
+      "failedAt": null
+    },
+    "manual-1776163942980-85369225c8ef1": {
+      "id": "manual-1776163942980-85369225c8ef1",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 182.89701408656543,
+      "status": "processing",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776163942980",
+        "provider": "midjourney",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776163942980-85369225c8ef1",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776163942980",
+      "provider": "midjourney",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776160365778,
+      "startedAt": 1776160365788,
+      "completedAt": null,
+      "failedAt": null
+    },
+    "manual-1776164288012-643ff874f0a318": {
+      "id": "manual-1776164288012-643ff874f0a318",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 165.4251515176634,
+      "status": "failed",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776164288012",
+        "provider": "midjourney",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776164288012-643ff874f0a318",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776164288012",
+      "provider": "midjourney",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776160710304,
+      "startedAt": 1776160710313,
+      "completedAt": null,
+      "failedAt": 1776161074995,
+      "executionResult": {
+        "success": false,
+        "error": "midjourney_dispatch_400:midjourney_timeout"
+      },
+      "durationMs": 364682,
+      "lastError": "midjourney_dispatch_400:midjourney_timeout"
+    },
+    "manual-1776166996585-91790627635b38": {
+      "id": "manual-1776166996585-91790627635b38",
+      "type": "discord",
+      "title": "test",
+      "priority": 1,
+      "progress": 0,
+      "required": 191.76970846336428,
+      "status": "done",
+      "action": "reply_to_message",
+      "payload": {
+        "channelId": "1491500223288184964",
+        "content": "test",
+        "messageId": null
+      },
+      "productId": null,
+      "provider": null,
+      "designIntent": null,
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776163419290,
+      "startedAt": 1776163419304,
+      "completedAt": 1776163420951,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "skipped": true,
+        "note": "discord_target_unavailable"
+      },
+      "durationMs": 1647
+    },
+    "manual-1776167009920-c89243dbb31f9": {
+      "id": "manual-1776167009920-c89243dbb31f9",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 104.36044814032088,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776167009920",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776167009920-c89243dbb31f9",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776167009920",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776163433105,
+      "startedAt": 1776163433119,
+      "completedAt": 1776163434810,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776167014484-3fc84586f00b7",
+        "productId": "product_1776167009920",
+        "url": "/assets/generated/product_1776167009920/asset-1776167014484-3fc84586f00b7.svg",
+        "provider": "sdxl",
+        "prompt": "Product: cat | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: cat. High detail product render, studio lighting, commercial mockup.",
+        "createdAt": 1776163434704,
+        "manifestUrl": "/assets/generated/product_1776167009920/asset-1776167014484-3fc84586f00b7.json",
+        "imageUrl": "/assets/generated/product_1776167009920/asset-1776167014484-3fc84586f00b7.svg"
+      },
+      "durationMs": 1691
+    },
+    "manual-1776167104796-ad805a8fd785f8": {
+      "id": "manual-1776167104796-ad805a8fd785f8",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 169.30018109048703,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776167104795",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776167104796-ad805a8fd785f8",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776167104795",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776163526635,
+      "startedAt": 1776163526648,
+      "completedAt": 1776163528051,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776167107727-c28fb0c9157ca",
+        "productId": "product_1776167104795",
+        "url": "/assets/generated/product_1776167104795/asset-1776167107727-c28fb0c9157ca.svg",
+        "provider": "sdxl",
+        "prompt": "Product: cat | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: cat. High detail product render, studio lighting, commercial mockup.",
+        "createdAt": 1776163527945,
+        "manifestUrl": "/assets/generated/product_1776167104795/asset-1776167107727-c28fb0c9157ca.json",
+        "imageUrl": "/assets/generated/product_1776167104795/asset-1776167107727-c28fb0c9157ca.svg"
+      },
+      "durationMs": 1403
+    },
+    "manual-1776167639597-fea44ccb6a3ea": {
+      "id": "manual-1776167639597-fea44ccb6a3ea",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 122.29045271353836,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776167639596",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776167639597-fea44ccb6a3ea",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776167639596",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776164062325,
+      "startedAt": 1776164062341,
+      "completedAt": 1776164096961,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776167676652-df24de976b21e",
+        "productId": "product_1776167639596",
+        "url": "/assets/generated/product_1776167639596/asset-1776167676652-df24de976b21e.svg",
+        "provider": "sdxl",
+        "prompt": "Product: cat | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: cat. High detail product render, studio lighting, commercial mockup.",
+        "createdAt": 1776164096864,
+        "manifestUrl": "/assets/generated/product_1776167639596/asset-1776167676652-df24de976b21e.json",
+        "imageUrl": "/assets/generated/product_1776167639596/asset-1776167676652-df24de976b21e.svg"
+      },
+      "durationMs": 34620
+    },
+    "manual-1776168183780-89d86c9f00f66": {
+      "id": "manual-1776168183780-89d86c9f00f66",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 158.6824721989293,
+      "status": "processing",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776168183780",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776168183780-89d86c9f00f66",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776168183780",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776164606463,
+      "startedAt": 1776164606471,
+      "completedAt": null,
+      "failedAt": null
+    },
+    "manual-1776168249582-6d7b1a3a06813": {
+      "id": "manual-1776168249582-6d7b1a3a06813",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 153.5325240458341,
+      "status": "failed",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776168249582",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776168249582-6d7b1a3a06813",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776168249582",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776164671720,
+      "startedAt": 1776164671728,
+      "completedAt": null,
+      "failedAt": 1776164764463,
+      "executionResult": {
+        "success": false,
+        "error": "asset_store_400"
+      },
+      "durationMs": 92735,
+      "lastError": "asset_store_400"
+    },
+    "manual-1776168460871-505837ef9bd238": {
+      "id": "manual-1776168460871-505837ef9bd238",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 87.49729680601585,
+      "status": "failed",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776168460870",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776168460871-505837ef9bd238",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776168460870",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776164883480,
+      "startedAt": 1776164883487,
+      "completedAt": null,
+      "failedAt": 1776165003518,
+      "executionResult": {
+        "success": false,
+        "error": "asset_store_400"
+      },
+      "durationMs": 120031,
+      "lastError": "asset_store_400"
+    },
+    "manual-1776172305480-05b8ab5dc16da8": {
+      "id": "manual-1776172305480-05b8ab5dc16da8",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 110.46755254537501,
+      "status": "failed",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776172305480",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776172305480-05b8ab5dc16da8",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776172305480",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776168729486,
+      "startedAt": 1776168729499,
+      "completedAt": null,
+      "failedAt": 1776168854236,
+      "executionResult": {
+        "success": false,
+        "error": "asset_store_400"
+      },
+      "durationMs": 124737,
+      "lastError": "asset_store_400"
+    },
+    "manual-1776172806879-4a1c8a44af1ff": {
+      "id": "manual-1776172806879-4a1c8a44af1ff",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 137.3798478389795,
+      "status": "processing",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776172806879",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776172806879-4a1c8a44af1ff",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776172806879",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776169228970,
+      "startedAt": 1776169228981,
+      "completedAt": null,
+      "failedAt": null
+    },
+    "manual-1776173629919-41294aa5b325": {
+      "id": "manual-1776173629919-41294aa5b325",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 126.82921480721907,
+      "status": "failed",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776173629919",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776173629919-41294aa5b325",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776173629919",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776170057260,
+      "startedAt": 1776170057276,
+      "completedAt": null,
+      "failedAt": 1776170165559,
+      "executionResult": {
+        "success": false,
+        "error": "asset_store_400:Payload too large"
+      },
+      "durationMs": 108283,
+      "lastError": "asset_store_400:Payload too large"
+    },
+    "manual-1776174074959-231cfadc642d48": {
+      "id": "manual-1776174074959-231cfadc642d48",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 95.79864515474776,
+      "status": "failed",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776174074959",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776174074959-231cfadc642d48",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776174074959",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776170498095,
+      "startedAt": 1776170498122,
+      "completedAt": null,
+      "failedAt": 1776170599055,
+      "executionResult": {
+        "success": false,
+        "error": "asset_store_400:Payload too large"
+      },
+      "durationMs": 100933,
+      "lastError": "asset_store_400:Payload too large"
+    },
+    "manual-1776174564247-4fa7617fd99b28": {
+      "id": "manual-1776174564247-4fa7617fd99b28",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 117.48420382157701,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776174564246",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "cat",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "cat",
+          "prompt_hint": "cat",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776174564247-4fa7617fd99b28",
+        "content": "cat",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776174564246",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "cat",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "cat",
+        "prompt_hint": "cat",
+        "niche": "home decor"
+      },
+      "retries": 1,
+      "maxRetries": 3,
+      "createdAt": 1776170987112,
+      "startedAt": 1776170987128,
+      "completedAt": 1776171024070,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776174603877-0edeae70731978",
+        "productId": "product_1776174564246",
+        "url": "/assets/generated/product_1776174564246/asset-1776174603877-0edeae70731978.png",
+        "provider": "openai",
+        "prompt": "Product: cat | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: cat. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776171023953,
+        "manifestUrl": "/assets/generated/product_1776174564246/asset-1776174603877-0edeae70731978.json",
+        "imageUrl": "/assets/generated/product_1776174564246/asset-1776174603877-0edeae70731978.png"
+      },
+      "durationMs": 36942
+    },
+    "manual-1776174715326-533b7a4032a6e8": {
+      "id": "manual-1776174715326-533b7a4032a6e8",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 117.38912101637845,
+      "status": "processing",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776174715326",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "seal",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "seal",
+          "prompt_hint": "seal",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776174715326-533b7a4032a6e8",
+        "content": "seal",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776174715326",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "seal",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "seal",
+        "prompt_hint": "seal",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776171137282,
+      "startedAt": 1776171137295,
+      "completedAt": null,
+      "failedAt": null
+    },
+    "manual-1776174755622-55cbeb28ab09f": {
+      "id": "manual-1776174755622-55cbeb28ab09f",
+      "type": "image_render",
+      "title": "Generate Product Image",
+      "priority": 1,
+      "progress": 0,
+      "required": 84.94729546717329,
+      "status": "done",
+      "action": null,
+      "payload": {
+        "source": "create_product_button",
+        "productId": "product_1776174755621",
+        "provider": "openai",
+        "designIntent": {
+          "product_name": "seal",
+          "style": "scandinavian",
+          "mood": "cozy ambient lighting",
+          "colors": [
+            "warm white",
+            "soft beige"
+          ],
+          "composition": "studio product shot",
+          "camera": "85mm lens",
+          "background": "neutral gradient",
+          "prompt": "seal",
+          "prompt_hint": "seal",
+          "niche": "home decor"
+        },
+        "renderId": "manual-1776174755622-55cbeb28ab09f",
+        "content": "seal",
+        "channelId": "1491500223288184964"
+      },
+      "productId": "product_1776174755621",
+      "provider": "openai",
+      "designIntent": {
+        "product_name": "seal",
+        "style": "scandinavian",
+        "mood": "cozy ambient lighting",
+        "colors": [
+          "warm white",
+          "soft beige"
+        ],
+        "composition": "studio product shot",
+        "camera": "85mm lens",
+        "background": "neutral gradient",
+        "prompt": "seal",
+        "prompt_hint": "seal",
+        "niche": "home decor"
+      },
+      "retries": 0,
+      "maxRetries": 3,
+      "createdAt": 1776171179186,
+      "startedAt": 1776171179200,
+      "completedAt": 1776171227882,
+      "failedAt": null,
+      "executionResult": {
+        "success": true,
+        "assetId": "asset-1776174807738-03e11acdae27b8",
+        "productId": "product_1776174755621",
+        "url": "/assets/generated/product_1776174755621/asset-1776174807738-03e11acdae27b8.png",
+        "provider": "openai",
+        "prompt": "Product: seal | Style: scandinavian | Mood: cozy ambient lighting | Composition: studio product shot | Camera: 85mm lens | Background: neutral gradient | Colors: warm white, soft beige | Prompt: seal. Generate a polished ecommerce-ready product image.",
+        "createdAt": 1776171227776,
+        "manifestUrl": "/assets/generated/product_1776174755621/asset-1776174807738-03e11acdae27b8.json",
+        "imageUrl": "/assets/generated/product_1776174755621/asset-1776174807738-03e11acdae27b8.png"
+      },
+      "durationMs": 48682
     }
   },
   "events": [
@@ -1072,6 +2350,186 @@
       "id": 32,
       "timestamp": 1776102740665,
       "taskId": "manual-1776106315049-3ccd624645f3f"
+    },
+    {
+      "id": 33,
+      "timestamp": 1776106917395,
+      "taskId": "manual-1776110494034-42c757bbda0938"
+    },
+    {
+      "id": 34,
+      "timestamp": 1776111141077,
+      "taskId": "manual-1776114718546-faaa7ae9bc8ea"
+    },
+    {
+      "id": 35,
+      "timestamp": 1776115035998,
+      "taskId": "manual-1776118613311-5bf0dfaf76e7e8"
+    },
+    {
+      "id": 36,
+      "timestamp": 1776158952924,
+      "taskId": "manual-1776162530669-f149109d9bc0b"
+    },
+    {
+      "id": 37,
+      "timestamp": 1776159494692,
+      "taskId": "diag-image-sync-1"
+    },
+    {
+      "id": 38,
+      "timestamp": 1776159918046,
+      "taskId": "manual-1776163495188-989824322bb4b"
+    },
+    {
+      "id": 39,
+      "timestamp": 1776159984965,
+      "taskId": "manual-1776163560249-8f3ceba512e89"
+    },
+    {
+      "id": 40,
+      "timestamp": 1776160131348,
+      "taskId": "manual-1776163709464-d2a8896b9bab78"
+    },
+    {
+      "id": 41,
+      "timestamp": 1776160365779,
+      "taskId": "manual-1776163942980-85369225c8ef1"
+    },
+    {
+      "id": 42,
+      "timestamp": 1776160710308,
+      "taskId": "manual-1776164288012-643ff874f0a318"
+    },
+    {
+      "id": 43,
+      "timestamp": 1776161074921,
+      "taskId": "manual-1776164288012-643ff874f0a318"
+    },
+    {
+      "id": 44,
+      "timestamp": 1776163419292,
+      "taskId": "manual-1776166996585-91790627635b38"
+    },
+    {
+      "id": 45,
+      "timestamp": 1776163420940,
+      "taskId": "manual-1776166996585-91790627635b38"
+    },
+    {
+      "id": 46,
+      "timestamp": 1776163433107,
+      "taskId": "manual-1776167009920-c89243dbb31f9"
+    },
+    {
+      "id": 47,
+      "timestamp": 1776163434756,
+      "taskId": "manual-1776167009920-c89243dbb31f9"
+    },
+    {
+      "id": 48,
+      "timestamp": 1776163526637,
+      "taskId": "manual-1776167104796-ad805a8fd785f8"
+    },
+    {
+      "id": 49,
+      "timestamp": 1776163527997,
+      "taskId": "manual-1776167104796-ad805a8fd785f8"
+    },
+    {
+      "id": 50,
+      "timestamp": 1776164062333,
+      "taskId": "manual-1776167639597-fea44ccb6a3ea"
+    },
+    {
+      "id": 51,
+      "timestamp": 1776164096915,
+      "taskId": "manual-1776167639597-fea44ccb6a3ea"
+    },
+    {
+      "id": 52,
+      "timestamp": 1776164606464,
+      "taskId": "manual-1776168183780-89d86c9f00f66"
+    },
+    {
+      "id": 53,
+      "timestamp": 1776164671722,
+      "taskId": "manual-1776168249582-6d7b1a3a06813"
+    },
+    {
+      "id": 54,
+      "timestamp": 1776164764455,
+      "taskId": "manual-1776168249582-6d7b1a3a06813"
+    },
+    {
+      "id": 55,
+      "timestamp": 1776164883481,
+      "taskId": "manual-1776168460871-505837ef9bd238"
+    },
+    {
+      "id": 56,
+      "timestamp": 1776165003510,
+      "taskId": "manual-1776168460871-505837ef9bd238"
+    },
+    {
+      "id": 57,
+      "timestamp": 1776168729489,
+      "taskId": "manual-1776172305480-05b8ab5dc16da8"
+    },
+    {
+      "id": 58,
+      "timestamp": 1776168854223,
+      "taskId": "manual-1776172305480-05b8ab5dc16da8"
+    },
+    {
+      "id": 59,
+      "timestamp": 1776169228973,
+      "taskId": "manual-1776172806879-4a1c8a44af1ff"
+    },
+    {
+      "id": 60,
+      "timestamp": 1776170057268,
+      "taskId": "manual-1776173629919-41294aa5b325"
+    },
+    {
+      "id": 61,
+      "timestamp": 1776170165550,
+      "taskId": "manual-1776173629919-41294aa5b325"
+    },
+    {
+      "id": 62,
+      "timestamp": 1776170498098,
+      "taskId": "manual-1776174074959-231cfadc642d48"
+    },
+    {
+      "id": 63,
+      "timestamp": 1776170599041,
+      "taskId": "manual-1776174074959-231cfadc642d48"
+    },
+    {
+      "id": 64,
+      "timestamp": 1776170987115,
+      "taskId": "manual-1776174564247-4fa7617fd99b28"
+    },
+    {
+      "id": 65,
+      "timestamp": 1776171024012,
+      "taskId": "manual-1776174564247-4fa7617fd99b28"
+    },
+    {
+      "id": 66,
+      "timestamp": 1776171137284,
+      "taskId": "manual-1776174715326-533b7a4032a6e8"
+    },
+    {
+      "id": 67,
+      "timestamp": 1776171179194,
+      "taskId": "manual-1776174755622-55cbeb28ab09f"
+    },
+    {
+      "id": 68,
+      "timestamp": 1776171227832,
+      "taskId": "manual-1776174755622-55cbeb28ab09f"
     }
   ]
 }

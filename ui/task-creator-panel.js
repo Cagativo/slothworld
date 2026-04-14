@@ -32,6 +32,13 @@ export function initTaskCreatorPanel() {
         </div>
 
         <button type="submit" class="tcp-submit">Create Task</button>
+
+        <div class="tcp-group" id="tcp-product-prompt-group">
+          <label>Product Prompt:</label>
+          <textarea id="tcp-product-prompt" name="productPrompt" placeholder="e.g. minimalist wooden desk lamp, soft lighting, product photo" rows="3"></textarea>
+        </div>
+
+        <button type="button" id="tcp-create-product" class="tcp-create-product">Create Product</button>
       </form>
       <div id="tcp-status" class="tcp-status"></div>
     </div>
@@ -50,6 +57,8 @@ export function initTaskCreatorPanel() {
   const contentInput = panel.querySelector('#tcp-content');
   const channelIdInput = panel.querySelector('#tcp-channel-id');
   const statusDiv = panel.querySelector('#tcp-status');
+  const createProductButton = panel.querySelector('#tcp-create-product');
+  const productPromptInput = panel.querySelector('#tcp-product-prompt');
   const contentGroup = panel.querySelector('#tcp-content-group');
   const channelGroup = panel.querySelector('#tcp-channel-group');
 
@@ -122,6 +131,39 @@ export function initTaskCreatorPanel() {
         }, 3000);
       } else {
         statusDiv.textContent = `Error: ${result.error || 'Task creation failed'}`;
+        statusDiv.className = 'tcp-status tcp-error';
+      }
+    } catch (error) {
+      statusDiv.textContent = `Error: ${error.message}`;
+      statusDiv.className = 'tcp-status tcp-error';
+    }
+  });
+
+  createProductButton.addEventListener('click', () => {
+    if (!window.createTestProduct || typeof window.createTestProduct !== 'function') {
+      statusDiv.textContent = 'Error: createTestProduct is unavailable';
+      statusDiv.className = 'tcp-status tcp-error';
+      return;
+    }
+
+    try {
+      const promptText = productPromptInput && typeof productPromptInput.value === 'string'
+        ? productPromptInput.value.trim()
+        : '';
+
+      if (!promptText) {
+        console.error('[CreateProduct] missing_prompt');
+        statusDiv.textContent = 'Error: Product Prompt is required';
+        statusDiv.className = 'tcp-status tcp-error';
+        return;
+      }
+
+      const result = window.createTestProduct({ promptText });
+      if (result && result.result && result.result.success) {
+        statusDiv.textContent = `✓ Product render task created: ${result.productId}`;
+        statusDiv.className = 'tcp-status tcp-success';
+      } else {
+        statusDiv.textContent = 'Error: Failed to create product render task';
         statusDiv.className = 'tcp-status tcp-error';
       }
     } catch (error) {

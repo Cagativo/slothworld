@@ -3,7 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { Client, GatewayIntentBits } from 'discord.js';
+import { AttachmentBuilder, Client, GatewayIntentBits } from 'discord.js';
+import { generateImage as generateOpenAIProviderImage } from './integrations/rendering/providers/openaiImageProvider.js';
 
 dotenv.config();
 
@@ -15,7 +16,9 @@ const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_DIR = __dirname;
 const MAX_EVENTS = 1000;
 const STORE_PATH = path.join(__dirname, 'bridge-store.json');
+const GENERATED_ASSETS_DIR = path.join(__dirname, 'assets', 'generated');
 const DISCORD_COMMAND_PREFIX = '!';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || null;
 const ALLOWED_CHANNELS = new Set(
   String(process.env.ALLOWED_CHANNELS || '')
     .split(',')
@@ -92,6 +95,16 @@ function generateId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function sanitizePathSegment(value, fallback = 'item') {
+  const sanitized = String(value || fallback)
+    .trim()
+    .replace(/[^a-zA-Z0-9-_]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  return sanitized || fallback;
+}
+
 function inferPriority(task) {
   const title = String(task.title || '').toLowerCase();
 
@@ -140,6 +153,37 @@ function parseDiscordCommand(rawContent) {
   };
 }
 
+async function generateOpenAIImage(renderRequest) {
+  if (!OPENAI_API_KEY) {
+    throw new Error('openai_api_key_missing');
+  }
+
+  const prompt = typeof (renderRequest && renderRequest.prompt) === 'string' ? renderRequest.prompt.trim() : '';
+  const productId = typeof (renderRequest && renderRequest.productId) === 'string'
+    ? renderRequest.productId
+    : 'product';
+
+  if (!prompt) {
+    throw new Error('missing_prompt');
+  }
+
+  const asset = await generateOpenAIProviderImage({
+    prompt,
+    productId
+  });
+
+  const assetPath = path.join(PUBLIC_DIR, asset.url.replace(/^\//, ''));
+  const imageBase64 = fs.readFileSync(assetPath).toString('base64');
+
+  return {
+    provider: 'openai',
+    model: 'gpt-5',
+    mimeType: 'image/png',
+    imageBase64,
+    asset
+  };
+}
+
 function mapCommandToAction(command) {
   if (command === 'reply') {
     return 'reply_to_message';
@@ -173,6 +217,9 @@ function normalizeTask(input) {
     status: input.status || 'pending',
     action: typeof input.action === 'string' ? input.action : null,
     payload: typeof input.payload === 'object' && input.payload !== null ? input.payload : {},
+    productId: typeof input.productId === 'string' ? input.productId : null,
+    provider: typeof input.provider === 'string' ? input.provider : null,
+    designIntent: typeof input.designIntent === 'object' && input.designIntent !== null ? input.designIntent : null,
     retries: typeof input.retries === 'number' ? input.retries : 0,
     maxRetries: typeof input.maxRetries === 'number' ? input.maxRetries : 3,
     createdAt: typeof input.createdAt === 'number' ? input.createdAt : now,
@@ -218,8 +265,8 @@ function validateTaskInput(body) {
     return 'Body must be a JSON object';
   }
 
-  if (body.type !== 'discord' && body.type !== 'shopify') {
-    return "type must be 'discord' or 'shopify'";
+  if (body.type !== 'discord' && body.type !== 'shopify' && body.type !== 'image_render') {
+    return "type must be 'discord', 'shopify', or 'image_render'";
   }
 
   if (body.title !== undefined && typeof body.title !== 'string') {
@@ -236,6 +283,10 @@ function validateTaskInput(body) {
 
   if (body.payload !== undefined && (typeof body.payload !== 'object' || body.payload === null || Array.isArray(body.payload))) {
     return 'payload must be an object';
+  }
+
+  if (body.designIntent !== undefined && (typeof body.designIntent !== 'object' || body.designIntent === null || Array.isArray(body.designIntent))) {
+    return 'designIntent must be an object';
   }
 
   return null;
@@ -326,7 +377,9 @@ function serveStatic(req, res) {
     const mimeMap = {
       '.html': 'text/html; charset=utf-8',
       '.js': 'application/javascript; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
       '.css': 'text/css; charset=utf-8',
+      '.svg': 'image/svg+xml',
       '.png': 'image/png',
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
@@ -334,23 +387,40 @@ function serveStatic(req, res) {
       '.gif': 'image/gif'
     };
 
-    res.writeHead(200, { 'Content-Type': mimeMap[ext] || 'application/octet-stream' });
+    res.writeHead(200, {
+      'Content-Type': mimeMap[ext] || 'application/octet-stream',
+      'Cache-Control': 'no-store, no-cache, must-revalidate'
+    });
     res.end(data);
   });
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, options = {}) {
+  const maxBytes = Number.isFinite(options.maxBytes) && options.maxBytes > 0
+    ? options.maxBytes
+    : 1024 * 1024;
+
   return new Promise((resolve, reject) => {
     let raw = '';
+    let rejected = false;
 
     req.on('data', (chunk) => {
+      if (rejected) {
+        return;
+      }
+
       raw += chunk;
-      if (raw.length > 1024 * 1024) {
+      if (raw.length > maxBytes) {
+        rejected = true;
         reject(new Error('Payload too large'));
       }
     });
 
     req.on('end', () => {
+      if (rejected) {
+        return;
+      }
+
       if (!raw) {
         resolve({});
         return;
@@ -383,6 +453,24 @@ async function sendDiscordCompletionNotification(task, discordClient) {
 
   try {
     const channel = await discordClient.channels.fetch(channelId);
+    const executionResult = task && typeof task.executionResult === 'object' && task.executionResult !== null
+      ? task.executionResult
+      : {};
+    const imageBase64 = typeof executionResult.imageBase64 === 'string'
+      ? executionResult.imageBase64
+      : (typeof executionResult.contentBase64 === 'string' ? executionResult.contentBase64 : '');
+    const imageMimeType = typeof executionResult.mimeType === 'string' ? executionResult.mimeType : 'image/png';
+    const imageUrl = typeof executionResult.imageUrl === 'string' ? executionResult.imageUrl : null;
+    const files = [];
+
+    if (imageBase64) {
+      const extension = imageMimeType.includes('jpeg') || imageMimeType.includes('jpg')
+        ? 'jpg'
+        : (imageMimeType.includes('webp') ? 'webp' : 'png');
+      const imageBuffer = Buffer.from(imageBase64, 'base64');
+      files.push(new AttachmentBuilder(imageBuffer, { name: `${task.id}.${extension}` }));
+    }
+
     const completionMsg = {
       taskId: task.id,
       type: task.type,
@@ -390,14 +478,17 @@ async function sendDiscordCompletionNotification(task, discordClient) {
       status: task.status,
       durationMs: task.durationMs || 0,
       error: task.lastError || null,
-      content: typeof taskContent === 'string' ? taskContent : null
+      content: typeof taskContent === 'string' ? taskContent : null,
+      hasGeneratedImage: files.length > 0,
+      imageUrl: imageUrl || null
     };
-    const content = `**Task Completed**\n\`\`\`json\n${JSON.stringify(completionMsg, null, 2).slice(0, 1800)}\n\`\`\``;
+    const suffix = imageUrl ? `\nImage URL: ${imageUrl}` : '';
+    const content = `**Task Completed**\n\`\`\`json\n${JSON.stringify(completionMsg, null, 2).slice(0, 1700)}\n\`\`\`${suffix}`;
 
     if (messageId) {
       try {
         const originalMessage = await channel.messages.fetch(messageId);
-        const sent = await originalMessage.reply(content);
+        const sent = await originalMessage.reply(files.length > 0 ? { content, files } : content);
         console.log('[DISCORD]', 'completion_notification_sent', {
           taskId: task.id,
           mode: 'reply',
@@ -411,7 +502,7 @@ async function sendDiscordCompletionNotification(task, discordClient) {
       }
     }
 
-    const sent = await channel.send(content);
+    const sent = await channel.send(files.length > 0 ? { content, files } : content);
     console.log('[DISCORD]', 'completion_notification_sent', {
       taskId: task.id,
       mode: 'channel',
@@ -557,6 +648,163 @@ const server = http.createServer(async (req, res) => {
       writeJson(res, isNew ? 201 : 200, { ok: true, eventId: event.id, task: storedTask, deduplicated: !isNew });
     } catch (error) {
       writeJson(res, 400, { error: error.message || 'Request failed' });
+    }
+
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/asset-store/render') {
+    try {
+      const body = await readJsonBody(req, { maxBytes: 25 * 1024 * 1024 });
+      const expectedKeys = [
+        'assetId',
+        'productId',
+        'provider',
+        'prompt',
+        'contentBase64',
+        'extension',
+        'mimeType',
+        'metadata'
+      ];
+      const receivedKeys = body && typeof body === 'object' ? Object.keys(body) : [];
+      const missingKeys = expectedKeys.filter((key) => !(body && Object.prototype.hasOwnProperty.call(body, key)));
+      const disallowedKeys = receivedKeys.filter((key) => ['content', 'externalUrl', 'imageBase64', 'buffer', 'filePath'].includes(key));
+      const unknownKeys = receivedKeys.filter((key) => !expectedKeys.includes(key));
+
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        writeJson(res, 400, {
+          error: 'invalid_asset_store_payload',
+          expectedKeys,
+          receivedKeys
+        });
+        return;
+      }
+
+      if (missingKeys.length > 0 || disallowedKeys.length > 0) {
+        writeJson(res, 400, {
+          error: 'asset_store_contract_mismatch',
+          detail: 'Expected PNG base64 payload under contentBase64 only.',
+          expectedKeys,
+          receivedKeys,
+          missingKeys,
+          disallowedKeys,
+          unknownKeys
+        });
+        return;
+      }
+
+      const productId = sanitizePathSegment(body && body.productId, 'product');
+      const assetId = sanitizePathSegment(body && body.assetId, generateId());
+      const extensionRaw = sanitizePathSegment(body && body.extension, 'png').toLowerCase();
+      const provider = typeof body.provider === 'string' ? body.provider : 'unknown';
+      const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+      const mimeTypeRaw = typeof body.mimeType === 'string' ? body.mimeType.toLowerCase() : 'image/png';
+      const contentBase64 = typeof body.contentBase64 === 'string' ? body.contentBase64.trim() : '';
+      const metadata = body && typeof body.metadata === 'object' && body.metadata !== null ? body.metadata : {};
+      const extension = 'png';
+      const mimeType = 'image/png';
+
+      if (!contentBase64) {
+        writeJson(res, 400, {
+          error: 'asset_store_contract_mismatch',
+          detail: 'contentBase64 must be a non-empty base64 string.',
+          expectedKeys,
+          receivedKeys,
+          missingKeys,
+          disallowedKeys,
+          unknownKeys
+        });
+        return;
+      }
+
+      if (extensionRaw !== 'png' || mimeTypeRaw !== 'image/png') {
+        writeJson(res, 400, {
+          error: 'asset_store_contract_mismatch',
+          detail: 'Only PNG assets are accepted. extension must be png and mimeType must be image/png.',
+          expectedKeys,
+          receivedKeys,
+          missingKeys,
+          disallowedKeys,
+          unknownKeys
+        });
+        return;
+      }
+
+      const targetDir = path.join(GENERATED_ASSETS_DIR, productId);
+      fs.mkdirSync(targetDir, { recursive: true });
+
+      const assetFilename = `${assetId}.${extension}`;
+      const manifestFilename = `${assetId}.json`;
+      const assetPath = path.join(targetDir, assetFilename);
+      const manifestPath = path.join(targetDir, manifestFilename);
+      const publicAssetUrl = `/assets/generated/${productId}/${assetFilename}`;
+      const publicManifestUrl = `/assets/generated/${productId}/${manifestFilename}`;
+      const createdAt = Date.now();
+
+      fs.writeFileSync(assetPath, Buffer.from(contentBase64, 'base64'));
+      fs.writeFileSync(manifestPath, JSON.stringify({
+        assetId,
+        productId,
+        url: publicAssetUrl,
+        sourceUrl: null,
+        provider,
+        prompt,
+        createdAt,
+        mimeType,
+        hasContentBase64: true,
+        metadata
+      }, null, 2), 'utf8');
+
+      writeJson(res, 201, {
+        ok: true,
+        asset: {
+          assetId,
+          productId,
+          url: publicAssetUrl,
+          provider,
+          prompt,
+          createdAt,
+          manifestUrl: publicManifestUrl
+        }
+      });
+    } catch (error) {
+      writeJson(res, 400, { error: error.message || 'Request failed' });
+    }
+
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/render/openai/generate') {
+    try {
+      const body = await readJsonBody(req);
+      const result = await generateOpenAIImage(body || {});
+      writeJson(res, 200, {
+        ok: true,
+        result
+      });
+    } catch (error) {
+      writeJson(res, 400, { error: error.message || 'openai_generate_failed' });
+    }
+
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/debug/test-openai-image') {
+    try {
+      const body = await readJsonBody(req);
+      const prompt = typeof body.prompt === 'string' ? body.prompt : 'Pixel-art office scene, isometric view, bright daylight';
+      const result = await generateOpenAIImage({ prompt, model: body.model, size: body.size });
+      writeJson(res, 200, {
+        ok: true,
+        result: {
+          provider: result.provider,
+          model: result.model,
+          mimeType: result.mimeType,
+          imageBase64Length: result.imageBase64.length
+        }
+      });
+    } catch (error) {
+      writeJson(res, 400, { error: error.message || 'openai_test_failed' });
     }
 
     return;

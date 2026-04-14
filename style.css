@@ -202,6 +202,22 @@ canvas {
   background: #3d6b8f;
 }
 
+.tcp-create-product {
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px;
+  background: #2f6b43;
+  color: #ecfdf5;
+  border: 1px solid #3f8256;
+  font: 11px monospace;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.tcp-create-product:hover {
+  background: #3f8256;
+}
+
 .tcp-status {
   margin-top: 8px;
   padding: 4px;
