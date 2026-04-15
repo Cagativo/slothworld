@@ -1,7 +1,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { generateImage as generateOpenAIProviderImage } from '../../integrations/rendering/providers/openaiImageProvider.js';
+import { ProviderRegistry } from '../../integrations/rendering/providers/providerRegistry.js';
+import { assertProviderExecutionContext, assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,19 +23,14 @@ function makeAssetId() {
   return `asset-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
-async function runOpenAIProvider(prompt, context) {
-  return generateOpenAIProviderImage({
-    prompt,
-    productId: context && context.metadata ? context.metadata.productId : null
-  });
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function runProvider(provider, prompt, context) {
-  if (provider === 'openai') {
-    return runOpenAIProvider(prompt, context);
-  }
-
-  throw new Error(`provider_not_supported:${provider}`);
+  assertProviderExecutionContext();
+  const plugin = ProviderRegistry.get(provider);
+  return plugin.generate(prompt, context);
 }
 
 async function persistImage({ productId, contentBase64 }) {
@@ -55,35 +51,80 @@ async function persistImage({ productId, contentBase64 }) {
   };
 }
 
+function ok(result) {
+  return {
+    success: true,
+    result
+  };
+}
+
+function fail(error, result = null) {
+  return {
+    success: false,
+    result,
+    error: typeof error === 'string' ? error : (error && error.message ? error.message : 'worker_failed')
+  };
+}
+
 export async function runImageRenderWorker({ provider = 'openai', prompt = '', productId = null, context = {} }) {
+  assertWorkerExecutionContext();
+
   const normalizedPrompt = typeof prompt === 'string' ? prompt.trim() : '';
   if (!normalizedPrompt) {
-    throw new Error('missing_prompt');
+    return fail('missing_prompt');
   }
 
   const normalizedProvider = String(provider || 'openai').toLowerCase();
-  const providerResult = await runProvider(normalizedProvider, normalizedPrompt, context);
+  const maxAttemptsRaw = context && typeof context.retryCount === 'number' ? context.retryCount : 0;
+  const maxAttempts = Math.max(1, Math.min(3, Math.floor(maxAttemptsRaw) + 1));
+  let providerResult = null;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      providerResult = await runProvider(normalizedProvider, normalizedPrompt, context);
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxAttempts) {
+        await sleep(250 * attempt);
+      }
+    }
+  }
+
+  if (!providerResult) {
+    return fail(lastError || 'provider_execution_failed');
+  }
+
   const contentBase64 = providerResult && typeof providerResult.contentBase64 === 'string'
     ? providerResult.contentBase64.trim()
     : '';
 
   if (!contentBase64) {
-    throw new Error('provider_missing_content_base64');
+    return fail('provider_missing_content_base64');
   }
 
-  const asset = await persistImage({
-    productId: typeof productId === 'string' && productId.trim()
-      ? productId
-      : (context && context.metadata && context.metadata.productId ? context.metadata.productId : 'product'),
-    contentBase64
-  });
+  try {
+    const asset = await persistImage({
+      productId: typeof productId === 'string' && productId.trim()
+        ? productId
+        : (context && context.metadata && context.metadata.productId ? context.metadata.productId : 'product'),
+      contentBase64
+    });
 
-  return {
-    provider: providerResult.provider || normalizedProvider,
-    model: providerResult.model || null,
-    mimeType: providerResult.mimeType || 'image/png',
-    imageBase64: contentBase64,
-    prompt: normalizedPrompt,
-    asset
-  };
+    return ok({
+      provider: providerResult.provider || normalizedProvider,
+      model: providerResult.model || null,
+      mimeType: providerResult.mimeType || 'image/png',
+      imageBase64: contentBase64,
+      prompt: normalizedPrompt,
+      path: asset.url,
+      imageUrl: asset.url,
+      createdAt: asset.createdAt,
+      asset
+    });
+  } catch (error) {
+    return fail(error || 'persist_failed');
+  }
 }

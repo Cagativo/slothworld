@@ -1,10 +1,10 @@
-import { ImageProvider } from './ImageProvider';
+import { Provider } from './ImageProvider';
 import { TaskContext } from '../../../core/types/TaskContext';
 import { ImageResult } from '../../../core/types/ImageResult';
 
 const DEFAULT_MODEL = 'stable-diffusion-1.5';
 
-export class HuggingFaceImageProvider implements ImageProvider {
+export class HuggingFaceImageProvider implements Provider {
 	private readonly model: string;
 
 	constructor(model: string = DEFAULT_MODEL) {

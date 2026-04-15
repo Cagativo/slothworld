@@ -3,8 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { AttachmentBuilder, Client, GatewayIntentBits } from 'discord.js';
-import { runImageRenderWorker } from './core/workers/imageRenderWorker.js';
+import { Client, GatewayIntentBits } from 'discord.js';
+import { createTaskExecutionWorker } from './core/workers/taskExecutionWorker.js';
+import { createDiscordNotificationWorker } from './core/workers/discordNotificationWorker.js';
+import { createTaskEngine } from './core/engine/taskEngine.js';
+import { getCanonicalPipelineLabel, warnLegacyExecutionPath } from './core/execution-pipeline.js';
 
 dotenv.config();
 
@@ -16,9 +19,11 @@ const PORT = Number(process.env.PORT || 3000);
 const PUBLIC_DIR = __dirname;
 const MAX_EVENTS = 1000;
 const STORE_PATH = path.join(__dirname, 'bridge-store.json');
-const GENERATED_ASSETS_DIR = path.join(__dirname, 'assets', 'generated');
 const DISCORD_COMMAND_PREFIX = '!';
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || null;
+const TASK_CREATION_WINDOW_MS = 10_000;
+const TASK_CREATION_LIMIT = Number(process.env.TASK_CREATION_LIMIT || 40);
+const TASK_MAX_DEPTH = Number(process.env.TASK_MAX_DEPTH || 3);
+const TASK_CORRELATION_WINDOW_MS = Number(process.env.TASK_CORRELATION_WINDOW_MS || 30_000);
 const ALLOWED_CHANNELS = new Set(
   String(process.env.ALLOWED_CHANNELS || '')
     .split(',')
@@ -31,6 +36,7 @@ let nextEventId = 1;
 let eventLog = [];
 let taskStore = {};
 let discordClient = null;
+const taskCreationTimestamps = [];
 
 if (!process.env.DISCORD_BOT_TOKEN) {
   console.error('[DISCORD] Missing DISCORD_BOT_TOKEN. Discord execution is disabled.');
@@ -132,6 +138,67 @@ function logTaskStatus(taskId, status, details) {
   console.log(`[TASK][${taskId}][${status}]`);
 }
 
+function toFiniteNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function isInternalTaskShape(task) {
+  if (!task || typeof task !== 'object') {
+    return false;
+  }
+
+  if (task.internal === true || task.domain === 'system') {
+    return true;
+  }
+
+  const payload = task.payload && typeof task.payload === 'object' ? task.payload : null;
+  if (payload && (payload.internal === true || payload.domain === 'system')) {
+    return true;
+  }
+
+  return false;
+}
+
+function pruneCreationWindow(now) {
+  while (taskCreationTimestamps.length > 0 && now - taskCreationTimestamps[0] > TASK_CREATION_WINDOW_MS) {
+    taskCreationTimestamps.shift();
+  }
+}
+
+function checkTaskCreationCircuitBreaker(now) {
+  pruneCreationWindow(now);
+  if (taskCreationTimestamps.length >= TASK_CREATION_LIMIT) {
+    return false;
+  }
+
+  taskCreationTimestamps.push(now);
+  return true;
+}
+
+function hasRecentCorrelationDuplicate(correlationId, incomingId, now) {
+  if (!correlationId) {
+    return false;
+  }
+
+  for (const task of Object.values(taskStore)) {
+    if (!task || task.id === incomingId) {
+      continue;
+    }
+
+    if (task.correlationId !== correlationId) {
+      continue;
+    }
+
+    const createdAt = toFiniteNumber(task.createdAt, 0);
+    if (createdAt > 0 && now - createdAt <= TASK_CORRELATION_WINDOW_MS) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function parseDiscordCommand(rawContent) {
   const trimmed = String(rawContent || '').trim();
   if (!trimmed.startsWith(DISCORD_COMMAND_PREFIX)) {
@@ -153,37 +220,47 @@ function parseDiscordCommand(rawContent) {
   };
 }
 
-async function generateOpenAIImage(renderRequest) {
-  if (!OPENAI_API_KEY) {
-    throw new Error('openai_api_key_missing');
+function mapTaskResultToExecution(taskResult) {
+  return {
+    success: taskResult && taskResult.success === true,
+    result: taskResult && taskResult.output ? taskResult.output : null,
+    error: taskResult && taskResult.error ? taskResult.error : undefined
+  };
+}
+
+function mapEngineStatusToPublic(engineStatus) {
+  if (engineStatus === 'acknowledged') {
+    return 'done';
   }
 
-  const prompt = typeof (renderRequest && renderRequest.prompt) === 'string' ? renderRequest.prompt.trim() : '';
-  const productId = typeof (renderRequest && renderRequest.productId) === 'string'
-    ? renderRequest.productId
-    : 'product';
-  const taskContext = renderRequest && typeof renderRequest.taskContext === 'object' && renderRequest.taskContext !== null
-    ? renderRequest.taskContext
-    : {};
-
-  if (!prompt) {
-    throw new Error('missing_prompt');
+  if (engineStatus === 'failed') {
+    return 'failed';
   }
 
-  return runImageRenderWorker({
-    provider: 'openai',
-    prompt,
-    productId,
-    context: {
-      ...taskContext,
-      metadata: {
-        ...(taskContext && typeof taskContext.metadata === 'object' && taskContext.metadata !== null
-          ? taskContext.metadata
-          : {}),
-        productId
-      }
-    }
-  });
+  if (engineStatus === 'executing' || engineStatus === 'claimed') {
+    return 'processing';
+  }
+
+  if (engineStatus === 'awaiting_ack') {
+    return 'processing';
+  }
+
+  return 'pending';
+}
+
+function projectTaskForRead(task) {
+  if (!task || !task.id) {
+    return task;
+  }
+
+  const engineTask = taskEngine.getTask(task.id);
+  const projectedStatus = mapEngineStatusToPublic(engineTask ? engineTask.status : null);
+
+  return {
+    ...task,
+    status: projectedStatus,
+    engineStatus: engineTask ? engineTask.status : null
+  };
 }
 
 function mapCommandToAction(command) {
@@ -209,6 +286,13 @@ function mapCommandToAction(command) {
 function normalizeTask(input) {
   const now = Date.now();
   const requiredRange = input.type === 'shopify' ? [120, 260] : [80, 200];
+  const payload = typeof input.payload === 'object' && input.payload !== null ? input.payload : {};
+  const correlationId = typeof input.correlationId === 'string' && input.correlationId.trim()
+    ? input.correlationId.trim()
+    : (typeof payload.correlationId === 'string' && payload.correlationId.trim() ? payload.correlationId.trim() : (input.id || generateId()));
+  const depth = Math.max(0, Math.floor(toFiniteNumber(input.depth, toFiniteNumber(payload.depth, 0))));
+  const internal = input.internal === true || input.domain === 'system' || payload.internal === true || payload.domain === 'system';
+
   return {
     id: input.id || generateId(),
     type: input.type,
@@ -216,9 +300,12 @@ function normalizeTask(input) {
     priority: [0, 1, 2].includes(input.priority) ? input.priority : inferPriority(input),
     progress: typeof input.progress === 'number' ? input.progress : 0,
     required: typeof input.required === 'number' ? input.required : randomInRange(requiredRange[0], requiredRange[1]),
-    status: input.status || 'pending',
     action: typeof input.action === 'string' ? input.action : null,
-    payload: typeof input.payload === 'object' && input.payload !== null ? input.payload : {},
+    payload,
+    correlationId,
+    depth,
+    internal,
+    domain: internal ? 'system' : 'external',
     productId: typeof input.productId === 'string' ? input.productId : null,
     provider: typeof input.provider === 'string' ? input.provider : null,
     designIntent: typeof input.designIntent === 'object' && input.designIntent !== null ? input.designIntent : null,
@@ -244,7 +331,6 @@ function createDiscordTaskFromMessage(message) {
     priority: 2,
     progress: 0,
     required: randomInRange(80, 200),
-    status: 'pending',
     action,
     payload: {
       channelId: message.channelId,
@@ -287,6 +373,16 @@ function validateTaskInput(body) {
     return 'payload must be an object';
   }
 
+  if (isInternalTaskShape(body)) {
+    return 'internal/system tasks are not accepted on /task intake';
+  }
+
+  const payloadDepth = body && body.payload && typeof body.payload === 'object' ? body.payload.depth : undefined;
+  const depth = Math.max(0, Math.floor(toFiniteNumber(body.depth, toFiniteNumber(payloadDepth, 0))));
+  if (depth > TASK_MAX_DEPTH) {
+    return `task depth exceeds limit (${TASK_MAX_DEPTH})`;
+  }
+
   if (body.designIntent !== undefined && (typeof body.designIntent !== 'object' || body.designIntent === null || Array.isArray(body.designIntent))) {
     return 'designIntent must be an object';
   }
@@ -312,20 +408,21 @@ function pushTaskEvent(task) {
 }
 
 function upsertTask(normalizedTask) {
+  const { status: _ignoredStatus, ...taskWithoutStatus } = normalizedTask;
   const existing = taskStore[normalizedTask.id];
   if (!existing) {
-    taskStore[normalizedTask.id] = normalizedTask;
+    taskStore[taskWithoutStatus.id] = taskWithoutStatus;
     saveStore();
-    return { task: normalizedTask, isNew: true };
+    return { task: taskWithoutStatus, isNew: true };
   }
 
   const mergedTask = {
     ...existing,
-    ...normalizedTask,
-    createdAt: existing.createdAt || normalizedTask.createdAt,
-    startedAt: existing.startedAt || normalizedTask.startedAt || null,
-    completedAt: existing.completedAt || normalizedTask.completedAt || null,
-    failedAt: existing.failedAt || normalizedTask.failedAt || null
+    ...taskWithoutStatus,
+    createdAt: existing.createdAt || taskWithoutStatus.createdAt,
+    startedAt: existing.startedAt || taskWithoutStatus.startedAt || null,
+    completedAt: existing.completedAt || taskWithoutStatus.completedAt || null,
+    failedAt: existing.failedAt || taskWithoutStatus.failedAt || null
   };
 
   taskStore[mergedTask.id] = mergedTask;
@@ -333,19 +430,67 @@ function upsertTask(normalizedTask) {
   return { task: mergedTask, isNew: false };
 }
 
-function ingestNormalizedTask(taskInput) {
+function ingestNormalizedTask(taskInput, options = {}) {
+  const source = typeof options.source === 'string' ? options.source : 'unknown';
   const normalizedTask = normalizeTask(taskInput);
+
+  if (source === 'http' && (normalizedTask.internal === true || normalizedTask.domain === 'system')) {
+    return {
+      task: null,
+      event: null,
+      isNew: false,
+      ignored: true,
+      reason: 'internal_task_blocked'
+    };
+  }
+
+  if (normalizedTask.depth > TASK_MAX_DEPTH) {
+    return {
+      task: null,
+      event: null,
+      isNew: false,
+      ignored: true,
+      reason: 'depth_limit_exceeded'
+    };
+  }
+
+  const now = Date.now();
+  if (hasRecentCorrelationDuplicate(normalizedTask.correlationId, normalizedTask.id, now)) {
+    return {
+      task: null,
+      event: null,
+      isNew: false,
+      ignored: true,
+      reason: 'correlation_loop_guard'
+    };
+  }
+
   const { task: storedTask, isNew } = upsertTask(normalizedTask);
-  const event = pushTaskEvent(storedTask);
+  if (isNew && !checkTaskCreationCircuitBreaker(now)) {
+    delete taskStore[storedTask.id];
+    saveStore();
+    return {
+      task: null,
+      event: null,
+      isNew: false,
+      ignored: true,
+      reason: 'task_circuit_breaker_open'
+    };
+  }
+
+  const engineTask = ensureTaskInEngine(storedTask);
+  const projectedTask = projectTaskForRead(storedTask);
+  const event = isNew ? pushTaskEvent(storedTask) : null;
   logTaskStatus(storedTask.id, isNew ? 'added' : 'updated', {
     type: storedTask.type,
     action: storedTask.action,
-    status: storedTask.status
+    status: mapEngineStatusToPublic(engineTask ? engineTask.status : null)
   });
   return {
-    task: storedTask,
+    task: projectedTask,
     event,
-    isNew
+    isNew,
+    ignored: false
   };
 }
 
@@ -441,142 +586,47 @@ function readJsonBody(req, options = {}) {
   });
 }
 
-async function sendDiscordCompletionNotification(task, discordClient) {
-  const { channelId, messageId, content: taskContent } = task.payload || {};
+const discordNotificationWorker = createDiscordNotificationWorker({
+  getDiscordClient: () => discordClient
+});
 
-  if (!channelId || !discordClient || !discordClient.isReady || !discordClient.isReady()) {
-    console.log('[DISCORD]', 'completion_notification_skipped', {
-      taskId: task && task.id,
-      hasChannelId: !!channelId,
-      clientReady: !!(discordClient && discordClient.isReady && discordClient.isReady())
-    });
+const taskExecutionWorker = createTaskExecutionWorker({
+  getDiscordClient: () => discordClient,
+  taskTriggeredMessageIds
+});
+
+const taskEngine = createTaskEngine({
+  executor: async (task) => {
+    const execution = await taskExecutionWorker.executeTask(task);
+    return {
+      success: execution && execution.success === true,
+      output: execution && Object.prototype.hasOwnProperty.call(execution, 'result')
+        ? execution.result
+        : execution,
+      error: execution && execution.error ? execution.error : undefined,
+      retryable: false
+    };
+  },
+  onTaskAcked: async (task) => {
+    await discordNotificationWorker.notifyTaskCompletion(task);
+  }
+});
+
+function ensureTaskInEngine(task) {
+  if (!task || !task.id) {
     return null;
   }
 
-  try {
-    const channel = await discordClient.channels.fetch(channelId);
-    const executionResult = task && typeof task.executionResult === 'object' && task.executionResult !== null
-      ? task.executionResult
-      : {};
-    const imageBase64 = typeof executionResult.imageBase64 === 'string'
-      ? executionResult.imageBase64
-      : (typeof executionResult.contentBase64 === 'string' ? executionResult.contentBase64 : '');
-    const imageMimeType = typeof executionResult.mimeType === 'string' ? executionResult.mimeType : 'image/png';
-    const imageUrl = typeof executionResult.imageUrl === 'string' ? executionResult.imageUrl : null;
-    const files = [];
-
-    if (imageBase64) {
-      const extension = imageMimeType.includes('jpeg') || imageMimeType.includes('jpg')
-        ? 'jpg'
-        : (imageMimeType.includes('webp') ? 'webp' : 'png');
-      const imageBuffer = Buffer.from(imageBase64, 'base64');
-      files.push(new AttachmentBuilder(imageBuffer, { name: `${task.id}.${extension}` }));
-    }
-
-    const completionMsg = {
-      taskId: task.id,
-      type: task.type,
-      title: task.title,
-      status: task.status,
-      durationMs: task.durationMs || 0,
-      error: task.lastError || null,
-      content: typeof taskContent === 'string' ? taskContent : null,
-      hasGeneratedImage: files.length > 0,
-      imageUrl: imageUrl || null
-    };
-    const suffix = imageUrl ? `\nImage URL: ${imageUrl}` : '';
-    const content = `**Task Completed**\n\`\`\`json\n${JSON.stringify(completionMsg, null, 2).slice(0, 1700)}\n\`\`\`${suffix}`;
-
-    if (messageId) {
-      try {
-        const originalMessage = await channel.messages.fetch(messageId);
-        const sent = await originalMessage.reply(files.length > 0 ? { content, files } : content);
-        console.log('[DISCORD]', 'completion_notification_sent', {
-          taskId: task.id,
-          mode: 'reply',
-          channelId,
-          messageId,
-          sentMessageId: sent && sent.id ? sent.id : null
-        });
-        return true;
-      } catch (replyError) {
-        console.warn('[DISCORD]', 'completion_reply_failed_fallback_send', task.id, replyError.message);
-      }
-    }
-
-    const sent = await channel.send(files.length > 0 ? { content, files } : content);
-    console.log('[DISCORD]', 'completion_notification_sent', {
-      taskId: task.id,
-      mode: 'channel',
-      channelId,
-      sentMessageId: sent && sent.id ? sent.id : null
-    });
-    return true;
-  } catch (error) {
-    console.warn('[DISCORD]', 'completion_notification_failed', task.id, error.message);
-    return false;
-  }
-}
-
-async function executeDiscordTask(task) {
-  const { channelId, messageId, content } = task.payload || {};
-
-  if (!discordClient || !discordClient.isReady || !discordClient.isReady()) {
-    return { success: false, error: 'discordClient is not configured' };
+  let engineTask = taskEngine.getTask(task.id);
+  if (!engineTask) {
+    engineTask = taskEngine.createTask(task);
   }
 
-  try {
-    if (task.action === 'fetch_order' || task.action === 'refund_order') {
-      return {
-        success: true,
-        action: task.action,
-        note: 'Action received and queued for downstream commerce worker.'
-      };
-    }
-
-    const channel = await discordClient.channels.fetch(channelId);
-    const message = await channel.messages.fetch(messageId);
-
-    const replyMessage = await message.reply(content);
-    if (replyMessage && replyMessage.id) {
-      taskTriggeredMessageIds.add(replyMessage.id);
-    }
-
-    return { success: true };
-  } catch (err) {
-    console.error('[DISCORD ERROR]', err);
-    return { success: false, error: err.message };
-  }
-}
-
-async function executeShopifyTask(task) {
-  console.log('[SHOPIFY ACTION]', task && task.action, task && task.payload);
-  return { success: true };
-}
-
-async function executeTask(task) {
-  if (!task) {
-    return { success: false, error: 'Invalid task' };
+  if (engineTask.status === 'created') {
+    taskEngine.enqueueTask(engineTask.id);
   }
 
-  switch (task.action) {
-    case 'reply_to_message':
-    case 'summarize_message':
-    case 'classify_intent':
-    case 'fetch_order':
-    case 'refund_order':
-      return executeDiscordTask(task);
-    default:
-      if (task.type === 'shopify') {
-        return executeShopifyTask(task);
-      }
-
-      if (task.type === 'discord') {
-        return executeDiscordTask(task);
-      }
-
-      return { success: false, error: `Unsupported task type: ${task.type}` };
-  }
+  return engineTask;
 }
 
 if (discordClient) {
@@ -620,7 +670,10 @@ if (discordClient) {
 
     taskTriggeredMessageIds.add(message.id);
 
-    const result = ingestNormalizedTask(createDiscordTaskFromMessage(message));
+    const result = ingestNormalizedTask(createDiscordTaskFromMessage(message), { source: 'discord' });
+    if (result.ignored) {
+      return;
+    }
     logTaskStatus(result.task.id, result.isNew ? 'added' : 'updated', {
       source: 'discord-listener',
       title: result.task.title,
@@ -646,8 +699,19 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const { task: storedTask, isNew, event } = ingestNormalizedTask(body);
-      writeJson(res, isNew ? 201 : 200, { ok: true, eventId: event.id, task: storedTask, deduplicated: !isNew });
+      const { task: storedTask, isNew, event, ignored, reason } = ingestNormalizedTask(body, { source: 'http' });
+      if (!storedTask) {
+        const statusCode = reason === 'task_circuit_breaker_open' ? 429 : 409;
+        writeJson(res, statusCode, { ok: false, ignored: true, reason: reason || 'guarded_intake' });
+        return;
+      }
+
+      writeJson(res, isNew ? 201 : 200, {
+        ok: true,
+        eventId: event ? event.id : null,
+        task: storedTask,
+        deduplicated: !isNew
+      });
     } catch (error) {
       writeJson(res, 400, { error: error.message || 'Request failed' });
     }
@@ -656,164 +720,66 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && req.url === '/asset-store/render') {
-    try {
-      const body = await readJsonBody(req, { maxBytes: 25 * 1024 * 1024 });
-      const expectedKeys = [
-        'assetId',
-        'productId',
-        'provider',
-        'prompt',
-        'contentBase64',
-        'extension',
-        'mimeType',
-        'metadata'
-      ];
-      const receivedKeys = body && typeof body === 'object' ? Object.keys(body) : [];
-      const missingKeys = expectedKeys.filter((key) => !(body && Object.prototype.hasOwnProperty.call(body, key)));
-      const disallowedKeys = receivedKeys.filter((key) => ['content', 'externalUrl', 'imageBase64', 'buffer', 'filePath'].includes(key));
-      const unknownKeys = receivedKeys.filter((key) => !expectedKeys.includes(key));
-
-      if (!body || typeof body !== 'object' || Array.isArray(body)) {
-        writeJson(res, 400, {
-          error: 'invalid_asset_store_payload',
-          expectedKeys,
-          receivedKeys
-        });
-        return;
-      }
-
-      if (missingKeys.length > 0 || disallowedKeys.length > 0) {
-        writeJson(res, 400, {
-          error: 'asset_store_contract_mismatch',
-          detail: 'Expected PNG base64 payload under contentBase64 only.',
-          expectedKeys,
-          receivedKeys,
-          missingKeys,
-          disallowedKeys,
-          unknownKeys
-        });
-        return;
-      }
-
-      const productId = sanitizePathSegment(body && body.productId, 'product');
-      const assetId = sanitizePathSegment(body && body.assetId, generateId());
-      const extensionRaw = sanitizePathSegment(body && body.extension, 'png').toLowerCase();
-      const provider = typeof body.provider === 'string' ? body.provider : 'unknown';
-      const prompt = typeof body.prompt === 'string' ? body.prompt : '';
-      const mimeTypeRaw = typeof body.mimeType === 'string' ? body.mimeType.toLowerCase() : 'image/png';
-      const contentBase64 = typeof body.contentBase64 === 'string' ? body.contentBase64.trim() : '';
-      const metadata = body && typeof body.metadata === 'object' && body.metadata !== null ? body.metadata : {};
-      const extension = 'png';
-      const mimeType = 'image/png';
-
-      if (!contentBase64) {
-        writeJson(res, 400, {
-          error: 'asset_store_contract_mismatch',
-          detail: 'contentBase64 must be a non-empty base64 string.',
-          expectedKeys,
-          receivedKeys,
-          missingKeys,
-          disallowedKeys,
-          unknownKeys
-        });
-        return;
-      }
-
-      if (extensionRaw !== 'png' || mimeTypeRaw !== 'image/png') {
-        writeJson(res, 400, {
-          error: 'asset_store_contract_mismatch',
-          detail: 'Only PNG assets are accepted. extension must be png and mimeType must be image/png.',
-          expectedKeys,
-          receivedKeys,
-          missingKeys,
-          disallowedKeys,
-          unknownKeys
-        });
-        return;
-      }
-
-      const targetDir = path.join(GENERATED_ASSETS_DIR, productId);
-      fs.mkdirSync(targetDir, { recursive: true });
-
-      const assetFilename = `${assetId}.${extension}`;
-      const manifestFilename = `${assetId}.json`;
-      const assetPath = path.join(targetDir, assetFilename);
-      const manifestPath = path.join(targetDir, manifestFilename);
-      const publicAssetUrl = `/assets/generated/${productId}/${assetFilename}`;
-      const publicManifestUrl = `/assets/generated/${productId}/${manifestFilename}`;
-      const createdAt = Date.now();
-
-      fs.writeFileSync(assetPath, Buffer.from(contentBase64, 'base64'));
-      fs.writeFileSync(manifestPath, JSON.stringify({
-        assetId,
-        productId,
-        url: publicAssetUrl,
-        sourceUrl: null,
-        provider,
-        prompt,
-        createdAt,
-        mimeType,
-        hasContentBase64: true,
-        metadata
-      }, null, 2), 'utf8');
-
-      writeJson(res, 201, {
-        ok: true,
-        asset: {
-          assetId,
-          productId,
-          url: publicAssetUrl,
-          provider,
-          prompt,
-          createdAt,
-          manifestUrl: publicManifestUrl
-        }
-      });
-    } catch (error) {
-      writeJson(res, 400, { error: error.message || 'Request failed' });
-    }
+    // LEGACY endpoint intentionally disabled to prevent side effects outside TaskEngine-driven workers.
+    warnLegacyExecutionPath('bridge-server.POST_/asset-store/render', {
+      canonical: getCanonicalPipelineLabel(),
+      disabled: true
+    });
+    writeJson(res, 410, {
+      error: 'legacy_execution_disabled',
+      detail: 'Asset persistence is worker-owned and only reachable through task lifecycle execution.'
+    });
 
     return;
   }
 
   if (req.method === 'POST' && req.url === '/render/openai/generate') {
-    try {
-      const body = await readJsonBody(req);
-      const result = await generateOpenAIImage(body || {});
-      writeJson(res, 200, {
-        ok: true,
-        result
-      });
-    } catch (error) {
-      writeJson(res, 400, { error: error.message || 'openai_generate_failed' });
-    }
+    // LEGACY endpoint intentionally disabled to prevent duplicate execution systems.
+    warnLegacyExecutionPath('bridge-server.POST_/render/openai/generate', {
+      canonical: getCanonicalPipelineLabel(),
+      disabled: true
+    });
+    writeJson(res, 410, {
+      error: 'legacy_execution_disabled',
+      detail: 'Use /task lifecycle endpoints for task execution.'
+    });
+
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/render/generate') {
+    // LEGACY endpoint intentionally disabled to prevent duplicate execution systems.
+    warnLegacyExecutionPath('bridge-server.POST_/render/generate', {
+      canonical: getCanonicalPipelineLabel(),
+      disabled: true
+    });
+    writeJson(res, 410, {
+      error: 'legacy_execution_disabled',
+      detail: 'Use /task lifecycle endpoints for task execution.'
+    });
 
     return;
   }
 
   if (req.method === 'POST' && req.url === '/debug/test-openai-image') {
-    try {
-      const body = await readJsonBody(req);
-      const prompt = typeof body.prompt === 'string' ? body.prompt : 'Pixel-art office scene, isometric view, bright daylight';
-      const result = await generateOpenAIImage({ prompt, model: body.model, size: body.size });
-      writeJson(res, 200, {
-        ok: true,
-        result: {
-          provider: result.provider,
-          model: result.model,
-          mimeType: result.mimeType,
-          imageBase64Length: result.imageBase64.length
-        }
-      });
-    } catch (error) {
-      writeJson(res, 400, { error: error.message || 'openai_test_failed' });
-    }
+    // LEGACY endpoint intentionally disabled to enforce canonical task lifecycle entry points only.
+    warnLegacyExecutionPath('bridge-server.POST_/debug/test-openai-image', {
+      canonical: getCanonicalPipelineLabel(),
+      disabled: true
+    });
+    writeJson(res, 410, {
+      error: 'legacy_execution_disabled',
+      detail: 'Use POST /task followed by task lifecycle endpoints.'
+    });
 
     return;
   }
 
   if (req.method === 'GET' && req.url === '/tasks') {
-    const tasks = Object.values(taskStore).sort((a, b) => b.createdAt - a.createdAt);
+    const tasks = Object.values(taskStore)
+      .filter((task) => !isInternalTaskShape(task))
+      .map((task) => projectTaskForRead(task))
+      .sort((a, b) => b.createdAt - a.createdAt);
     writeJson(res, 200, { ok: true, tasks });
     return;
   }
@@ -826,10 +792,18 @@ const server = http.createServer(async (req, res) => {
       ? eventLog.filter((event) => event.id > after)
       : eventLog;
 
-    // Reliability mode: only emit tasks that are still pending.
+    // Reliability mode: only emit tasks that are still pending from engine projection.
     const events = scopedEvents
       .map((event) => {
-        const task = taskStore[event.taskId];
+        const rawTask = taskStore[event.taskId];
+        if (!rawTask) {
+          return null;
+        }
+
+        const task = projectTaskForRead(rawTask);
+        if (isInternalTaskShape(task)) {
+          return null;
+        }
         if (!task || task.status !== 'pending') {
           return null;
         }
@@ -858,17 +832,22 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      if (existing.status === 'processing' || existing.status === 'done' || existing.status === 'failed') {
-        writeJson(res, 200, { ok: true, ignored: true, task: existing });
+      const engineTask = ensureTaskInEngine(existing);
+      if (!engineTask) {
+        writeJson(res, 404, { error: 'Task not found' });
         return;
       }
 
-      existing.status = 'processing';
+      if (engineTask.status === 'executing' || engineTask.status === 'acknowledged' || engineTask.status === 'failed') {
+        writeJson(res, 200, { ok: true, ignored: true, task: projectTaskForRead(existing) });
+        return;
+      }
+
       existing.startedAt = existing.startedAt || Date.now();
 
       saveStore();
       logTaskStatus(taskId, 'processing');
-      writeJson(res, 200, { ok: true, task: existing });
+      writeJson(res, 200, { ok: true, task: projectTaskForRead(existing) });
     } catch (error) {
       writeJson(res, 400, { error: error.message || 'Request failed' });
     }
@@ -883,9 +862,15 @@ const server = http.createServer(async (req, res) => {
       const taskId = decodeURIComponent(parts[2]);
       const body = await readJsonBody(req);
 
-      if (!body || (body.status !== 'done' && body.status !== 'failed')) {
-        writeJson(res, 400, { error: "status must be 'done' or 'failed'" });
-        return;
+      if (body && typeof body === 'object') {
+        if (
+          Object.prototype.hasOwnProperty.call(body, 'executionResult')
+          || Object.prototype.hasOwnProperty.call(body, 'status')
+          || Object.prototype.hasOwnProperty.call(body, 'payload')
+          || Object.prototype.hasOwnProperty.call(body, 'retries')
+        ) {
+          throw new Error('ENGINE_ENFORCEMENT_VIOLATION');
+        }
       }
 
       const existing = taskStore[taskId];
@@ -894,39 +879,68 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      const engineTaskBeforeAck = taskEngine.getTask(taskId);
+      if (!engineTaskBeforeAck || engineTaskBeforeAck.status !== 'awaiting_ack' || !engineTaskBeforeAck.executionRecord) {
+        console.error('[ACK_WITHOUT_EXECUTION]', {
+          taskId,
+          phase: 'pre_ack_validation',
+          hasEngineTask: !!engineTaskBeforeAck,
+          engineStatus: engineTaskBeforeAck ? engineTaskBeforeAck.status : null,
+          hasExecutionRecord: !!(engineTaskBeforeAck && engineTaskBeforeAck.executionRecord)
+        });
+        throw new Error('ENGINE_ENFORCEMENT_VIOLATION');
+      }
+
+      try {
+        await taskEngine.ackTask(taskId);
+      } catch (error) {
+        throw new Error('ENGINE_ENFORCEMENT_VIOLATION');
+      }
+
+      const engineTask = taskEngine.getTask(taskId);
+      if (!engineTask || !engineTask.executionRecord || (engineTask.status !== 'acknowledged' && engineTask.status !== 'failed')) {
+        console.error('[ACK_WITHOUT_EXECUTION]', {
+          taskId,
+          phase: 'post_ack_validation',
+          hasEngineTask: !!engineTask,
+          engineStatus: engineTask ? engineTask.status : null,
+          hasExecutionRecord: !!(engineTask && engineTask.executionRecord)
+        });
+        throw new Error('ENGINE_ENFORCEMENT_VIOLATION');
+      }
+
+      const resolvedStatus = mapEngineStatusToPublic(engineTask.status);
+      const engineExecutionResult = mapTaskResultToExecution(engineTask.executionRecord.result);
+
       const now = Date.now();
-      const completedAt = body.status === 'done' ? now : existing.completedAt;
-      const failedAt = body.status === 'failed' ? now : existing.failedAt;
-      const finishedAt = body.status === 'done' ? completedAt : failedAt;
+      const completedAt = resolvedStatus === 'done' ? now : existing.completedAt;
+      const failedAt = resolvedStatus === 'failed' ? now : existing.failedAt;
+      const finishedAt = resolvedStatus === 'done' ? completedAt : failedAt;
       const durationMs = existing.startedAt && finishedAt ? Math.max(0, finishedAt - existing.startedAt) : existing.durationMs;
       const task = existing;
-      task.status = body.status;
-      task.retries = typeof body.retries === 'number' ? body.retries : task.retries;
-      task.executionResult = body.executionResult !== undefined ? body.executionResult : task.executionResult;
-      if (body.payload && typeof body.payload === 'object') {
-        if (!task.payload || typeof task.payload !== 'object') {
-          task.payload = {};
-        }
-        Object.assign(task.payload, body.payload);
-      }
+      task.executionResult = engineExecutionResult;
       task.startedAt = task.startedAt || now;
       task.completedAt = completedAt;
       task.failedAt = failedAt;
       task.durationMs = durationMs;
-      task.lastError = body.executionResult && body.executionResult.error ? body.executionResult.error : task.lastError;
+      task.lastError = task.executionResult && task.executionResult.error ? task.executionResult.error : task.lastError;
 
       console.log('[ACK DEBUG]', task.id, task.payload);
 
       saveStore();
-      logTaskStatus(taskId, body.status, {
+      logTaskStatus(taskId, resolvedStatus, {
         durationMs: task.durationMs,
         error: task.lastError || null,
         hasPayload: !!task.payload,
         channelId: task.payload && task.payload.channelId ? task.payload.channelId : null
       });
-      sendDiscordCompletionNotification(task, discordClient);
-      writeJson(res, 200, { ok: true, task });
+      writeJson(res, 200, { ok: true, task: projectTaskForRead(task) });
     } catch (error) {
+      if (error && error.message === 'ENGINE_ENFORCEMENT_VIOLATION') {
+        writeJson(res, 409, { error: 'ENGINE_ENFORCEMENT_VIOLATION' });
+        return;
+      }
+
       writeJson(res, 400, { error: error.message || 'Request failed' });
     }
 
@@ -938,6 +952,7 @@ const server = http.createServer(async (req, res) => {
       const requestUrl = new URL(req.url, `http://${req.headers.host}`);
       const parts = requestUrl.pathname.split('/');
       const taskId = decodeURIComponent(parts[2]);
+      console.log('[TASK_EXECUTE_ENDPOINT_HIT]', { taskId });
 
       const existing = taskStore[taskId];
       if (!existing) {
@@ -946,20 +961,27 @@ const server = http.createServer(async (req, res) => {
       }
 
       const executionStartedAt = Date.now();
-      const result = await executeTask(existing);
+      ensureTaskInEngine(existing);
+      const taskResult = await taskEngine.executeTask(existing.id);
+      const execution = mapTaskResultToExecution(taskResult);
       const executionCompletedAt = Date.now();
-      existing.executionResult = result;
+      existing.executionResult = execution;
       existing.executionStartedAt = executionStartedAt;
       existing.executionCompletedAt = executionCompletedAt;
       existing.executionDurationMs = executionCompletedAt - executionStartedAt;
-      existing.lastError = result && result.error ? result.error : existing.lastError;
+      existing.lastError = execution && execution.error ? execution.error : existing.lastError;
 
       saveStore();
-      logTaskStatus(taskId, result && result.success ? 'executed' : 'execute_failed', {
+      logTaskStatus(taskId, execution && execution.success ? 'executed' : 'execute_failed', {
         durationMs: existing.executionDurationMs,
         error: existing.lastError || null
       });
-      writeJson(res, 200, { ok: true, result, durationMs: existing.executionDurationMs });
+      writeJson(res, 200, {
+        ok: true,
+        result: execution,
+        durationMs: existing.executionDurationMs,
+        task: projectTaskForRead(existing)
+      });
     } catch (error) {
       writeJson(res, 400, { error: error.message || 'Request failed' });
     }

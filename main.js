@@ -4,7 +4,6 @@
 
 import { startBridgePolling } from './core/task-handling.js';
 import { initSimulation, updateSimulation } from './core/simulation-runner.js';
-import { startRenderWorkers } from './integrations/rendering/render-queue.js';
 import { initRenderer, renderFrame } from './rendering/renderer-loop.js';
 import { initUI } from './ui/ui-bootstrap.js';
 import { exposeWindowAPI } from './ui/window-api.js';
@@ -18,7 +17,6 @@ function start() {
   initSimulation();
   initRenderer();
   initUI();
-  startRenderWorkers({ workerCount: 2 });
 
   function loop() {
     updateSimulation();

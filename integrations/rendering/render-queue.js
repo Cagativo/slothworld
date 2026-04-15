@@ -1,5 +1,6 @@
 import { emitEvent } from '../../core/app-state.js';
 import { executeRenderRoute, normalizeRenderTask } from './render-router.js';
+import { warnLegacyExecutionPath } from '../../core/execution-pipeline.js';
 import {
   getRenderQueueSnapshot,
   logRenderEvent,
@@ -331,11 +332,23 @@ class RenderQueue {
 export const renderQueue = new RenderQueue();
 
 export function startRenderWorkers(options = {}) {
-  renderQueue.start(options);
+  // LEGACY: keep for compatibility/observability while canonical task pipeline is enforced.
+  warnLegacyExecutionPath('integrations/rendering/render-queue.startRenderWorkers', {
+    reason: 'legacy_browser_render_workers',
+    disabled: true
+  });
+  void options;
+  throw new Error('legacy_execution_disabled:startRenderWorkers');
 }
 
 export function enqueueRenderTask(task) {
-  return renderQueue.enqueue(task);
+  // LEGACY: avoid introducing new enqueue callers outside canonical task pipeline.
+  warnLegacyExecutionPath('integrations/rendering/render-queue.enqueueRenderTask', {
+    reason: 'legacy_render_queue_enqueue',
+    disabled: true
+  });
+  void task;
+  throw new Error('legacy_execution_disabled:enqueueRenderTask');
 }
 
 registerReplayEnqueueHandler((task) => enqueueRenderTask(task));

@@ -5,7 +5,10 @@
   "private": true,
   "description": "Lightweight event bridge for slothworld task ingestion",
   "scripts": {
-    "start": "node bridge-server.js"
+    "start": "node bridge-server.js",
+    "test": "npm run test:enforcement",
+    "test:adversarial": "node --test tests/adversarial-enforcement.test.mjs",
+    "test:enforcement": "node --test tests/adversarial-enforcement.test.mjs"
   },
   "dependencies": {
     "discord.js": "^14.16.3",
