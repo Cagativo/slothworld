@@ -1,6 +1,7 @@
 import { generateId, randomInRange, cloneContext } from './utils.js';
 import { ACTION_TOOL_MAP, TASK_EXECUTION_FAILURE_CHANCE, BRIDGE_POLL_INTERVAL_MS } from './constants.js';
 import { desks, emitEvent } from './app-state.js';
+import { appendRawEvents } from './world/eventStore.js';
 import { getCanonicalPipelineLabel, warnLegacyExecutionPath } from './execution-pipeline.js';
 // Circular with workflow — safe: only called at runtime, never at module init.
 import { applyWorkflowTaskCompletion, createProductWorkflowFromTask, inferDefaultPriority } from './workflow.js';
@@ -925,13 +926,11 @@ export async function pollBridgeTasks() {
       return;
     }
 
+    appendRawEvents(data.events);
+
     for (const event of data.events) {
       if (typeof event.id === 'number') {
         bridgeLastEventId = Math.max(bridgeLastEventId, event.id);
-      }
-
-      if (event.task) {
-        ingestTask(event.task);
       }
     }
   } catch (error) {

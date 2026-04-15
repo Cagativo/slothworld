@@ -1,7 +1,7 @@
 import { randomInRange } from './utils.js';
 import { spriteConfigs } from './constants.js';
 
-// --- Canvas setup ---
+// --- Canvas setup (rendering surface only; not a world-state source of truth) ---
 export const canvas = document.getElementById('game');
 export const ctx = canvas.getContext('2d');
 canvas.width = 800;
