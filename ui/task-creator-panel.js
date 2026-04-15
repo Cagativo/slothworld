@@ -1,5 +1,99 @@
+import { subscribeEventStream, getRawEvents } from '../core/world/eventStore.js';
+
 export function initTaskCreatorPanel() {
   const FIXED_DISCORD_CHANNEL_ID = '1491500223288184964';
+
+  const panelRuntime = {
+    pendingTaskId: null,
+    waitingForCreated: false,
+    observedLifecycleByTaskId: new Map()
+  };
+
+  function eventTaskId(event) {
+    if (!event || typeof event !== 'object') {
+      return null;
+    }
+
+    if (event.taskId) {
+      return String(event.taskId);
+    }
+
+    if (event.task && event.task.id) {
+      return String(event.task.id);
+    }
+
+    if (event.payload && event.payload.taskId) {
+      return String(event.payload.taskId);
+    }
+
+    return null;
+  }
+
+  function lifecycleFromEvent(event) {
+    if (!event || typeof event !== 'object') {
+      return null;
+    }
+
+    const type = typeof event.type === 'string' ? event.type : null;
+    if (type === 'TASK_CREATED') {
+      return { code: 'created', label: 'created' };
+    }
+    if (type === 'TASK_QUEUED' || type === 'TASK_ENQUEUED') {
+      return { code: 'queued', label: 'queued' };
+    }
+    if (type === 'TASK_CLAIMED') {
+      const payload = event.payload && typeof event.payload === 'object' ? event.payload : {};
+      const agentId = payload.agentId || payload.workerId || 'unknown';
+      return { code: 'claimed', label: `claimed by agent ${agentId}` };
+    }
+    if (type === 'TASK_STARTED' || type === 'TASK_EXECUTE_STARTED') {
+      return { code: 'executing', label: 'executing' };
+    }
+    if (type === 'TASK_EXECUTE_FINISHED') {
+      return { code: 'finished', label: 'finished' };
+    }
+    if (type === 'TASK_ACKED') {
+      const payload = event.payload && typeof event.payload === 'object' ? event.payload : {};
+      if (payload && (payload.status === 'failed' || payload.success === false)) {
+        return { code: 'failed', label: 'failed' };
+      }
+      return { code: 'completed', label: 'completed' };
+    }
+    if (type === 'TASK_FAILED') {
+      return { code: 'failed', label: 'failed' };
+    }
+
+    // Compatibility path for bridge snapshots without explicit lifecycle event types.
+    const task = event.task && typeof event.task === 'object' ? event.task : null;
+    if (!task || typeof task.status !== 'string') {
+      return null;
+    }
+
+    const status = task.status;
+    if (status === 'pending' || status === 'created') {
+      return { code: 'created', label: 'created' };
+    }
+    if (status === 'queued') {
+      return { code: 'queued', label: 'queued' };
+    }
+    if (status === 'claimed') {
+      return { code: 'claimed', label: 'claimed by agent unknown' };
+    }
+    if (status === 'executing' || status === 'in_progress') {
+      return { code: 'executing', label: 'executing' };
+    }
+    if (status === 'awaiting_ack') {
+      return { code: 'finished', label: 'finished' };
+    }
+    if (status === 'done' || status === 'completed' || status === 'acknowledged') {
+      return { code: 'completed', label: 'completed' };
+    }
+    if (status === 'failed') {
+      return { code: 'failed', label: 'failed' };
+    }
+
+    return null;
+  }
 
   function mountPanel() {
   const panel = document.createElement('div');
@@ -57,6 +151,52 @@ export function initTaskCreatorPanel() {
   const contentInput = panel.querySelector('#tcp-content');
   const channelIdInput = panel.querySelector('#tcp-channel-id');
   const statusDiv = panel.querySelector('#tcp-status');
+    function renderLifecycleStatus(taskId) {
+      const lifecycle = panelRuntime.observedLifecycleByTaskId.get(taskId);
+      if (!lifecycle) {
+        return;
+      }
+
+      statusDiv.textContent = `Task ${taskId}: ${lifecycle.label}`;
+      if (lifecycle.code === 'failed') {
+        statusDiv.className = 'tcp-status tcp-error';
+        return;
+      }
+
+      statusDiv.className = 'tcp-status tcp-success';
+    }
+
+    function observeLifecycleEvents(events) {
+      if (!Array.isArray(events) || events.length === 0) {
+        return;
+      }
+
+      for (const event of events) {
+        const taskId = eventTaskId(event);
+        if (!taskId) {
+          continue;
+        }
+
+        const lifecycle = lifecycleFromEvent(event);
+        if (!lifecycle) {
+          continue;
+        }
+
+        panelRuntime.observedLifecycleByTaskId.set(taskId, lifecycle);
+
+        if (panelRuntime.pendingTaskId === taskId && panelRuntime.waitingForCreated && lifecycle.code === 'created') {
+          panelRuntime.waitingForCreated = false;
+        }
+
+        if (panelRuntime.pendingTaskId === taskId) {
+          renderLifecycleStatus(taskId);
+        }
+      }
+    }
+
+    observeLifecycleEvents(getRawEvents());
+    subscribeEventStream(observeLifecycleEvents);
+
   const createProductButton = panel.querySelector('#tcp-create-product');
   const productPromptInput = panel.querySelector('#tcp-product-prompt');
   const contentGroup = panel.querySelector('#tcp-content-group');
@@ -98,6 +238,9 @@ export function initTaskCreatorPanel() {
     }
 
     try {
+      statusDiv.textContent = 'sending...';
+      statusDiv.className = 'tcp-status';
+
       const taskPayload = {
         type,
         title,
@@ -119,16 +262,24 @@ export function initTaskCreatorPanel() {
 
       console.log('UI TASK PAYLOAD:', taskPayload);
 
-      const result = window.controlAPI.injectTask(taskPayload);
+      const result = await window.controlAPI.injectTask(taskPayload);
 
       if (result && result.success) {
-        statusDiv.textContent = `✓ Task created: ${result.data.id}`;
-        statusDiv.className = 'tcp-status tcp-success';
+        const taskId = result && result.data && result.data.id ? String(result.data.id) : null;
+        panelRuntime.pendingTaskId = taskId;
+        panelRuntime.waitingForCreated = true;
+
+        statusDiv.textContent = taskId
+          ? `waiting for engine... task ${taskId}`
+          : 'waiting for engine...';
+        statusDiv.className = 'tcp-status';
+
         form.reset();
         channelIdInput.value = FIXED_DISCORD_CHANNEL_ID;
-        setTimeout(() => {
-          statusDiv.textContent = '';
-        }, 3000);
+
+        if (taskId) {
+          renderLifecycleStatus(taskId);
+        }
       } else {
         statusDiv.textContent = `Error: ${result.error || 'Task creation failed'}`;
         statusDiv.className = 'tcp-status tcp-error';
@@ -139,7 +290,7 @@ export function initTaskCreatorPanel() {
     }
   });
 
-  createProductButton.addEventListener('click', () => {
+  createProductButton.addEventListener('click', async () => {
     if (!window.createTestProduct || typeof window.createTestProduct !== 'function') {
       statusDiv.textContent = 'Error: createTestProduct is unavailable';
       statusDiv.className = 'tcp-status tcp-error';
@@ -158,7 +309,7 @@ export function initTaskCreatorPanel() {
         return;
       }
 
-      const result = window.createTestProduct({ promptText });
+      const result = await window.createTestProduct({ promptText });
       if (result && result.result && result.result.success) {
         statusDiv.textContent = `✓ Product render task created: ${result.productId}`;
         statusDiv.className = 'tcp-status tcp-success';

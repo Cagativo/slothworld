@@ -1,155 +1,115 @@
-# Copilot System Instructions for Slothworld
+🧠 CORE DEFINITION
 
-These instructions define the architecture, constraints, and development philosophy of Slothworld.
+Slothworld is a deterministic event-driven workflow execution engine with a real-time 2D office simulation UI.
 
-Copilot MUST follow these rules when generating, modifying, or suggesting code.
+The system is NOT a game or simulation engine.
+The UI is ONLY a visualization layer of backend execution truth.
 
-If a suggestion conflicts with these rules, it should be considered incorrect.
+🧠 ARCHITECTURE TRUTH (ABSOLUTE)
 
----
-You are assisting in the development of “Slothworld”, an event-driven AI operations simulator that has evolved into a commerce automation engine.
+Slothworld has three strictly separated layers:
 
-This is not a game. It is a distributed AI workflow system that simulates an office of autonomous agents that execute real tasks and generate real outputs (including commercial assets).
+1. 🧠 EXECUTION LAYER (SOURCE OF TRUTH)
+TaskEngine is the ONLY authority over task lifecycle state
+Workers execute tasks
+Providers generate AI outputs
+Bridge handles external integrations
 
----
+RULES:
 
-## 🧠 SYSTEM CONTEXT
+Only TaskEngine may mutate task state
+Workers never directly modify lifecycle state
+Providers are stateless and pure
+2. 📡 EVENT LAYER (SYSTEM CONTRACT)
 
-Slothworld consists of:
+All state changes MUST emit immutable events.
 
-1. Agent Simulation Layer
-- AI agents act as workers in a digital office
-- Agents have roles (researcher, executor, operator, etc.)
-- They pick up tasks, execute workflows, retry failures, and emit state transitions
+UI and external systems MUST rely ONLY on events.
 
-2. Task + Workflow Engine
-- Everything is a task (image generation, research, product creation, publishing)
-- Tasks flow through: UI → normalization → queue → worker → execution → ACK completion
-- ACK is the source of truth for completion
+Required events:
+TASK_CREATED
+TASK_QUEUED
+TASK_CLAIMED
+TASK_STARTED
+TASK_PROGRESS
+TASK_COMPLETED
+TASK_FAILED
+TASK_ACKED
 
-3. Event-Driven Architecture
-- All system behavior is driven by events
-- Event stream is used for observability and debugging
-- No tight coupling between modules
+RULE:
+If it is not an event, it does not exist for the UI.
 
-4. Bridge Server
-- Handles external integrations (Discord, Shopify, APIs)
-- Ingests tasks and forwards them into the internal queue system
-- Manages persistence via bridge-store.json
+3. 🎨 OFFICE UI LAYER (VISUALIZATION ONLY)
 
-5. Render / Image Generation Pipeline
-- Image generation is handled as a “provider-based system”
-- DO NOT hardcode any single AI provider (e.g. OpenAI)
-- All image generation must use an abstraction layer:
+The UI is a 2D office where sprites represent workers.
 
-interface ImageProvider {
-  generate(prompt: string, context: TaskContext): Promise<ImageResult>;
+IMPORTANT:
+
+Agents do NOT exist as system entities
+Agents are visual projections of worker + event state
+UI is fully reactive and stateless
+
+RULES:
+
+UI MUST NOT execute logic
+UI MUST NOT mutate state
+UI MUST ONLY consume event stream
+UI MUST NOT call providers or TaskEngine
+🧍 AGENT MODEL (DERIVED ONLY)
+
+Agents are visual sprites derived from events:
+
+AgentViewModel = {
+  agentId: string,
+  role: "researcher" | "designer" | "operator" | "executor",
+  workerId: string,
+  state: "idle" | "moving" | "working" | "error" | "delivering",
+  position: { x: number, y: number },
+  currentTaskId?: string
 }
 
-- Providers can include:
-  - Hugging Face Inference API (primary free option)
-  - Local ComfyUI server
-  - Replicate (optional fallback)
-  - OpenAI (legacy / optional)
+RULE:
 
-- All image outputs must be stored in assets/generated/
+This model is NOT persisted as source of truth
+It is derived entirely from event history
+🎮 OFFICE SIMULATION MAPPING
 
-6. Discord Integration
-- Discord is a control plane for triggering tasks and receiving outputs
-- Discord messages may create tasks or receive completion notifications
+UI animations MUST be driven by events:
 
-7. Operator Control Panel
-- UI is read-only observability dashboard
-- Shows:
-  - tasks
-  - agents
-  - workflows
-  - event stream
-- Must not directly mutate system state
+TASK_CREATED → ticket appears
+TASK_CLAIMED → agent walks to desk
+TASK_STARTED → working animation
+TASK_PROGRESS → progress update
+TASK_COMPLETED → delivery animation
+TASK_FAILED → error animation
+🚫 STRICT FORBIDDEN RULES
 
----
+DO NOT:
 
-## 🧩 ARCHITECTURE RULES (VERY IMPORTANT)
+bypass TaskEngine
+execute tasks outside worker pipeline
+mutate state from UI
+call providers directly from UI or bridge
+skip event emission
+treat agents as autonomous system entities
+⚙️ DEVELOPMENT PRINCIPLES
 
-- Never bypass the task queue system
-- Never execute side effects outside ACK-based completion flow
-- All external actions must go through bridge server or worker pipeline
-- Image generation MUST go through ImageProvider abstraction
-- No direct API calls inside UI components
-- Keep modules strictly separated (core, workers, bridge, UI, render)
+When generating code:
 
----
-
-## 📝 TASK EXECUTION PATTERN
-
-1. Task is created and normalized
-2. Task is pushed into queue
-3. Worker claims task
-4. Worker executes task logic
-5. External side effects occur inside worker only
-6. Result is persisted
-7. ACK event is emitted as the single source of truth
-
-Workers must:
-- be idempotent
-- support retries
-- emit events for observability
-- never directly mutate global state without emitting events
-
----
-
-## 🎨 IMAGE GENERATION RULES
-
-When generating images:
-
-- Always use structured prompts (not raw user input)
-- Enforce consistent “Slothworld style”:
-  - clean 2D illustration
-  - office / system aesthetic
-  - soft lighting
-  - consistent UI/game-simulation visual identity
-- Never depend on a single provider
-- Always assume provider may fail and implement retry/fallback logic
-
----
-
-## ⚙️ DEVELOPMENT PRIORITY
-
-When writing or modifying code, prioritize:
-
-1. System reliability (queue correctness, ACK integrity)
-2. Observability (event tracing, debugging)
-3. Modular design (pluggable providers, isolated services)
-4. Deterministic workflows
-5. Clear separation of simulation vs execution layers
-
----
-
-## 💻 CODE GENERATION GUIDELINES
-
-- Prefer small, composable modules over large files
-- Always route execution through queues and workers
-- Use explicit types/interfaces for all core systems (Task, Agent, Event, ImageProvider)
-- Include logging or event emission for all important actions
-- Design for retryability and idempotency
-- Avoid hidden side effects
-
----
-
-## 🚫 DO NOT
-
-- Do not hardcode OpenAI image generation
-- Do not bypass the task queue
-- Do not mix UI logic with execution logic
-- Do not directly mutate agent state without events
-- Do not treat Slothworld as a game engine
-
----
-
-## 🧠 CORE MINDSET
+Always route execution through TaskEngine
+Always emit events for state changes
+Workers must be idempotent and retry-safe
+UI must be fully event-driven and stateless
+Keep execution and visualization strictly separated
+Prefer modular, pluggable architecture
+🧠 CORE MINDSET
 
 Slothworld is:
 
-> A distributed AI workforce simulation that produces real-world outputs through a deterministic event-driven execution pipeline.
+A deterministic AI workflow engine with a real-time visual office layer that renders system truth as animated worker sprites.
 
-Every feature must respect this architecture.
+The UI is a metaphor. The engine is reality.
+
+FINAL RULE
+
+If a suggestion violates these rules, it is incorrect.

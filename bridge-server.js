@@ -38,6 +38,48 @@ let taskStore = {};
 let discordClient = null;
 const taskCreationTimestamps = [];
 
+function isValidEventType(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isValidTaskId(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isValidTimestamp(value) {
+  return Number.isFinite(value) && value > 0;
+}
+
+function assertStrictEventSchema(event) {
+  if (!event || typeof event !== 'object') {
+    throw new Error('EVENT_SCHEMA_VIOLATION:event_object_required');
+  }
+
+  if (!isValidEventType(event.type)) {
+    throw new Error('EVENT_SCHEMA_VIOLATION:type_required');
+  }
+
+  if (!isValidTaskId(event.taskId)) {
+    throw new Error('EVENT_SCHEMA_VIOLATION:taskId_required');
+  }
+
+  if (!isValidTimestamp(event.timestamp)) {
+    throw new Error('EVENT_SCHEMA_VIOLATION:timestamp_required');
+  }
+
+  if (!Number.isFinite(event.id)) {
+    throw new Error('EVENT_SCHEMA_VIOLATION:id_required');
+  }
+}
+
+function appendEventToLog(event) {
+  assertStrictEventSchema(event);
+  eventLog.push(event);
+  while (eventLog.length > MAX_EVENTS) {
+    eventLog.shift();
+  }
+}
+
 if (!process.env.DISCORD_BOT_TOKEN) {
   console.error('[DISCORD] Missing DISCORD_BOT_TOKEN. Discord execution is disabled.');
 } else {
@@ -72,8 +114,33 @@ function loadStore() {
 
     const parsed = JSON.parse(raw);
     taskStore = parsed.tasks && typeof parsed.tasks === 'object' ? parsed.tasks : {};
-    nextEventId = Number.isFinite(parsed.nextEventId) ? parsed.nextEventId : 1;
-    eventLog = Array.isArray(parsed.events) ? parsed.events.slice(-MAX_EVENTS) : [];
+
+    const loadedEvents = Array.isArray(parsed.events) ? parsed.events : [];
+    const validEvents = [];
+    let droppedInvalidEvents = 0;
+
+    for (const candidate of loadedEvents) {
+      try {
+        assertStrictEventSchema(candidate);
+        validEvents.push(candidate);
+      } catch (_error) {
+        droppedInvalidEvents += 1;
+      }
+    }
+
+    eventLog = validEvents.slice(-MAX_EVENTS);
+
+    const highestId = eventLog.reduce((max, event) => {
+      return Math.max(max, Number(event.id) || 0);
+    }, 0);
+
+    const parsedNextEventId = Number.isFinite(parsed.nextEventId) ? parsed.nextEventId : 1;
+    nextEventId = Math.max(parsedNextEventId, highestId + 1, 1);
+
+    if (droppedInvalidEvents > 0) {
+      console.warn('[BRIDGE]', 'store_load_dropped_invalid_events', droppedInvalidEvents);
+      saveStore();
+    }
   } catch (error) {
     console.warn('[BRIDGE]', 'store_load_failed', error.message);
   }
@@ -390,22 +457,6 @@ function validateTaskInput(body) {
   return null;
 }
 
-function pushTaskEvent(task) {
-  const event = {
-    id: nextEventId++,
-    timestamp: Date.now(),
-    taskId: task.id
-  };
-
-  eventLog.push(event);
-  if (eventLog.length > MAX_EVENTS) {
-    eventLog.shift();
-  }
-
-  saveStore();
-
-  return event;
-}
 
 function upsertTask(normalizedTask) {
   const { status: _ignoredStatus, ...taskWithoutStatus } = normalizedTask;
@@ -480,7 +531,6 @@ function ingestNormalizedTask(taskInput, options = {}) {
 
   const engineTask = ensureTaskInEngine(storedTask);
   const projectedTask = projectTaskForRead(storedTask);
-  const event = isNew ? pushTaskEvent(storedTask) : null;
   logTaskStatus(storedTask.id, isNew ? 'added' : 'updated', {
     type: storedTask.type,
     action: storedTask.action,
@@ -488,7 +538,7 @@ function ingestNormalizedTask(taskInput, options = {}) {
   });
   return {
     task: projectedTask,
-    event,
+    event: null,
     isNew,
     ignored: false
   };
@@ -609,8 +659,73 @@ const taskEngine = createTaskEngine({
   },
   onTaskAcked: async (task) => {
     await discordNotificationWorker.notifyTaskCompletion(task);
+  },
+  emitEvent: (event) => {
+    const timestamp = Number.isFinite(event && event.timestamp) ? event.timestamp : Date.now();
+    const payload = event && event.payload && typeof event.payload === 'object' ? event.payload : {};
+
+    appendEventToLog({
+      id: nextEventId++,
+      type: event.event,
+      taskId: String(event.taskId),
+      timestamp,
+      payload
+    });
+
+    saveStore();
   }
 });
+
+async function autoExecuteAndAck(taskId) {
+  try {
+    const existing = taskStore[taskId];
+    if (!existing) {
+      return;
+    }
+
+    const executionStartedAt = Date.now();
+    ensureTaskInEngine(existing);
+    const taskResult = await taskEngine.executeTask(taskId);
+    const execution = mapTaskResultToExecution(taskResult);
+    const executionCompletedAt = Date.now();
+    existing.executionResult = execution;
+    existing.executionStartedAt = executionStartedAt;
+    existing.executionCompletedAt = executionCompletedAt;
+    existing.executionDurationMs = executionCompletedAt - executionStartedAt;
+    existing.lastError = execution && execution.error ? execution.error : existing.lastError;
+    saveStore();
+
+    const engineTaskBeforeAck = taskEngine.getTask(taskId);
+    if (engineTaskBeforeAck && engineTaskBeforeAck.status === 'awaiting_ack' && engineTaskBeforeAck.executionRecord) {
+      await taskEngine.ackTask(taskId);
+      const engineTask = taskEngine.getTask(taskId);
+      const resolvedStatus = mapEngineStatusToPublic(engineTask ? engineTask.status : null);
+      const engineExecutionResult = engineTask && engineTask.executionRecord
+        ? mapTaskResultToExecution(engineTask.executionRecord.result)
+        : execution;
+      const now = Date.now();
+      const completedAt = resolvedStatus === 'done' ? now : existing.completedAt;
+      const failedAt = resolvedStatus === 'failed' ? now : existing.failedAt;
+      const finishedAt = resolvedStatus === 'done' ? completedAt : failedAt;
+      existing.executionResult = engineExecutionResult;
+      existing.startedAt = existing.startedAt || now;
+      existing.completedAt = completedAt;
+      existing.failedAt = failedAt;
+      existing.durationMs = existing.startedAt && finishedAt ? Math.max(0, finishedAt - existing.startedAt) : existing.durationMs;
+      existing.lastError = engineExecutionResult && engineExecutionResult.error
+        ? engineExecutionResult.error
+        : existing.lastError;
+      saveStore();
+      logTaskStatus(taskId, resolvedStatus, {
+        durationMs: existing.durationMs,
+        error: existing.lastError || null,
+        source: 'auto_execute_ack'
+      });
+    }
+  } catch (error) {
+    console.error('[AUTO_EXECUTE_ACK_ERROR]', taskId, error && error.message ? error.message : error);
+  }
+}
 
 function ensureTaskInEngine(task) {
   if (!task || !task.id) {
@@ -712,6 +827,15 @@ const server = http.createServer(async (req, res) => {
         task: storedTask,
         deduplicated: !isNew
       });
+
+      // Engine owns the full lifecycle — fire execute+ack asynchronously after response.
+      if (isNew && storedTask && storedTask.id) {
+        setImmediate(() => {
+          autoExecuteAndAck(storedTask.id).catch((err) => {
+            console.error('[POST_TASK_AUTO_EXEC]', storedTask.id, err && err.message ? err.message : err);
+          });
+        });
+      }
     } catch (error) {
       writeJson(res, 400, { error: error.message || 'Request failed' });
     }
@@ -792,26 +916,24 @@ const server = http.createServer(async (req, res) => {
       ? eventLog.filter((event) => event.id > after)
       : eventLog;
 
-    // Reliability mode: only emit tasks that are still pending from engine projection.
     const events = scopedEvents
       .map((event) => {
-        const rawTask = taskStore[event.taskId];
-        if (!rawTask) {
+        // Strict event schema contract: only typed lifecycle events are exposed.
+        if (!isValidEventType(event.type)) {
           return null;
         }
 
-        const task = projectTaskForRead(rawTask);
-        if (isInternalTaskShape(task)) {
-          return null;
-        }
-        if (!task || task.status !== 'pending') {
+        const rawTask = taskStore[event.taskId];
+        if (rawTask && isInternalTaskShape(rawTask)) {
           return null;
         }
 
         return {
           id: event.id,
+          type: event.type,
+          taskId: event.taskId,
           timestamp: event.timestamp,
-          task
+          payload: event.payload || {}
         };
       })
       .filter(Boolean);

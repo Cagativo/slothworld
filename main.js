@@ -3,8 +3,10 @@
 // =============================================================================
 
 import { startBridgePolling } from './core/task-handling.js';
-import { initSimulation, updateSimulation } from './core/simulation-runner.js';
 import { initRenderer, renderFrame } from './rendering/renderer-loop.js';
+import { deriveWorldState } from './core/world/deriveWorldState.js';
+import { appendRawEvents, getRawEvents } from './core/world/eventStore.js';
+import { createInitialEventSeed } from './core/world/initialEventSeed.js';
 import { initUI } from './ui/ui-bootstrap.js';
 import { exposeWindowAPI } from './ui/window-api.js';
 
@@ -13,14 +15,17 @@ function start() {
   window.DEV_MODE = false;
   window.__DEBUG_MODE__ = false;
 
+  if (getRawEvents().length === 0) {
+    appendRawEvents(createInitialEventSeed());
+  }
+
   exposeWindowAPI();
-  initSimulation();
   initRenderer();
   initUI();
 
   function loop() {
-    updateSimulation();
-    renderFrame();
+    const worldState = deriveWorldState(getRawEvents());
+    renderFrame(worldState);
     requestAnimationFrame(loop);
   }
 
