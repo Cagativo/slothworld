@@ -3,6 +3,7 @@ export type TaskStatus =
   | 'queued'
   | 'claimed'
   | 'executing'
+  | 'awaiting_ack'
   | 'acknowledged'
   | 'failed';
 
@@ -30,6 +31,11 @@ export interface StoredTask extends EngineTask {
   attempts: number;
   maxRetries: number;
   lastResult?: TaskResult;
+  executionRecord?: {
+    completedAt: number;
+    attempt: number;
+    result: TaskResult;
+  };
 }
 
 export type TaskEngineEventName =
@@ -61,7 +67,7 @@ export interface TaskEngine {
   enqueueTask: (task: EngineTask | string) => StoredTask;
   claimTask: (taskId?: string) => StoredTask | null;
   executeTask: (task: EngineTask | string) => Promise<TaskResult>;
-  ackTask: (taskId: string, result: TaskResult) => StoredTask;
+  ackTask: (taskId: string) => StoredTask;
   getTask: (taskId: string) => StoredTask | null;
   getQueueSnapshot: () => string[];
 }
@@ -258,11 +264,39 @@ export function createTaskEngine(options: TaskEngineOptions = {}): TaskEngine {
 
     const executionPromise = Promise.resolve(executor(task))
       .then((result) => {
+        task.lastResult = {
+          success: result && result.success === true,
+          output: result && result.output ? result.output : undefined,
+          error: result && result.error ? result.error : undefined,
+          retryable: result && result.retryable === true
+        };
+        task.executionRecord = {
+          completedAt: now(),
+          attempt: task.attempts,
+          result: task.lastResult
+        };
+
+        const shouldRetry = !task.lastResult.success && canRetry(task, task.lastResult);
+        if (shouldRetry) {
+          task.status = 'queued';
+          if (!queueContains(task.id)) {
+            queue.push(task.id);
+          }
+          emit('TASK_REQUEUED', task.id, {
+            attempts: task.attempts,
+            maxRetries: task.maxRetries,
+            queueSize: queue.length
+          });
+          return task.lastResult;
+        }
+
+        task.status = 'awaiting_ack';
         emit('TASK_EXECUTE_FINISHED', task.id, {
-          success: result.success,
-          retryable: result.retryable === true
+          success: task.lastResult.success,
+          retryable: task.lastResult.retryable === true,
+          status: task.status
         });
-        return ackTask(task.id, result).lastResult || result;
+        return task.lastResult;
       })
       .catch((error: unknown) => {
         const failure: TaskResult = {
@@ -270,11 +304,19 @@ export function createTaskEngine(options: TaskEngineOptions = {}): TaskEngine {
           error: error instanceof Error ? error.message : 'execution_failed',
           retryable: false
         };
+        task.lastResult = failure;
+        task.executionRecord = {
+          completedAt: now(),
+          attempt: task.attempts,
+          result: failure
+        };
+        task.status = 'awaiting_ack';
         emit('TASK_EXECUTE_FINISHED', task.id, {
           success: false,
-          error: failure.error
+          error: failure.error,
+          status: task.status
         });
-        return ackTask(task.id, failure).lastResult || failure;
+        return failure;
       })
       .finally(() => {
         running.delete(task.id);
@@ -284,39 +326,18 @@ export function createTaskEngine(options: TaskEngineOptions = {}): TaskEngine {
     return executionPromise;
   }
 
-  function ackTask(taskId: string, result: TaskResult): StoredTask {
+  function ackTask(taskId: string): StoredTask {
     const task = resolveTask(taskId);
 
-    if (task.status === 'acknowledged' || task.status === 'failed') {
-      emit('TASK_ACKED', task.id, {
-        deduplicated: true,
-        status: task.status
-      });
-      return task;
+    if (task.status !== 'awaiting_ack') {
+      throw new Error('ENGINE_ENFORCEMENT_VIOLATION');
     }
 
-    task.lastResult = {
-      success: result && result.success === true,
-      output: result && result.output ? result.output : undefined,
-      error: result && result.error ? result.error : undefined,
-      retryable: result && result.retryable === true
-    };
-
-    const shouldRetry = !task.lastResult.success && canRetry(task, task.lastResult);
-
-    if (shouldRetry) {
-      task.status = 'queued';
-      if (!queueContains(task.id)) {
-        queue.push(task.id);
-      }
-      emit('TASK_REQUEUED', task.id, {
-        attempts: task.attempts,
-        maxRetries: task.maxRetries,
-        queueSize: queue.length
-      });
-      return task;
+    if (!task.executionRecord || !task.executionRecord.result) {
+      throw new Error('ENGINE_ENFORCEMENT_VIOLATION');
     }
 
+    task.lastResult = task.executionRecord.result;
     task.status = task.lastResult.success ? 'acknowledged' : 'failed';
     task.acknowledgedAt = now();
     emit('TASK_ACKED', task.id, {

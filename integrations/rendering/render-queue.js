@@ -351,8 +351,6 @@ export function enqueueRenderTask(task) {
   throw new Error('legacy_execution_disabled:enqueueRenderTask');
 }
 
-registerReplayEnqueueHandler((task) => enqueueRenderTask(task));
-
 export function getRenderQueueStats() {
   const snapshot = getRenderQueueSnapshot();
   return {
