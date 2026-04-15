@@ -1,41 +1,18 @@
 import { generateImage } from '../../../core/image-generation.js';
+import { warnLegacyExecutionPath } from '../../../core/execution-pipeline.js';
 
 export const openAIImageAdapter = {
   id: 'openai',
   async render(task, prompt) {
-    const result = await generateImage({
-      provider: 'openai',
-      prompt,
-      context: {
-        taskId: task && task.id ? task.id : null,
-        workflowId: task && task.renderId ? task.renderId : undefined,
-        source: task && task.type === 'discord' ? 'discord' : 'api',
-        retryCount: task && typeof task.retries === 'number' ? task.retries : 0,
-        metadata: {
-          productId: task && task.productId ? task.productId : null,
-          provider: 'openai'
-        }
-      }
+    // LEGACY: adapter path is frozen for compatibility.
+    // New execution should flow through canonical task pipeline.
+    warnLegacyExecutionPath('integrations/rendering/providers/openAIImageAdapter.render', {
+      reason: 'legacy_adapter_execution',
+      disabled: true
     });
 
-    if (!result.contentBase64) {
-      throw new Error('openai_invalid_response_missing_content_base64');
-    }
-
-    return {
-      provider: this.id,
-      prompt: result.prompt,
-      contentBase64: result.contentBase64,
-      extension: 'png',
-      mimeType: result.mimeType || 'image/png',
-      metadata: {
-        apiFamily: 'images',
-        mode: 'openai_api',
-        model: result && result.metadata ? result.metadata.model || 'gpt-5' : 'gpt-5',
-        imageBytesApprox: Math.floor((result.contentBase64.length * 3) / 4),
-        path: result.path,
-        createdAt: result.createdAt
-      }
-    };
+    void task;
+    void prompt;
+    throw new Error('legacy_execution_disabled:openAIImageAdapter.render');
   }
 };

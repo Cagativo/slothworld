@@ -131,8 +131,12 @@ export async function sendWorkflowFailureDiscordMessage(workflow, task, executio
   await executeDiscordTask({
     id: `${workflow.id}-failure-notice-${Date.now()}`,
     type: 'discord',
+    correlationId: workflow.id,
+    depth: 1,
     action: 'reply_to_message',
     payload: {
+      correlationId: workflow.id,
+      depth: 1,
       channelId,
       messageId,
       content: `Workflow failed for "${keyword}" at step "${stepName}". Error: ${reason}`

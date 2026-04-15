@@ -1,5 +1,6 @@
 export interface ImageResult {
-  path?: string;
+  path: string;
+  imageUrl?: string;
   prompt: string;
   provider: string;
   createdAt: number;

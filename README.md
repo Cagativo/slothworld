@@ -1,233 +1,270 @@
-# Slothworld AI Office Simulation
+# Slothworld Execution Engine
 
-Slothworld is a modular, event-driven browser simulation that visualizes agent behavior and task workflows. AI-controlled workers process queued tasks drawn from Discord and Shopify through a step-based execution loop. The system is structured with clear module boundaries across core simulation logic, rendering, UI controls, and a bridge server.
+Slothworld is an event-driven workflow execution engine for autonomous AI operations.
 
-## Features
+This system enforces a single deterministic execution pipeline. Any alternative execution path is invalid.
 
-- **Modular architecture**: Core simulation, rendering, and UI logic cleanly separated into independent modules.
-- **Event-driven**: Decoupled event system (event stream, emissions) enables observability and extensibility without cross-module coupling.
-- **Agent simulation**: Four AI agents with role-based skills (researcher, executor, other) that autonomously claim tasks, move, work, and retry.
-- **Step-based workflows**: Multi-step workflows with approval gates, retries, and context propagation.
-- **Real-time canvas rendering**: Pixel art office with animated agents, desk queues, task progress bars, and workflow overlays.
-- **Operator Control Panel**: Read-only runtime dashboard for task queues, agent state, workflows, and event stream.
-- **Task Creator panel**: Form-driven task creation UI for Discord/Shopify intents (no manual in-canvas console input required).
-- **Task bridge server**: HTTP endpoints for task ingestion, polling, execution, and acknowledgement. Persistent storage in `bridge-store.json`.
-- **Optional Discord integration**: Listen for mentions and commands; ingest tasks via event polling.
-- **Unified completion pipeline**: All tasks (UI, API, workflows, Discord) complete exclusively through ACK-based lifecycle handling ensuring consistent state transitions and reliable external side effects.
-- **Discord completion notifications**: Completed tasks can notify Discord via channel post or message reply (when `messageId` is available).
-- **Worker-based image generation**: `image_render` tasks run through a backend worker pipeline (provider -> worker persistence -> asset URL) with browser-safe UI calls.
-- **Agent lifecycle + speech system**: Agents remain seated while working/waiting, transition through explicit visual states, and use cooldown-gated speech bubbles.
+It is not a game, not a simulation runtime, and not a UI-driven execution system.
 
-## System Architecture Flow
+The platform behaves like a Zapier-style AI orchestration backend: tasks are ingested, routed through an execution engine, processed by workers, delegated to providers, and finalized through ACK-based completion with persistent records.
 
-The runtime follows an ACK-centered task lifecycle:
+## 🔒 Core Guarantee
+
+All task execution is strictly controlled by TaskEngine.
+
+No task can:
+- execute outside TaskEngine
+- be marked complete without execution
+- trigger side effects outside lifecycle
+
+Execution is enforced as:
+
+execute → ack → side effects
+
+Any violation throws `ENGINE_ENFORCEMENT_VIOLATION`.
+
+## Core Flow
 
 ```text
-Task Creator UI
-→ controlAPI.injectTask
-→ Task Normalization (core/task-handling)
-→ Desk Queue Assignment
-→ Agent Execution Loop
-→ Task Completion (status = done | failed)
-→ ACK Handler (bridge-server)
-→ External Side Effects (Discord / integrations)
+Intake -> Engine -> Queue -> Worker -> Provider -> Result -> ACK -> Persistence
 ```
 
-All task completions must pass through ACK — no exceptions.
+```text
+UI/External Trigger → Bridge → TaskEngine → Worker → Provider → Worker Result → ACK → Persistence
+```
 
-## Key Design Principles
+## Canonical Task Execution Flow (Authoritative)
 
-### Single Completion Pipeline
-All tasks must complete through `POST /task/:id/ack`.
+The enforced lifecycle for externally created tasks is:
 
-### Bridge Store Lifecycle Mutation
-Bridge lifecycle endpoints (`/start`, `/execute`, `/ack`) update existing stored task references in place.
+```text
+POST /task
+-> TaskEngine.createTask
+-> TaskEngine.enqueueTask
+-> TaskEngine.claimTask
+-> POST /task/:id/execute
+-> TaskExecutionWorker
+-> TaskEngine stores executionRecord
+-> POST /task/:id/ack
+-> TaskEngine finalizes
+-> post-ACK side effects (for example Discord notification)
+```
 
-### Payload Continuity
-Task payload is carried end-to-end and used for integration behavior.
-For Discord tasks, `channelId`, `messageId`, and `content` are the operational fields.
+Execution must complete before ACK is accepted.
 
-For image-render tasks, the bridge persists the generated PNG and returns a local asset URL that becomes `task.executionResult.imageUrl`.
+## Single Source of Truth Rule
 
-### Event-driven execution
-State changes emit events; no direct side-effect coupling in core.
+Law: TaskEngine is the only lifecycle authority. ACK is the engine-emitted finalization event that commits completion state.
 
-### UI only emits intent
-UI only calls `window.controlAPI.injectTask()`.
+The TaskEngine is the ONLY system allowed to:
 
-## System Behavior (Verified)
+- transition task state
+- define lifecycle status changes
+- determine completion or failure
+- authorize ACK finalization
 
-The following behavior is verified against runtime code in `core/`, `ui/`, `rendering/`, and `bridge-server.js`.
+Bridge, UI, Workers, and Providers may NOT:
 
-### Runtime task flow
+- mutate task state directly
+- override lifecycle status
+- write completion status independently
 
-1. UI task creation calls `window.controlAPI.injectTask(task)`.
-2. `core/task-handling.normalizeTask` enforces task defaults and normalizes payload shape.
-3. `addTaskToDesk` assigns the task to the least-loaded eligible desk and emits `TASK_CREATED`.
-4. Agent loop (`core/agent-logic.update`) claims queued work (`TASK_STARTED`), progresses work, and triggers execution.
-5. Task execution runs via tool mapping in `core/task-handling.executeTask`.
-6. Completion always routes through `sendTaskAck(...)` to `POST /task/:id/ack` with status `done` or `failed`.
-7. Bridge ACK handler persists final status, merges optional ACK payload updates, records timing/error fields, and triggers completion notifications.
+All state changes must originate from TaskEngine and be finalized through ACK.
 
-### Payload and persistence rules
+## Architecture
 
-- Bridge normalization requires `type` (`discord` or `shopify`) and stores payload as an object.
-- In simulation, payload is normalized before queueing; Discord payload is shaped around `channelId`, `content`, and optional `messageId`.
-- ACK payload is merged into the stored task payload (not replaced) by the bridge.
-- Bridge polling endpoint `GET /events?after=n` only returns tasks currently in `pending` status.
+### 1. Intake (Bridge/Server)
 
-### Discord integration behavior
+- Receives task intents from UI and external systems.
+- Normalizes and persists task records.
+- Forwards execution through TaskEngine lifecycle endpoints.
+- Does not execute provider logic directly.
 
-- Discord bot integration is enabled only when `DISCORD_BOT_TOKEN` is configured and client login succeeds.
-- Listener ingests mentions and prefix commands (`!`) into bridge tasks, with optional channel gating via `ALLOWED_CHANNELS`.
-- Bridge task execution for Discord replies fetches channel/message and replies; some actions (`fetch_order`, `refund_order`) return success notes for downstream handling.
-- On ACK completion, bridge attempts completion notification:
-  - reply to original message when `messageId` exists and fetch succeeds
-  - fallback to channel send when reply is unavailable
+### 2. Engine (Task Routing + Queue)
 
-### Image generation behavior
+- State machine plus scheduler, not executor.
+- The Engine is the only state machine in the system.
+- Owns lifecycle transitions: create, enqueue, claim, execute, ack.
+- Decides ordering, retries, completion, and failure.
+- Enforces idempotency and deterministic status transitions.
+- Orchestrates workers and finalizes state; it does not perform operational side effects.
 
-- The only supported image provider is OpenAI.
-- `core/image-generation.js` is a browser-safe bridge client that posts to `POST /render/openai/generate` and returns normalized image result metadata.
-- `bridge-server.js` delegates image execution to `core/workers/imageRenderWorker.js`.
-- `imageRenderWorker.js` is the Node-only layer responsible for filesystem writes to `assets/generated/<productId>/` and returning persisted asset metadata.
-- `openaiImageProvider.js` is provider logic only (OpenAI Responses API call + base64 extraction), with no filesystem writes.
-- The OpenAI provider extracts the image from `response.output` where `type === "image_generation_call"` and reads `output.result` as base64 PNG.
-- PNG-only output is enforced; SVG placeholder generation has been removed.
-- `POST /asset-store/render` persists generated images under `assets/generated/<productId>/`.
-- `/asset-store/render` accepts strict contract payloads only: `contentBase64` (PNG base64 string), `extension: "png"`, `mimeType: "image/png"`.
-- `/asset-store/render` request body limit is set to 25MB to support image base64 payloads.
-- `render.route` returns the persisted asset URL, and that URL is stored as `task.executionResult.imageUrl`.
-- Generated images are created through the API and stored locally by the bridge; they are not expected to appear in the OpenAI Playground image history.
+### 3. Workers (Execution Layer)
 
-### Agent lifecycle + speech behavior
+- Execute task logic by type.
+- Handle retries, error shaping, and result normalization.
+- Own operational side effects: filesystem writes for generated artifacts, external integration calls, and message dispatch.
+- Return execution output to the engine; workers do not commit lifecycle status.
+- Return structured execution results to the engine.
 
-- Agent visual lifecycle is explicit: `idle -> moving -> sitting -> working -> waiting -> complete_react -> idle`.
-- Agents stay seated for `working`, `waiting`, and `complete_react` rendering states.
-- Completion is status-driven (`done`/`failed`), synchronized from completion events and task status.
-- Speech bubbles are state-driven (`agent.speech`) with cooldown gating.
-- Speech duration/cooldown is currently 7000ms.
+### 4. Providers (AI Generation Layer)
 
-### Control API behavior
+- Provider abstraction for model calls (for example OpenAI, Hugging Face).
+- Pure generation logic only.
+- May perform model inference requests only.
+- No filesystem access.
+- No task-state mutation.
+- No queue, bridge, or UI responsibilities.
 
-- `window.controlAPI.injectTask(...)` is the primary UI/task-intent entrypoint and enqueues tasks in simulation.
-- `window.dispatchCommand(...)` parses command strings and routes to inject/spawn/inspect/pause/resume/workflow actions.
-- Keyboard debug-console interception is disabled; command APIs remain callable programmatically.
+### 5. Persistence (Storage Layer)
 
-## Project Structure
+- Stores task records, execution results, event history, and generated asset metadata.
+- Lifecycle status persistence is ACK-driven and engine-authoritative.
+- Completion and failure status are committed only through ACK finalization.
+- Worker-produced artifacts/metadata can be persisted, but task lifecycle state is not worker-writable.
 
-The codebase is organized into modular components by responsibility:
+## Runtime Guarantees
 
-### Core (`core/`)
-- **constants.js** – Global timings, thresholds, debug flags, sprite configurations
-- **utils.js** – Pure utility functions (random generation, ID creation, serialization)
-- **app-state.js** – Shared state initialization: canvas, agents, desks, workflows, event emitter
-- **task-handling.js** – Task factories, execution, tool registry, bridge polling, retry logic
-- **workflow.js** – Workflow lifecycle: creation, step queueing, approval/rejection, context propagation
-- **agent-logic.js** – Agent simulation lifecycle, task claiming/execution, completion reactions, and speech state updates
-- **workers/imageRenderWorker.js** – Node worker for provider execution and file persistence to generated assets
-- **types/TaskContext.ts** – Shared task execution context contract for providers/workers
-- **types/ImageResult.ts** – Shared provider output contract with metadata/base64 fields
+- All tasks go through TaskEngine.
+- All execution happens in workers.
+- All AI generation runs through providers.
+- All completion finalization goes through ackTask.
+- No browser-side execution logic for providers, queue processing, or filesystem writes.
 
-### Rendering (`rendering/`)
-- **assets.js** – Asset loader and sprite path registry (lazy-loaded into memory)
-- **overlays.js** – Visual effects: HUD, agent labels, workflow cards, task indicators, particles
-- **canvas-renderer.js** – Render orchestration and canvas drawing primitive
+## Explicit Invariants (Must Never Be Violated)
 
-### UI (`ui/`)
-- **command-parser.js** – Pure command parsing (8+ commands: inject, spawn, inspect, approve, etc.)
-- **operator-control-panel.js** – Read-only runtime observer panel (queues, agents, workflows, events)
-- **task-creator-panel.js** – Form-based task injection UI with structured payload creation
-- **control-api.js** – Control command handlers (agent inspection, movement, role assignment, workflow actions)
-- **keyboard-input.js** – Keyboard binding shim (debug console interception retired)
+- Tasks cannot be completed without TaskEngine execution.
+- ACK requires both `awaiting_ack` state and a valid `executionRecord`.
+- UI is non-authoritative and cannot set terminal lifecycle state (`done`/`failed`) as source of truth.
+- Workers cannot run outside TaskEngine execution context.
+- Providers cannot be called outside worker/provider context.
+- Side effects run only inside engine lifecycle, after ACK finalization.
 
-### Image pipeline modules
-- **core/image-generation.js** – Frontend-safe bridge client for image generation requests and normalized image results
-- **integrations/rendering/render-router.js** – OpenAI-only render routing for `image_render` tasks
-- **integrations/rendering/providers/openAIImageAdapter.js** – Render adapter that converts backend image results into the asset-store contract
-- **integrations/rendering/providers/openaiImageProvider.js** – OpenAI provider logic (Responses API -> base64 PNG extraction), no filesystem access
-- **integrations/rendering/providers/HuggingFaceImageProvider.ts** – Hugging Face provider implementation returning image payload metadata/base64
-- **integrations/rendering/providers/ImageProvider.ts** – Shared provider interface (`generate(prompt, context) => ImageResult`)
-- **integrations/rendering/asset-store.js** – Persists generated PNG assets through the bridge
+## Execution Entry Points
 
-### Root
-- **main.js** – Thin orchestrator: imports all modules, exposes window API, starts simulation loop and bridge polling
-- **index.html** – HTML entry point with canvas and ES module script loader
-- **bridge-server.js** – Node.js backend: HTTP task API, Discord webhook listener, persistent storage
-- **style.css** – Canvas wrapper styling
-- **assets/** – Pixel art sprites for agents, desks, furniture, and environmental elements
-- **bridge-store.json** – Persistent task storage
+The system now enforces one canonical execution chain.
+
+Allowed runtime task entry points:
+
+- `POST /task`: canonical intake (normalizes, persists, creates/enqueues in TaskEngine).
+- `POST /task/:id/start`: lifecycle observation sync only; task remains engine-owned.
+- `POST /task/:id/execute`: canonical execution trigger (TaskEngine claim -> execute -> ack).
+- `POST /task/:id/ack`: idempotent ACK projection/persistence sync; finalization must already be engine-authoritative.
+
+Rejected runtime entry points (HTTP 410):
+
+- `POST /render/openai/generate`
+- `POST /render/generate`
+- `POST /asset-store/render`
+- `POST /debug/test-openai-image`
+
+Rejected runtime entry points (module/runtime guard):
+
+- `integrations/rendering/render-queue.enqueueRenderTask`
+- `integrations/rendering/render-queue.startRenderWorkers`
+- `integrations/rendering/render-router.executeRenderRoute`
+- `integrations/rendering/asset-store.persistRenderedAsset`
+- `integrations/rendering/providers/openAIImageAdapter.render`
+- `core/image-generation.generateImage`
+- `core/task-handling.executeTool`
+
+Canonical chain:
+
+```text
+POST /task -> TaskEngine.createTask -> TaskEngine.enqueueTask -> TaskEngine.claimTask -> TaskEngine.executeTask -> TaskEngine.ackTask -> projection/persistence read model
+```
+
+## Enforcement Mechanisms
+
+- Runtime context guards in `core/engine/enforcementRuntime.js` enforce engine/worker/provider/side-effect execution boundaries.
+- ACK validation rejects body-driven status or payload injection and requires existing `executionRecord`.
+- Execution context propagation is performed through TaskEngine lifecycle so worker/provider/side-effect calls are validated.
+- Task-creation circuit breaker throttles intake bursts in a 10-second window.
+- Internal/system task intake blocking applies to external HTTP `/task` creation attempts.
+
+## Security Guarantees
+
+- No status forgery through ACK payload injection.
+- No direct execution bypass outside TaskEngine lifecycle.
+- No direct provider bypass outside worker context.
+- No side-effect injection outside engine lifecycle.
+- Deterministic lifecycle ordering is enforced: execute -> ack -> side effects.
+
+## Observability / Logs
+
+Key enforcement and ordering logs include:
+
+- `TASK_EXECUTE_REQUEST`
+- `TASK_EXECUTION_WORKER_RUN`
+- `TASK_EXECUTE_FINISHED`
+- `ACK_WITHOUT_EXECUTION`
+- `ENGINE_ENFORCEMENT_VIOLATION`
+
+## Failure, Retry, and Idempotency Rules
+
+- Retry ownership is engine-directed and worker-executed.
+- Workers return retryable versus terminal failures in structured results.
+- A task reaches terminal state only when retries are exhausted or completion succeeds.
+- Terminal failed tasks are persisted as failed outcomes (dead-letter equivalent) and are not re-executed automatically.
+- Replays and duplicate execute attempts must be idempotent at the engine level.
+
+## Boundary Summary
+
+- UI is intent-only.
+- Bridge handles intake and lifecycle API boundaries.
+- Workers execute side effects; providers generate AI outputs.
+
+## Deprecated Execution Paths
+
+Legacy render-router and adapter-style execution paths are deprecated and disabled.
+Current stable runtime is engine-first and worker-driven.
+
+## Testing and CI Enforcement
+
+- Adversarial enforcement tests validate exploit resistance against lifecycle, authority, provider, and side-effect bypasses.
+- Invariant enforcement suite runs as permanent regression checks.
+- CI workflow (`.github/workflows/invariant-enforcement.yml`) runs enforcement checks on push and pull request.
+
+## Project Modules
+
+- `bridge-server.js`: intake API, lifecycle endpoints, ACK persistence integration.
+- `core/engine/taskEngine.js` and `core/engine/taskEngine.ts`: engine lifecycle contracts and runtime behavior.
+- `core/workers/taskExecutionWorker.js`: task execution dispatcher.
+- `core/workers/imageRenderWorker.js`: image task execution + filesystem persistence.
+- `integrations/rendering/providers/*`: provider implementations and provider registry.
+- `bridge-store.json`: persistent task/event storage.
 
 ## Installation
 
 ### 1. Prerequisites
 
-- Node.js 18+ (recommended)
+- Node.js 18+
 - npm
 
-### 2. Install dependencies
+### 2. Install
 
 ```bash
 npm install
 ```
 
-### 3. Configure environment variables (optional but recommended)
+### 3. Environment
 
-Create a `.env` file in the project root:
+Create `.env` in project root:
 
 ```env
 HOST=0.0.0.0
 PORT=3000
 OPENAI_API_KEY=your_openai_api_key_here
+HUGGINGFACE_API_KEY=your_huggingface_api_key_here
 DISCORD_BOT_TOKEN=your_token_here
 ALLOWED_CHANNELS=123456789012345678,987654321098765432
 ```
 
-Notes:
-
-- If `DISCORD_BOT_TOKEN` is missing, Discord execution is disabled, but the app still runs.
-- `ALLOWED_CHANNELS` is optional. Leave it empty to allow all channels.
-- `OPENAI_API_KEY` is required for `image_render` tasks.
-- Image generation is executed via OpenAI Responses API (`gpt-5` + `image_generation` tool).
-
-## Usage
-
-### 1. Start the app
+## Run
 
 ```bash
 npm start
 ```
 
-This starts the bridge server and serves the frontend.
-
-### 2. Open in browser
-
-Visit:
+Server default:
 
 ```text
 http://localhost:3000
 ```
 
-### 3. Quick API examples
+## Minimal API Examples
 
-Create a task:
-
-```bash
-curl -X POST http://localhost:3000/task \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "discord",
-    "title": "Reply to support message",
-    "action": "reply_to_message",
-    "payload": {
-      "channelId": "demo-channel",
-      "messageId": "demo-message",
-      "content": "Automated reply from Slothworld"
-    }
-  }'
-```
-
-Create an image render task:
+Create task:
 
 ```bash
 curl -X POST http://localhost:3000/task \
@@ -235,128 +272,30 @@ curl -X POST http://localhost:3000/task \
   -d '{
     "type": "image_render",
     "title": "Generate Product Image",
+    "action": "render_product_image",
     "payload": {
       "productId": "product-demo",
       "provider": "openai",
       "designIntent": {
-        "product_name": "Demo Mug",
-        "style": "clean ecommerce product illustration",
-        "mood": "commercial",
-        "colors": ["white", "blue"],
-        "composition": "centered hero composition",
-        "camera": "front-facing studio shot",
-        "background": "minimal plain backdrop",
-        "prompt": "ceramic mug with a minimal geometric print"
+        "prompt": "minimal product hero shot"
       }
     }
   }'
 ```
 
-Test the OpenAI image route directly:
+Execute task lifecycle:
 
 ```bash
-curl -X POST http://localhost:3000/render/openai/generate \
+curl -X POST http://localhost:3000/task/<task-id>/start
+curl -X POST http://localhost:3000/task/<task-id>/execute
+curl -X POST http://localhost:3000/task/<task-id>/ack \
   -H "Content-Type: application/json" \
-  -d '{"prompt":"Minimal ecommerce product shot of a ceramic mug","productId":"product-demo"}'
+  -d '{}'
 ```
 
-Persist an image payload to asset store (strict contract):
-
-```bash
-curl -X POST http://localhost:3000/asset-store/render \
-  -H "Content-Type: application/json" \
-  -d '{
-    "assetId":"asset-demo",
-    "productId":"product-demo",
-    "provider":"openai",
-    "prompt":"demo",
-    "contentBase64":"<base64_png>",
-    "extension":"png",
-    "mimeType":"image/png",
-    "metadata":{}
-  }'
-```
-
-Fetch tasks:
+Fetch tasks/events:
 
 ```bash
 curl http://localhost:3000/tasks
-```
-
-Poll events after ID 0:
-
-```bash
 curl "http://localhost:3000/events?after=0"
 ```
-
-Health check:
-
-```bash
-curl http://localhost:3000/health
-```
-
-### 4. Task Creator and Runtime Panels
-
-Use the in-app Task Creator panel to create tasks with structured payloads:
-
-- Select task type (`discord`, `shopify`, or `image_render`)
-- Enter task title/content
-- Submit task directly through `window.controlAPI.injectTask(...)`
-
-For image tasks:
-
-- The generated file is written to `assets/generated/<productId>/` as PNG.
-- The task result uses the local generated asset URL, not a Playground URL.
-
-Use the Operator Control Panel to inspect:
-
-- Pending/running/completed/failed task queues
-- Agent assignment and state
-- Workflow progress and history
-- Live event stream
-
-### 5. Command API (without in-game console UI)
-
-The keyboard-driven in-canvas debug console has been removed. Command execution APIs remain available programmatically:
-
-- `window.dispatchCommand('inject discord "Help with order #42"')`
-- `window.dispatchCommand('spawn workflow product vintage mug')`
-- `window.dispatchCommand('inspect agent 0')`
-- `window.dispatchCommand('approve workflow workflow-id')`
-
-## Tech Stack
-
-- **JavaScript (ES6 modules)** – Modular frontend with clean separation between core, rendering, and UI layers
-- **HTML5 Canvas** – Real-time pixel art rendering and simulation visualization
-- **Node.js HTTP server** – Lightweight backend (no framework dependencies)
-- **OpenAI Node SDK** – Responses API client for image generation (`gpt-5` + `image_generation`)
-- **discord.js** – Optional Discord bot integration for task ingestion
-- **dotenv** – Environment variable configuration
-- **JSON persistence** – `bridge-store.json` for task and event storage
-
-## Future Improvements
-
-- Add automated tests for bridge endpoints and workflow state transitions
-- Add a dedicated UI panel for workflow inspection and filtering
-- Add task filtering/search and sorting in debug tools
-- Add Docker support for one-command local startup
-- Add HTTP authentication and rate limiting for public deployments
-- Add persistence for agent role preferences and desk configurations
-- Add real-time metrics panel (throughput, error rates, workflow SLAs)
-
-## Recent Migration Summary
-
-- Removed the old stub image providers and SVG placeholder renderer.
-- Removed `provider_stub` image generation mode and the mock image fallback path.
-- Standardized image generation on OpenAI Responses API (`gpt-5` + `image_generation`).
-- Standardized persisted image assets on PNG with `image/png` MIME type.
-- Standardized asset-store contract on PNG base64 via `contentBase64` only.
-- Increased `/asset-store/render` request body limit to 25MB to support image payloads.
-- `task.executionResult.imageUrl` now points to the bridge-managed generated asset URL.
-
-## System Classification
-
-- Event-driven job queue simulator
-- Workflow execution engine
-- Agent orchestration sandbox
-- External integration control plane

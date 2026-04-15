@@ -257,9 +257,8 @@ function syncAgentTaskStatus(agent) {
   }
 
   const syncedStatus = completionStatusByTaskId.get(String(agent.currentTask.id));
-  if (syncedStatus && agent.currentTask.status !== syncedStatus) {
-    // Keep same object reference so status mutation propagates to lifecycle checks.
-    agent.currentTask.status = syncedStatus;
+  if (syncedStatus && getTaskStatus(agent.currentTask) !== syncedStatus) {
+    agent.currentTask.localLifecycleStatus = syncedStatus;
   }
 }
 
@@ -298,7 +297,19 @@ function tickSpeech(agent) {
 }
 
 function getTaskStatus(task) {
-  if (!task || typeof task.status !== 'string') {
+  if (!task) {
+    return 'in_progress';
+  }
+
+  if (typeof task.localLifecycleStatus === 'string') {
+    return task.localLifecycleStatus;
+  }
+
+  if (typeof task.runtimeStatus === 'string') {
+    return task.runtimeStatus;
+  }
+
+  if (typeof task.status !== 'string') {
     return 'in_progress';
   }
 
@@ -575,7 +586,7 @@ export function claimNextTask(desk) {
   }
 
   const nextTask = desk.queue.shift();
-  nextTask.status = 'processing';
+  nextTask.runtimeStatus = 'processing';
   syncTaskStart(nextTask);
   desk.currentTask = nextTask;
   if (desk.occupant) {
@@ -706,10 +717,11 @@ export function update() {
 
     const task = agent.currentTask;
     if (shouldLogAgentStatus(agent, Date.now())) {
-      console.log('[Agent Status]', agent.id, task ? task.id : null, task ? task.status : null);
+      console.log('[Agent Status]', agent.id, task ? task.id : null, task ? getTaskStatus(task) : null);
     }
-    if (task && (task.status === 'done' || task.status === 'failed') && agent.state !== 'complete_react') {
-      beginCompletionReaction(agent, task.status === 'done' ? 'Done!' : 'Finished.');
+    const taskStatus = getTaskStatus(task);
+    if (task && (taskStatus === 'done' || taskStatus === 'failed') && agent.state !== 'complete_react') {
+      beginCompletionReaction(agent, taskStatus === 'done' ? 'Done!' : 'Finished.');
       continue;
     }
 
@@ -749,20 +761,22 @@ export function update() {
         continue;
       }
 
-      if (trackedTask.status === 'done' || trackedTask.status === 'failed') {
-        beginCompletionReaction(agent, trackedTask.status === 'done' ? 'Done!' : 'Finished.');
+      const trackedStatus = getTaskStatus(trackedTask);
+
+      if (trackedStatus === 'done' || trackedStatus === 'failed') {
+        beginCompletionReaction(agent, trackedStatus === 'done' ? 'Done!' : 'Finished.');
         continue;
       }
 
-      if (trackedTask.status !== 'awaiting_ack') {
-        trackedTask.status = 'awaiting_ack';
+      if (trackedStatus !== 'awaiting_ack') {
+        trackedTask.runtimeStatus = 'awaiting_ack';
       }
 
       if (typeof trackedTask.required === 'number' && trackedTask.required > 0) {
         trackedTask.progress = Math.max(trackedTask.progress || 0, trackedTask.required * 0.95);
       }
 
-      if (trackedTask.status === 'awaiting_ack' && canSpeak(agent)) {
+      if (getTaskStatus(trackedTask) === 'awaiting_ack' && canSpeak(agent)) {
         setAgentSpeech(agent, pickSpeechLine([
           'Sending it off...',
           'Almost done...',
@@ -819,12 +833,14 @@ export function update() {
       const skill = agent.skills[activeTask.type] || 1;
       activeTask.progress += agent.productivity * skill;
       if (activeTask.progress >= activeTask.required) {
-        activeTask.status = 'awaiting_ack';
+        activeTask.runtimeStatus = 'awaiting_ack';
         activeTask.progress = activeTask.required * 0.95;
         agent.awaitingTaskCompletion = true;
         handleTaskExecutionResult(desk, activeTask);
 
-        if (activeTask.status === 'pending') {
+        const postExecutionStatus = getTaskStatus(activeTask);
+
+        if (postExecutionStatus === 'pending') {
           agent.awaitingTaskCompletion = false;
           agent.currentTask = null;
           agent.currentTaskId = null;
@@ -834,7 +850,7 @@ export function update() {
           continue;
         }
 
-        if (activeTask.status === 'failed') {
+        if (postExecutionStatus === 'failed') {
           beginCompletionReaction(agent, 'Finished.');
           continue;
         }

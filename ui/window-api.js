@@ -1,9 +1,19 @@
 import { agents, desks, workflows, commandHistory, eventStream } from '../core/app-state.js';
 import { addTaskToDesk, ingestTask } from '../core/task-handling.js';
 import { createWorkflow, getWorkflow, listWorkflows } from '../core/workflow.js';
-import { getRenderQueueStats } from '../integrations/rendering/render-queue.js';
 import { getRenderQueueSnapshot, getFailedRenderReport, replayFailedRender, getRenderTrace } from '../integrations/rendering/render-stability.js';
 import { controlAPI, dispatchCommand, inspectAgent, inspectDesk, inspectWorkflow } from './control-api.js';
+
+function getRenderQueueStats() {
+  const snapshot = getRenderQueueSnapshot();
+  return {
+    queueSize: snapshot && typeof snapshot.queueSize === 'number' ? snapshot.queueSize : 0,
+    workerCount: 0,
+    midjourneyWorkerCount: 0,
+    running: false,
+    utilization: snapshot && snapshot.workerUtilization ? snapshot.workerUtilization : null
+  };
+}
 
 function buildTestDesignIntent(override = {}) {
   return {

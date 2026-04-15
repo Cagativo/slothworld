@@ -1,7 +1,7 @@
 import { generateId, randomInRange, cloneContext } from './utils.js';
 import { ACTION_TOOL_MAP, TASK_EXECUTION_FAILURE_CHANCE, BRIDGE_POLL_INTERVAL_MS } from './constants.js';
 import { desks, emitEvent } from './app-state.js';
-import { enqueueRenderTask } from '../integrations/rendering/render-queue.js';
+import { getCanonicalPipelineLabel, warnLegacyExecutionPath } from './execution-pipeline.js';
 // Circular with workflow — safe: only called at runtime, never at module init.
 import { applyWorkflowTaskCompletion, createProductWorkflowFromTask, inferDefaultPriority } from './workflow.js';
 
@@ -104,6 +104,10 @@ async function registerTaskInBridge(task) {
     type: task.type || 'discord',
     title: task.title || 'Injected task',
     status: 'pending',
+    correlationId: typeof task.correlationId === 'string' ? task.correlationId : undefined,
+    depth: typeof task.depth === 'number' ? task.depth : undefined,
+    internal: task.internal === true,
+    domain: typeof task.domain === 'string' ? task.domain : undefined,
     payload: normalizedPayload,
     ...(typeof task.action === 'string' ? { action: task.action } : {}),
     ...([0, 1, 2].includes(task.priority) ? { priority: task.priority } : {}),
@@ -158,27 +162,24 @@ export async function executeDiscordTask(task) {
   }
 
   try {
-    let response = await fetch(`/task/${encodeURIComponent(task.id)}/execute`, {
-      method: 'POST'
-    });
+    return await executeTask(task);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
 
-    // Manual/debug injected tasks may exist only in the simulation queue.
-    // If bridge does not know the task yet, register it once and retry execute.
-    if (response.status === 404) {
-      const synced = await registerTaskInBridge(task);
-      if (synced) {
-        response = await fetch(`/task/${encodeURIComponent(task.id)}/execute`, {
-          method: 'POST'
-        });
-      }
-    }
+export async function executeImageRenderTask(task) {
+  // LEGACY helper: maintained for compatibility while canonical execution remains task-driven.
+  warnLegacyExecutionPath('core/task-handling.executeImageRenderTask', {
+    canonical: getCanonicalPipelineLabel()
+  });
 
-    if (!response.ok) {
-      return { success: false, error: `execute_${response.status}` };
-    }
+  if (!task || !task.id) {
+    return { success: false, error: 'Missing task id' };
+  }
 
-    const data = await response.json();
-    return data && data.result ? data.result : { success: false, error: 'Invalid execute response' };
+  try {
+    return await executeTask(task);
   } catch (error) {
     return { success: false, error: error.message };
   }
@@ -269,7 +270,7 @@ export const tools = {
         priority: typeof payload.priority === 'number' ? payload.priority : 1
       };
 
-      const result = await enqueueRenderTask(task);
+      const result = await executeImageRenderTask(task);
       if (!result.success) {
         return {
           success: false,
@@ -281,14 +282,16 @@ export const tools = {
       return {
         success: true,
         data: {
-          assetId: result.asset.assetId,
-          productId: result.asset.productId,
-          url: result.asset.url,
-          provider: result.asset.provider,
-          prompt: result.asset.prompt,
-          createdAt: result.asset.createdAt,
-          manifestUrl: result.asset.manifestUrl || null,
-          imageUrl: result.asset.url
+          assetId: result.result && result.result.assetId ? result.result.assetId : null,
+          productId: result.result && result.result.productId ? result.result.productId : null,
+          url: result.result && result.result.url ? result.result.url : null,
+          provider: result.result && result.result.provider ? result.result.provider : null,
+          prompt: result.result && result.result.prompt ? result.result.prompt : null,
+          createdAt: result.result && result.result.createdAt ? result.result.createdAt : null,
+          manifestUrl: result.result && result.result.manifestUrl ? result.result.manifestUrl : null,
+          imageUrl: result.result && (result.result.imageUrl || result.result.url)
+            ? (result.result.imageUrl || result.result.url)
+            : null
         }
       };
     }
@@ -366,51 +369,59 @@ export function inferToolNameForTask(task) {
 }
 
 export async function executeTool(toolName, payload, context) {
-  const tool = resolveTool(toolName);
-  if (!tool) {
-    return { success: false, error: `tool_not_found:${toolName}` };
-  }
-
-  try {
-    const result = await tool(payload || {}, context || {});
-    return normalizeToolResult(result);
-  } catch (error) {
-    return {
-      success: false,
-      error: error && error.message ? error.message : 'tool_execution_failed'
-    };
-  }
+  // LEGACY: direct client-side tool execution bypasses canonical TaskEngine lifecycle.
+  warnLegacyExecutionPath('core/task-handling.executeTool', {
+    canonical: getCanonicalPipelineLabel(),
+    disabled: true
+  });
+  void toolName;
+  void payload;
+  void context;
+  return { success: false, error: 'legacy_execution_disabled:executeTool' };
 }
 
 export async function executeTask(task) {
+  // Canonical pipeline step: createTask -> enqueueTask -> claimTask -> executeTask -> ackTask
   if (!task || !task.type) {
     return { success: false, error: 'Invalid task' };
   }
 
-  const payload = task.payload && typeof task.payload === 'object' ? { ...task.payload } : {};
-  const context = payload.context && typeof payload.context === 'object' ? payload.context : {};
-  const toolName = inferToolNameForTask(task);
+  try {
+    console.log('[TASK_EXECUTE_REQUEST]', { taskId: task.id, type: task.type, action: task.action || null });
+    let response = await fetch(`/task/${encodeURIComponent(task.id)}/execute`, {
+      method: 'POST'
+    });
 
-  if (!toolName) {
-    return { success: false, error: `Unsupported task type: ${task.type}` };
+    if (response.status === 404) {
+      const synced = await registerTaskInBridge(task);
+      if (synced) {
+        response = await fetch(`/task/${encodeURIComponent(task.id)}/execute`, {
+          method: 'POST'
+        });
+      }
+    }
+
+    if (!response.ok) {
+      return { success: false, error: `execute_${response.status}` };
+    }
+
+    const data = await response.json();
+    const execution = data && data.result ? data.result : null;
+    if (!execution || typeof execution !== 'object') {
+      return { success: false, error: 'Invalid execute response' };
+    }
+
+    if (execution.success !== true) {
+      return {
+        success: false,
+        error: execution.error || 'tool_execution_failed'
+      };
+    }
+
+    return execution;
+  } catch (error) {
+    return { success: false, error: error && error.message ? error.message : 'execute_request_failed' };
   }
-
-  const toolResult = await executeTool(toolName, {
-    ...payload,
-    taskId: task.id
-  }, context);
-
-  if (!toolResult.success) {
-    return {
-      success: false,
-      error: toolResult.error || 'tool_execution_failed'
-    };
-  }
-
-  return {
-    success: true,
-    ...(toolResult.data && typeof toolResult.data === 'object' ? toolResult.data : { data: toolResult.data })
-  };
 }
 
 // --- Desk/queue helpers ---
@@ -554,6 +565,14 @@ export async function sendTaskAck(taskOrId, statusOrAck, retries, executionResul
     return;
   }
 
+  if (task && task._executionInFlight === true && task._executionComplete !== true) {
+    console.error('[ACK_BEFORE_EXECUTION_COMPLETE]', {
+      taskId,
+      status: ack.status
+    });
+    throw new Error('ACK_BEFORE_EXECUTION_COMPLETE');
+  }
+
   if (task) {
     await registerTaskInBridge({
       ...task,
@@ -574,12 +593,7 @@ export async function sendTaskAck(taskOrId, statusOrAck, retries, executionResul
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        status: ack.status,
-        retries: ack.retries,
-        executionResult: ack.executionResult,
-        payload: ack.payload && typeof ack.payload === 'object' ? ack.payload : undefined
-      })
+      body: JSON.stringify({})
     });
 
     // UI/manual tasks can occasionally race bridge persistence and ACK.
@@ -596,12 +610,7 @@ export async function sendTaskAck(taskOrId, statusOrAck, retries, executionResul
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            status: ack.status,
-            retries: ack.retries,
-            executionResult: ack.executionResult,
-            payload: ack.payload && typeof ack.payload === 'object' ? ack.payload : undefined
-          })
+          body: JSON.stringify({})
         });
       }
     }
@@ -635,6 +644,14 @@ function inferCompletionSource(task) {
 }
 
 function completeTaskThroughAck(task, ackStatus, executionResult) {
+  if (!task || task._executionComplete !== true) {
+    console.error('[ACK_BEFORE_EXECUTION_COMPLETE]', {
+      taskId: task && task.id ? task.id : null,
+      ackStatus
+    });
+    throw new Error('ACK_BEFORE_EXECUTION_COMPLETE');
+  }
+
   const source = inferCompletionSource(task);
   console.log('[TASK COMPLETE FLOW]', task.id, 'via', source);
   return sendTaskAck(task, {
@@ -715,45 +732,24 @@ export function hasTaskInSimulation(taskId) {
 }
 
 export function handleTaskExecutionResult(desk, task) {
-  if (Math.random() < TASK_EXECUTION_FAILURE_CHANCE) {
-    task.retries += 1;
-
-    if (task.retries < task.maxRetries) {
-      task.status = 'pending';
-      task.progress = 0;
-      desk.queue.unshift(task);
-      console.log('[TASK]', 'retry', task.type, task.title, `${task.retries}/${task.maxRetries}`);
-    } else {
-      task.status = 'failed';
-      desk.failedTasks += 1;
-      desk.lastFailedTask = task;
-      console.log('[TASK]', 'failed', task.type, task.title);
-      emitEvent('TASK_COMPLETED', {
-        taskId: task.id,
-        taskType: task.type,
-        deskIndex: desks.indexOf(desk),
-        success: false,
-        reason: 'max_retries_reached',
-        channelId: task.payload && task.payload.channelId ? task.payload.channelId : null,
-        content: task.payload && typeof task.payload.content === 'string' ? task.payload.content : null
-      });
-      const failureResult = { success: false, error: 'max_retries_reached' };
-      applyWorkflowTaskCompletion(task, failureResult);
-      completeTaskThroughAck(task, 'failed', failureResult);
-    }
-
-    desk.currentTask = null;
-    return;
-  }
-
   console.log('[TASK]', 'completed', task.type, task.title);
   console.log('[TASK]', 'before_execution', task.id, {
     hasPayload: !!task.payload,
     channelId: task.payload && task.payload.channelId ? task.payload.channelId : null
   });
 
-  executeTask(task)
-    .then((executionResult) => {
+  task._executionInFlight = true;
+  task._executionComplete = false;
+
+  (async () => {
+    try {
+      const executionResult = await executeTask(task);
+      task._executionComplete = true;
+      console.log('[TASK_EXECUTE_FINISHED]', {
+        taskId: task.id,
+        success: !(executionResult && executionResult.success === false)
+      });
+
       emitEvent('TASK_COMPLETED', {
         taskId: task.id,
         taskType: task.type,
@@ -765,9 +761,10 @@ export function handleTaskExecutionResult(desk, task) {
       });
       applyWorkflowTaskCompletion(task, executionResult);
       const ackStatus = executionResult && executionResult.success === false ? 'failed' : 'done';
-      completeTaskThroughAck(task, ackStatus, executionResult || { success: false, error: 'Missing execution result' });
-    })
-    .catch((error) => {
+      task.localLifecycleStatus = ackStatus;
+      await completeTaskThroughAck(task, ackStatus, executionResult || { success: false, error: 'Missing execution result' });
+      desk.completedTasks += 1;
+    } catch (error) {
       emitEvent('TASK_COMPLETED', {
         taskId: task.id,
         taskType: task.type,
@@ -777,13 +774,28 @@ export function handleTaskExecutionResult(desk, task) {
         channelId: task.payload && task.payload.channelId ? task.payload.channelId : null,
         content: task.payload && typeof task.payload.content === 'string' ? task.payload.content : null
       });
+
+      // If execution never completed, ACK is blocked by guard and we keep lifecycle non-authoritative in UI.
+      if (task && task._executionComplete !== true) {
+        task.localLifecycleStatus = 'awaiting_ack';
+        console.error('[TASK]', 'execution_incomplete_ack_blocked', {
+          taskId: task.id,
+          error: error && error.message ? error.message : 'Execution failed'
+        });
+        return;
+      }
+
       const failureResult = { success: false, error: error && error.message ? error.message : 'Execution failed' };
       applyWorkflowTaskCompletion(task, failureResult);
-      completeTaskThroughAck(task, 'failed', failureResult);
-    });
+      task.localLifecycleStatus = 'failed';
+      await completeTaskThroughAck(task, 'failed', failureResult);
+      desk.completedTasks += 1;
+    } finally {
+      task._executionInFlight = false;
+    }
+  })();
 
   desk.currentTask = null;
-  desk.completedTasks += 1;
 }
 
 export function addTaskToDesk(task) {

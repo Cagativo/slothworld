@@ -1,3 +1,5 @@
+import { warnLegacyExecutionPath } from './execution-pipeline.js';
+
 function normalizePrompt(prompt) {
   const normalizedPrompt = String(prompt || '').trim();
   if (!normalizedPrompt) {
@@ -9,9 +11,6 @@ function normalizePrompt(prompt) {
 function normalizeRequest(configOrProvider = {}, prompt, productId, options = {}) {
   if (typeof configOrProvider === 'string') {
     const selectedProvider = String(configOrProvider || 'openai').toLowerCase();
-    if (selectedProvider !== 'openai') {
-      throw new Error(`provider_not_supported:${selectedProvider}`);
-    }
 
     return {
       provider: selectedProvider,
@@ -39,60 +38,18 @@ function normalizeRequest(configOrProvider = {}, prompt, productId, options = {}
 }
 
 export async function generateImage(configOrProvider = {}, prompt, productId, options) {
-  const request = normalizeRequest(configOrProvider, prompt, productId, options);
-  const normalizedPrompt = normalizePrompt(request.prompt);
-  const context = request.context || {};
-  const provider = request.provider || 'openai';
-  if (provider !== 'openai') {
-    throw new Error(`provider_not_supported:${provider}`);
-  }
-  const endpoint = '/render/openai/generate';
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      provider,
-      prompt: normalizedPrompt,
-      productId: context && context.metadata ? context.metadata.productId : null,
-      taskContext: context
-    })
+  // LEGACY: direct render endpoint invocation bypasses createTask->enqueueTask->claimTask.
+  // Freeze policy keeps this path for compatibility, but new code must use task pipeline.
+  warnLegacyExecutionPath('core/image-generation.generateImage', {
+    endpoint: '/render/generate',
+    disabled: true
   });
 
-  if (!response.ok) {
-    let detail = null;
-    try {
-      const body = await response.json();
-      detail = body && body.error ? String(body.error) : null;
-    } catch (_error) {
-      detail = null;
-    }
-
-    throw new Error(detail
-      ? `${provider}_generate_${response.status}:${detail}`
-      : `${provider}_generate_${response.status}`);
-  }
-
-  const payload = await response.json();
-  const result = payload && payload.result ? payload.result : null;
-  if (!result) {
-    throw new Error(`${provider}_invalid_response`);
-  }
-
-  return {
-    path: result.asset && result.asset.url ? result.asset.url : '',
-    prompt: normalizedPrompt,
-    provider,
-    createdAt: result.asset && typeof result.asset.createdAt === 'number' ? result.asset.createdAt : Date.now(),
-    contentBase64: typeof result.imageBase64 === 'string' ? result.imageBase64 : null,
-    mimeType: typeof result.mimeType === 'string' ? result.mimeType : 'image/png',
-    metadata: {
-      asset: result.asset || null,
-      model: result.model || null
-    }
-  };
+  void configOrProvider;
+  void prompt;
+  void productId;
+  void options;
+  throw new Error('legacy_execution_disabled:core/image-generation.generateImage');
 }
 
 export async function generateProductImage(prompt, config = {}) {
