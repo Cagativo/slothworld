@@ -123,11 +123,29 @@ canvas {
   border-color: #6b7280;
 }
 
+.ocp-item.is-selected {
+  border-color: #22d3ee;
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.45);
+}
+
+.ocp-item.ocp-agent-active {
+  border-color: #86efac;
+  box-shadow: inset 0 0 0 1px rgba(134, 239, 172, 0.35);
+}
+
 .ocp-empty,
 .ocp-event {
   font-size: 11px;
   color: #9ca3af;
   padding: 2px 0;
+}
+
+.ocp-timeline-wrap {
+  margin-top: 8px;
+}
+
+.ocp-timeline {
+  max-height: 130px;
 }
 
 .ocp-detail {

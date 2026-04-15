@@ -25,11 +25,24 @@ export function createTaskEngine(options = {}) {
     : () => {};
 
   function emit(event, taskId, payload) {
+    if (typeof event !== 'string' || event.trim().length === 0) {
+      throw new Error('EVENT_SCHEMA_VIOLATION:event_required');
+    }
+
+    if (typeof taskId !== 'string' || taskId.trim().length === 0) {
+      throw new Error('EVENT_SCHEMA_VIOLATION:taskId_required');
+    }
+
+    const timestamp = now();
+    if (!Number.isFinite(timestamp) || timestamp <= 0) {
+      throw new Error('EVENT_SCHEMA_VIOLATION:timestamp_required');
+    }
+
     const taskEvent = {
       event,
-      timestamp: now(),
+      timestamp,
       taskId,
-      payload
+      payload: payload && typeof payload === 'object' ? payload : {}
     };
 
     if (typeof options.emitEvent === 'function') {
@@ -39,7 +52,7 @@ export function createTaskEngine(options = {}) {
     log('[TASK_ENGINE]', {
       event,
       taskId,
-      ...(payload || {})
+      ...(taskEvent.payload || {})
     });
   }
 
