@@ -51,6 +51,42 @@ Every task follows this deterministic sequence:
 - **Immutability**: Event log is append-only, events are immutable copies
 - **Traceability**: Full task history queryable from events
 
+## Event Contract & Failure Derivation
+
+Current merged lifecycle contract is ACK-finalized and engine-authoritative:
+
+- TaskEngine is the only lifecycle authority.
+- Bridge is intake and boundary API only.
+- Workers execute tasks and providers generate outputs.
+- ACK finalizes terminal lifecycle state.
+
+Failure derivation in the event stream is defined as:
+
+- `TASK_ACKED` is terminal authority for success and failure.
+- `payload.status === "failed"` on `TASK_ACKED` marks terminal failure.
+- `TASK_FAILED` is not required for failure-state derivation in current runtime behavior.
+
+Canonical failure sequence:
+
+```text
+TASK_CREATED -> TASK_ENQUEUED -> TASK_CLAIMED -> TASK_EXECUTE_STARTED -> TASK_EXECUTE_FINISHED(success=false) -> TASK_ACKED(status=failed)
+```
+
+## Historical Event Artifacts
+
+The event log in `bridge-store.json` is immutable history across execution runs.
+
+- Older `TASK_ACKED` events with `payload.status === "failed"` may be historical artifacts.
+- These entries represent previous runs and do not automatically indicate active failures now.
+- UI and diagnostics must treat the event log as immutable history, not a live-only state feed.
+
+## UI vs Event Truth Separation
+
+- UI world state is derived by event replay (`deriveWorldState`).
+- Event store history is the source of truth; frontend state is projection only.
+- Derived failed task lists can include historical failures unless scoped by recency or execution cycle.
+- This behavior is expected for event replay and does not change architecture boundaries.
+
 ## Testing
 
 ### Golden Path Unit Test
@@ -174,6 +210,11 @@ const errors = eventBus.getErrors();
 | `TASK_EXECUTE_FINISHED` | executor result | awaiting_ack | { success, retryable, status } |
 | `TASK_ACKED` | ackTask() | acknowledged/failed | { status, attempts, success } |
 | `TASK_ACK_SIDE_EFFECT_FAILED` | ackTask() side effect error | (unchanged) | { error } |
+
+Terminal failure semantics note:
+
+- `TASK_ACKED` with `status: failed` commits terminal failure.
+- `TASK_FAILED` is optional and not required for failure derivation in this lifecycle.
 
 ## Observability
 

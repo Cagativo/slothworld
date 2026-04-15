@@ -198,6 +198,41 @@ Key enforcement and ordering logs include:
 - Terminal failed tasks are persisted as failed outcomes (dead-letter equivalent) and are not re-executed automatically.
 - Replays and duplicate execute attempts must be idempotent at the engine level.
 
+## Event Contract & Failure Derivation
+
+- TaskEngine remains the only lifecycle authority.
+- ACK finalizes terminal lifecycle state.
+- `TASK_ACKED` is the terminal authority for success and failure in the current merged event contract.
+- A task is derived as failed when `TASK_ACKED` contains `payload.status === "failed"`.
+- `TASK_FAILED` is not required for failure-state derivation in current runtime behavior.
+
+Failure derivation contract summary:
+
+```text
+TASK_EXECUTE_FINISHED (success: false) -> awaiting_ack
+TASK_ACKED (payload.status: failed) -> terminal failed
+```
+
+This keeps lifecycle finalization centralized in the engine ACK step and avoids frontend-owned terminal inference.
+
+## Historical Event Artifacts
+
+- Event history in `bridge-store.json` is append-only runtime history across runs.
+- Older `TASK_ACKED` entries with `payload.status === "failed"` can remain in storage from prior execution cycles.
+- These historical failed ACK events do not, by themselves, mean there is an active failure in the current cycle.
+- UI and diagnostics must treat the event log as immutable history, not a live-only feed.
+
+Interpretation rule:
+
+- Event truth is authoritative, but operators should reason about failure in the context of recency or execution cycle boundaries when separating active versus historical failures.
+
+## UI vs Event Truth Separation
+
+- UI state is derived from event replay via `deriveWorldState`.
+- The event store is the source of truth; frontend in-memory state is not authoritative.
+- Derived failed tasks may include historical failures unless replay is scoped by recency window or execution cycle.
+- This does not change architecture authority: TaskEngine owns lifecycle transitions, Bridge is intake-only, workers execute, providers generate, and ACK finalizes state.
+
 ## Boundary Summary
 
 - UI is intent-only.
