@@ -7,8 +7,12 @@
   "scripts": {
     "start": "node bridge-server.js",
     "test": "npm run test:enforcement",
+    "test:enforcement": "node --test tests/adversarial-enforcement.test.mjs",
+    "test:golden-path": "node --test tests/golden-path.test.mjs",
     "test:adversarial": "node --test tests/adversarial-enforcement.test.mjs",
-    "test:enforcement": "node --test tests/adversarial-enforcement.test.mjs"
+    "events:list": "node cli/event-stream.js list",
+    "events:stats": "node cli/event-stream.js stats",
+    "events:task": "node cli/event-stream.js task"
   },
   "dependencies": {
     "discord.js": "^14.16.3",
