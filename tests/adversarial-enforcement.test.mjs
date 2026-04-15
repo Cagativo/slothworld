@@ -19,12 +19,6 @@ const STORE_PATH = path.join(ROOT_DIR, 'bridge-store.json');
 let serverProcess = null;
 let baseUrl = null;
 let storeBackup = null;
-<<<<<<< HEAD
-let storeExistedBefore = false;
-=======
->>>>>>> 1a6ddc9 (docs: enforce TaskEngine execution model and invariants)
-const cleanupGeneratedDirs = new Set();
-let serverStdout = '';
 let serverExistedBefore = false;
 let storeExistedBefore = false;
 const cleanupGeneratedDirs = new Set();

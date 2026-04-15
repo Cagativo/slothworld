@@ -67,11 +67,7 @@ export interface TaskEngine {
   enqueueTask: (task: EngineTask | string) => StoredTask;
   claimTask: (taskId?: string) => StoredTask | null;
   executeTask: (task: EngineTask | string) => Promise<TaskResult>;
-<<<<<<< HEAD
   ackTask: (taskId: string) => StoredTask;
-=======
-  ackTask: (taskId: string, result: TaskResult) => StoredTask;
->>>>>>> 1a6ddc9 (docs: enforce TaskEngine execution model and invariants)
   getTask: (taskId: string) => StoredTask | null;
   getQueueSnapshot: () => string[];
 }
@@ -268,7 +264,6 @@ export function createTaskEngine(options: TaskEngineOptions = {}): TaskEngine {
 
     const executionPromise = Promise.resolve(executor(task))
       .then((result) => {
-<<<<<<< HEAD
         task.lastResult = {
           success: result && result.success === true,
           output: result && result.output ? result.output : undefined,
@@ -302,13 +297,6 @@ export function createTaskEngine(options: TaskEngineOptions = {}): TaskEngine {
           status: task.status
         });
         return task.lastResult;
-=======
-        emit('TASK_EXECUTE_FINISHED', task.id, {
-          success: result.success,
-          retryable: result.retryable === true
-        });
-        return ackTask(task.id, result).lastResult || result;
->>>>>>> 1a6ddc9 (docs: enforce TaskEngine execution model and invariants)
       })
       .catch((error: unknown) => {
         const failure: TaskResult = {
@@ -316,7 +304,6 @@ export function createTaskEngine(options: TaskEngineOptions = {}): TaskEngine {
           error: error instanceof Error ? error.message : 'execution_failed',
           retryable: false
         };
-<<<<<<< HEAD
         task.lastResult = failure;
         task.executionRecord = {
           completedAt: now(),
@@ -330,13 +317,6 @@ export function createTaskEngine(options: TaskEngineOptions = {}): TaskEngine {
           status: task.status
         });
         return failure;
-=======
-        emit('TASK_EXECUTE_FINISHED', task.id, {
-          success: false,
-          error: failure.error
-        });
-        return ackTask(task.id, failure).lastResult || failure;
->>>>>>> 1a6ddc9 (docs: enforce TaskEngine execution model and invariants)
       })
       .finally(() => {
         running.delete(task.id);
@@ -346,7 +326,6 @@ export function createTaskEngine(options: TaskEngineOptions = {}): TaskEngine {
     return executionPromise;
   }
 
-<<<<<<< HEAD
   function ackTask(taskId: string): StoredTask {
     const task = resolveTask(taskId);
 
@@ -359,41 +338,6 @@ export function createTaskEngine(options: TaskEngineOptions = {}): TaskEngine {
     }
 
     task.lastResult = task.executionRecord.result;
-=======
-  function ackTask(taskId: string, result: TaskResult): StoredTask {
-    const task = resolveTask(taskId);
-
-    if (task.status === 'acknowledged' || task.status === 'failed') {
-      emit('TASK_ACKED', task.id, {
-        deduplicated: true,
-        status: task.status
-      });
-      return task;
-    }
-
-    task.lastResult = {
-      success: result && result.success === true,
-      output: result && result.output ? result.output : undefined,
-      error: result && result.error ? result.error : undefined,
-      retryable: result && result.retryable === true
-    };
-
-    const shouldRetry = !task.lastResult.success && canRetry(task, task.lastResult);
-
-    if (shouldRetry) {
-      task.status = 'queued';
-      if (!queueContains(task.id)) {
-        queue.push(task.id);
-      }
-      emit('TASK_REQUEUED', task.id, {
-        attempts: task.attempts,
-        maxRetries: task.maxRetries,
-        queueSize: queue.length
-      });
-      return task;
-    }
-
->>>>>>> 1a6ddc9 (docs: enforce TaskEngine execution model and invariants)
     task.status = task.lastResult.success ? 'acknowledged' : 'failed';
     task.acknowledgedAt = now();
     emit('TASK_ACKED', task.id, {
