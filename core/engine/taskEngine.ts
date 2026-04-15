@@ -330,11 +330,11 @@ export function createTaskEngine(options: TaskEngineOptions = {}): TaskEngine {
     const task = resolveTask(taskId);
 
     if (task.status !== 'awaiting_ack') {
-      throw new Error('ENGINE_ENFORCEMENT_VIOLATION');
+      throw new Error('ack_requires_awaiting_ack_status');
     }
 
     if (!task.executionRecord || !task.executionRecord.result) {
-      throw new Error('ENGINE_ENFORCEMENT_VIOLATION');
+      throw new Error('ack_requires_execution_record');
     }
 
     task.lastResult = task.executionRecord.result;
