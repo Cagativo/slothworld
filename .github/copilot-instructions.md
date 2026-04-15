@@ -1,63 +1,69 @@
-🧠 CORE DEFINITION
+🧠 SLOTHWORLD — CANONICAL ARCHITECTURE CONTRACT
 
-Slothworld is a deterministic event-driven workflow execution engine with a real-time 2D office simulation UI.
+Slothworld is a deterministic event-driven workflow execution engine with a real-time 2D office visualization layer.
 
-The system is NOT a game or simulation engine.
-The UI is ONLY a visualization layer of backend execution truth.
+The system is NOT a game, NOT a simulation engine.
+The UI is only a reactive visualization of backend execution truth.
 
-🧠 ARCHITECTURE TRUTH (ABSOLUTE)
+🧠 ABSOLUTE SYSTEM TRUTH
 
-Slothworld has three strictly separated layers:
+There are exactly 3 layers:
 
 1. 🧠 EXECUTION LAYER (SOURCE OF TRUTH)
-TaskEngine is the ONLY authority over task lifecycle state
+
+TaskEngine is the ONLY authority over lifecycle state.
+
+TaskEngine controls all task transitions
 Workers execute tasks
-Providers generate AI outputs
-Bridge handles external integrations
-
-RULES:
-
+Providers generate AI output (pure functions)
+Bridge only routes external requests
+HARD RULES:
 Only TaskEngine may mutate task state
-Workers never directly modify lifecycle state
-Providers are stateless and pure
-2. 📡 EVENT LAYER (SYSTEM CONTRACT)
+Workers NEVER directly set lifecycle state
+Providers are stateless and cannot persist anything
+No other system can create or finalize lifecycle transitions
+2. 📡 EVENT LAYER (IMMUTABLE SYSTEM LOG)
 
-All state changes MUST emit immutable events.
+All system truth is represented as append-only events.
 
-UI and external systems MUST rely ONLY on events.
+UI + analytics MUST be derived ONLY from events.
 
-Required events:
+📌 CANONICAL EVENT SET (STRICT)
+
+These are the ONLY valid lifecycle events:
+
 TASK_CREATED
-TASK_QUEUED
+TASK_ENQUEUED
 TASK_CLAIMED
-TASK_STARTED
-TASK_PROGRESS
-TASK_COMPLETED
-TASK_FAILED
+TASK_EXECUTE_STARTED
+TASK_EXECUTE_FINISHED
 TASK_ACKED
+⚠️ IMPORTANT RULE
+There is NO TASK_STARTED event
+There is NO TASK_QUEUED event
+There is NO TASK_COMPLETED event
+There is NO TASK_FAILED event as a primary lifecycle event
 
-RULE:
-If it is not an event, it does not exist for the UI.
+Failure is derived from:
 
-3. 🎨 OFFICE UI LAYER (VISUALIZATION ONLY)
+TASK_ACKED.payload.status === "failed"
 
-The UI is a 2D office where sprites represent workers.
+3. 🎨 UI LAYER (OFFICE VISUALIZATION ONLY)
 
-IMPORTANT:
+The UI is a stateless 2D office renderer.
 
-Agents do NOT exist as system entities
-Agents are visual projections of worker + event state
-UI is fully reactive and stateless
+It visualizes workers as sprites moving through an office.
 
-RULES:
+HARD RULES:
+UI does NOT execute logic
+UI does NOT mutate state
+UI does NOT call TaskEngine, workers, or providers
+UI ONLY consumes event stream
+🧍 AGENT MODEL (DERIVED VIEW ONLY)
 
-UI MUST NOT execute logic
-UI MUST NOT mutate state
-UI MUST ONLY consume event stream
-UI MUST NOT call providers or TaskEngine
-🧍 AGENT MODEL (DERIVED ONLY)
+Agents DO NOT exist in the backend.
 
-Agents are visual sprites derived from events:
+They are derived from events:
 
 AgentViewModel = {
   agentId: string,
@@ -70,46 +76,48 @@ AgentViewModel = {
 
 RULE:
 
-This model is NOT persisted as source of truth
-It is derived entirely from event history
+This is NOT persisted
+This is NOT authoritative
+This is purely derived from event history
 🎮 OFFICE SIMULATION MAPPING
 
-UI animations MUST be driven by events:
+UI animations MUST be derived from events:
 
 TASK_CREATED → ticket appears
-TASK_CLAIMED → agent walks to desk
-TASK_STARTED → working animation
-TASK_PROGRESS → progress update
-TASK_COMPLETED → delivery animation
-TASK_FAILED → error animation
+TASK_ENQUEUED → queued at intake desk
+TASK_CLAIMED → worker moves to task
+TASK_EXECUTE_STARTED → working animation begins
+TASK_EXECUTE_FINISHED → processing complete animation
+TASK_ACKED → terminal state animation (success/failure)
 🚫 STRICT FORBIDDEN RULES
 
 DO NOT:
 
 bypass TaskEngine
-execute tasks outside worker pipeline
+create lifecycle state outside event emission
+invent new event types
+introduce TASK_STARTED / TASK_QUEUED / TASK_COMPLETED
 mutate state from UI
 call providers directly from UI or bridge
-skip event emission
-treat agents as autonomous system entities
-⚙️ DEVELOPMENT PRINCIPLES
+treat UI as a system actor
+⚙️ ENGINEERING PRINCIPLES
 
 When generating code:
 
 Always route execution through TaskEngine
-Always emit events for state changes
+Always emit canonical events only
 Workers must be idempotent and retry-safe
 UI must be fully event-driven and stateless
-Keep execution and visualization strictly separated
-Prefer modular, pluggable architecture
+Never introduce new lifecycle states without engine changes
+Prefer strict determinism over convenience
 🧠 CORE MINDSET
 
 Slothworld is:
 
-A deterministic AI workflow engine with a real-time visual office layer that renders system truth as animated worker sprites.
+A deterministic AI workflow engine with a real-time visual office layer that renders execution truth as animated worker behavior.
 
 The UI is a metaphor. The engine is reality.
 
 FINAL RULE
 
-If a suggestion violates these rules, it is incorrect.
+If a suggestion violates this contract, it is incorrect.
