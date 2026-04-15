@@ -8,6 +8,7 @@ on:
 
 jobs:
   enforcement-tests:
+    name: .github/workflows/invariant-enforcement.yml
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
