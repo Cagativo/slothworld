@@ -19,6 +19,7 @@ const STORE_PATH = path.join(ROOT_DIR, 'bridge-store.json');
 let serverProcess = null;
 let baseUrl = null;
 let storeBackup = null;
+let storeExistedBefore = false;
 const cleanupGeneratedDirs = new Set();
 let serverStdout = '';
 let serverStderr = '';
@@ -172,7 +173,17 @@ async function pathExists(filePath) {
 }
 
 before(async () => {
-  storeBackup = await fs.readFile(STORE_PATH, 'utf8');
+  try {
+    storeBackup = await fs.readFile(STORE_PATH, 'utf8');
+    storeExistedBefore = true;
+  } catch (error) {
+    if (error && error.code !== 'ENOENT') {
+      throw error;
+    }
+
+    storeBackup = null;
+    storeExistedBefore = false;
+  }
 
   const port = await getFreePort();
   baseUrl = `http://127.0.0.1:${port}`;
@@ -213,8 +224,10 @@ after(async () => {
     });
   }
 
-  if (storeBackup !== null) {
+  if (storeExistedBefore && storeBackup !== null) {
     await fs.writeFile(STORE_PATH, storeBackup, 'utf8');
+  } else {
+    await fs.rm(STORE_PATH, { force: true });
   }
 
   for (const dirPath of cleanupGeneratedDirs) {
