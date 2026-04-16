@@ -12,6 +12,32 @@ function hashString(text) {
   return hash;
 }
 
+function clamp01(value) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  if (value <= 0) {
+    return 0;
+  }
+
+  if (value >= 1) {
+    return 1;
+  }
+
+  return value;
+}
+
+function easeInOutSine(t) {
+  const x = clamp01(t);
+  return -(Math.cos(Math.PI * x) - 1) / 2;
+}
+
+function easeOutCubic(t) {
+  const x = clamp01(t);
+  return 1 - Math.pow(1 - x, 3);
+}
+
 function deskAnchor(desk) {
   if (!desk) {
     return { x: 30, y: 30 };
@@ -26,7 +52,16 @@ function findTask(tasksById, taskId) {
   return tasksById.get(taskId) || null;
 }
 
-function computeAgentRenderPosition(agent, desksById, tasksById, frameNow) {
+function getAgentVisualState(agent) {
+  if (!agent || typeof agent !== 'object' || typeof agent.state !== 'string') {
+    return 'idle';
+  }
+
+  return agent.state;
+}
+
+function getAgentPosition(agent, frameNow, desksById, tasksById) {
+  const visualState = getAgentVisualState(agent);
   const homeDesk = agent && agent.deskId ? desksById.get(agent.deskId) : null;
   const targetDesk = agent && agent.targetDeskId ? desksById.get(agent.targetDeskId) : null;
   const task = findTask(tasksById, agent && agent.currentTaskId);
@@ -34,24 +69,29 @@ function computeAgentRenderPosition(agent, desksById, tasksById, frameNow) {
   const home = deskAnchor(homeDesk || targetDesk);
   const target = deskAnchor(targetDesk || homeDesk);
 
-  const phase = ((frameNow / 1000) + (hashString(agent && agent.id) % 11) * 0.13) % 1;
-  const wobble = Math.sin(frameNow * 0.02 + (hashString(agent && agent.id) % 13)) * 1.2;
+  const idHash = hashString(agent && agent.id);
+  const phase = ((frameNow / 1000) + (idHash % 11) * 0.13) % 1;
+  const easedPhase = easeInOutSine(phase);
+  const wobble = Math.sin(frameNow * 0.02 + (idHash % 13)) * 1.2;
+  const idleWave = Math.sin(frameNow * 0.0028 + (idHash % 29)) * 2.2;
+  const idleDrift = Math.cos(frameNow * 0.0019 + (idHash % 37)) * 1.4;
 
-  if (agent && agent.state === 'moving') {
+  if (visualState === 'moving') {
     return {
-      x: home.x + (target.x - home.x) * phase,
-      y: home.y + (target.y - home.y) * phase + wobble
+      x: home.x + (target.x - home.x) * easedPhase,
+      y: home.y + (target.y - home.y) * easedPhase + wobble
     };
   }
 
-  if (agent && agent.state === 'working') {
+  if (visualState === 'working') {
+    const workPulse = easeOutCubic((Math.sin(frameNow * 0.0034 + (idHash % 17)) + 1) / 2);
     return {
       x: target.x,
-      y: target.y + Math.sin(frameNow * 0.03 + (hashString(agent.id) % 17)) * 1.6
+      y: target.y + (workPulse - 0.5) * 3.2
     };
   }
 
-  if (agent && agent.state === 'delivering') {
+  if (visualState === 'delivering') {
     const arc = Math.sin(frameNow * 0.02 + (hashString(agent.id) % 19));
     return {
       x: target.x + arc * 8,
@@ -59,7 +99,7 @@ function computeAgentRenderPosition(agent, desksById, tasksById, frameNow) {
     };
   }
 
-  if (agent && agent.state === 'error') {
+  if (visualState === 'error') {
     const jitter = Math.sin(frameNow * 0.11 + (hashString(agent.id) % 23)) * 2;
     return {
       x: target.x + jitter,
@@ -73,19 +113,31 @@ function computeAgentRenderPosition(agent, desksById, tasksById, frameNow) {
     return deskAnchor(taskDesk);
   }
 
-  return home;
+  return {
+    x: home.x + idleDrift,
+    y: home.y + idleWave
+  };
 }
 
 function statusColor(status) {
-  if (status === 'failed' || status === 'error') {
+  const key = String(status || '').toLowerCase();
+
+  if (key === 'failed' || key === 'error') {
     return '#ef4444';
   }
-  if (status === 'acknowledged' || status === 'completed') {
+
+  if (key === 'delivering' || key === 'acknowledged' || key === 'completed') {
     return '#22c55e';
   }
-  if (status === 'executing' || status === 'awaiting_ack' || status === 'claimed') {
+
+  if (key === 'awaiting_ack') {
+    return '#f59e0b';
+  }
+
+  if (key === 'working' || key === 'executing' || key === 'claimed' || key === 'moving') {
     return '#38bdf8';
   }
+
   return '#94a3b8';
 }
 
@@ -130,11 +182,12 @@ function drawTask(task, desk) {
 }
 
 function drawAgent(agent, desksById, tasksById, frameNow) {
-  const position = computeAgentRenderPosition(agent, desksById, tasksById, frameNow);
+  const visualState = getAgentVisualState(agent);
+  const position = getAgentPosition(agent, frameNow, desksById, tasksById);
   const x = position.x;
   const y = position.y;
 
-  const visual = resolveAgentVisual(agent && agent.role, agent && agent.state);
+  const visual = resolveAgentVisual(agent && agent.role, visualState);
   const spriteImage = visual && visual.spriteFilename ? loadedAssets[visual.spriteFilename] : null;
 
   if (spriteImage) {
@@ -154,13 +207,13 @@ function drawAgent(agent, desksById, tasksById, frameNow) {
     );
   } else {
     // Fallback: preserve previous circle visualization when no sprite is available.
-    ctx.fillStyle = statusColor(agent.state);
+    ctx.fillStyle = statusColor(visualState);
     ctx.beginPath();
     ctx.arc(x, y, 10, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  if (agent && agent.state === 'working') {
+  if (visualState === 'working') {
     ctx.fillStyle = 'rgba(56, 189, 248, 0.22)';
     ctx.beginPath();
     ctx.arc(x, y + 2, 16, 0, Math.PI * 2);
@@ -177,7 +230,7 @@ function drawAgent(agent, desksById, tasksById, frameNow) {
     }
   }
 
-  if (agent && agent.state === 'delivering') {
+  if (visualState === 'delivering') {
     const pulse = 0.5 + 0.5 * Math.sin(frameNow * 0.02 + (hashString(agent.id) % 29));
     ctx.strokeStyle = `rgba(74, 222, 128, ${0.2 + pulse * 0.55})`;
     ctx.lineWidth = 1;
@@ -186,11 +239,20 @@ function drawAgent(agent, desksById, tasksById, frameNow) {
     ctx.stroke();
   }
 
+  if (visualState === 'idle') {
+    const idlePulse = 0.5 + 0.5 * Math.sin(frameNow * 0.003 + (hashString(agent.id) % 31));
+    ctx.strokeStyle = `rgba(148, 163, 184, ${0.12 + idlePulse * 0.12})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y + 1, 12 + idlePulse * 2.5, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   ctx.fillStyle = '#e2e8f0';
   ctx.font = '8px monospace';
   ctx.textAlign = 'center';
   ctx.fillText(String(agent.id).replace('agent-desk-', 'A').replace('agent-', 'A-'), x, y + 20);
-  ctx.fillText(agent.state || 'idle', x, y + 30);
+  ctx.fillText(visualState, x, y + 30);
 }
 
 function drawHud(worldState) {

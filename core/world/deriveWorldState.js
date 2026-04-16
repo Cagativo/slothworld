@@ -1,3 +1,21 @@
+/**
+ * 🚨 ARCHITECTURE LOCK
+ *
+ * This module participates in the event-sourced execution model.
+ *
+ * DO NOT:
+ * - Infer lifecycle state
+ * - Introduce fallback transitions
+ * - Derive failure outside TASK_ACKED
+ * - Treat any event other than TASK_ACKED as terminal authority
+ *
+ * ONLY TaskEngine defines lifecycle.
+ * TASK_ACKED is the ONLY terminal authority.
+ * ONLY events define truth.
+ *
+ * If something is missing -> FIX EVENT EMISSION, not derivation.
+ */
+
 function clone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
@@ -355,8 +373,18 @@ function applyTaskLifecycleEvent(event, task, desksById, agentsById, taskToAgent
     return;
   }
 
-  if (type === 'TASK_COMPLETED') {
-    task.status = 'completed';
+  if (type === 'TASK_COMPLETED' || type === 'TASK_FAILED') {
+    // Accept legacy terminal aliases for replay tolerance, but do not
+    // derive terminal lifecycle authority from them.
+    return;
+  }
+
+  if (type === 'TASK_EXECUTE_FINISHED') {
+    task.status = 'awaiting_ack';
+    task.error = payload && Object.prototype.hasOwnProperty.call(payload, 'error')
+      ? (payload.error || null)
+      : task.error;
+
     const agent = resolveAgentForTask(event, task, desksById, agentsById, taskToAgentId, agentToTaskId);
     if (!agent) {
       return;
@@ -369,44 +397,11 @@ function applyTaskLifecycleEvent(event, task, desksById, agentsById, taskToAgent
     return;
   }
 
-  if (type === 'TASK_FAILED') {
-    task.status = 'failed';
-    task.error = payload.error || payload.reason || null;
-
-    const agent = resolveAgentForTask(event, task, desksById, agentsById, taskToAgentId, agentToTaskId);
-    if (!agent) {
-      return;
-    }
-
-    bindTaskToAgent(task, agent, taskToAgentId, agentToTaskId);
-    agent.state = 'error';
-    agent.currentTaskId = task.id;
-    agent.targetDeskId = task.deskId || agent.deskId || undefined;
-    return;
-  }
-
-  if (type === 'TASK_EXECUTE_FINISHED') {
-    task.status = 'awaiting_ack';
-    if (payload.success === false) {
-      task.error = payload.error || null;
-    }
-
-    const agent = resolveAgentForTask(event, task, desksById, agentsById, taskToAgentId, agentToTaskId);
-    if (!agent) {
-      return;
-    }
-
-    bindTaskToAgent(task, agent, taskToAgentId, agentToTaskId);
-    agent.state = payload.success === false ? 'error' : 'delivering';
-    agent.currentTaskId = task.id;
-    agent.targetDeskId = task.deskId || agent.deskId || undefined;
-    return;
-  }
-
   if (type === 'TASK_ACKED') {
-    const ackStatus = typeof payload.status === 'string'
-      ? payload.status
-      : (payload.success === false ? 'failed' : 'acknowledged');
+    const ackStatus = typeof payload.status === 'string' ? payload.status : null;
+    if (!ackStatus) {
+      return;
+    }
 
     task.status = ackStatus;
     if (ackStatus === 'failed') {

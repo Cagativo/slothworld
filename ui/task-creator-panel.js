@@ -38,7 +38,7 @@ export function initTaskCreatorPanel() {
     if (type === 'TASK_CREATED') {
       return { code: 'created', label: 'created' };
     }
-    if (type === 'TASK_QUEUED' || type === 'TASK_ENQUEUED') {
+    if (type === 'TASK_ENQUEUED') {
       return { code: 'queued', label: 'queued' };
     }
     if (type === 'TASK_CLAIMED') {
@@ -46,7 +46,7 @@ export function initTaskCreatorPanel() {
       const agentId = payload.agentId || payload.workerId || 'unknown';
       return { code: 'claimed', label: `claimed by agent ${agentId}` };
     }
-    if (type === 'TASK_STARTED' || type === 'TASK_EXECUTE_STARTED') {
+    if (type === 'TASK_EXECUTE_STARTED') {
       return { code: 'executing', label: 'executing' };
     }
     if (type === 'TASK_EXECUTE_FINISHED') {
@@ -54,44 +54,11 @@ export function initTaskCreatorPanel() {
     }
     if (type === 'TASK_ACKED') {
       const payload = event.payload && typeof event.payload === 'object' ? event.payload : {};
-      if (payload && (payload.status === 'failed' || payload.success === false)) {
+      if (payload && payload.status === 'failed') {
         return { code: 'failed', label: 'failed' };
       }
       return { code: 'completed', label: 'completed' };
     }
-    if (type === 'TASK_FAILED') {
-      return { code: 'failed', label: 'failed' };
-    }
-
-    // Compatibility path for bridge snapshots without explicit lifecycle event types.
-    const task = event.task && typeof event.task === 'object' ? event.task : null;
-    if (!task || typeof task.status !== 'string') {
-      return null;
-    }
-
-    const status = task.status;
-    if (status === 'pending' || status === 'created') {
-      return { code: 'created', label: 'created' };
-    }
-    if (status === 'queued') {
-      return { code: 'queued', label: 'queued' };
-    }
-    if (status === 'claimed') {
-      return { code: 'claimed', label: 'claimed by agent unknown' };
-    }
-    if (status === 'executing' || status === 'in_progress') {
-      return { code: 'executing', label: 'executing' };
-    }
-    if (status === 'awaiting_ack') {
-      return { code: 'finished', label: 'finished' };
-    }
-    if (status === 'done' || status === 'completed' || status === 'acknowledged') {
-      return { code: 'completed', label: 'completed' };
-    }
-    if (status === 'failed') {
-      return { code: 'failed', label: 'failed' };
-    }
-
     return null;
   }
 

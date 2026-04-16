@@ -1,3 +1,19 @@
+/**
+ * 🚨 ARCHITECTURE LOCK
+ *
+ * This module participates in the event-sourced execution model.
+ *
+ * DO NOT:
+ * - Infer lifecycle state
+ * - Introduce fallback transitions
+ * - Derive failure outside TASK_ACKED
+ *
+ * ONLY TaskEngine defines lifecycle.
+ * ONLY events define truth.
+ *
+ * If something is missing -> FIX EVENT EMISSION, not derivation.
+ */
+
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
