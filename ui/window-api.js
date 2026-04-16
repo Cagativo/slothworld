@@ -1,6 +1,4 @@
 import { controlAPI, dispatchCommand } from './control-api.js';
-import { getRawEvents } from '../core/world/eventStore.js';
-import { deriveWorldState } from '../core/world/deriveWorldState.js';
 
 async function createTestProduct(options = {}) {
   const promptText = typeof options === 'string'
@@ -53,6 +51,9 @@ export function exposeWindowAPI() {
   window.dispatchCommand = dispatchCommand;
   window.createTestProduct = createTestProduct;
 
-  window.getRawEvents = () => getRawEvents();
-  window.getDerivedWorldState = () => deriveWorldState(getRawEvents());
+  window.getIndexedWorldState = () => controlAPI.getWorldState();
+  window.getTaskView = () => controlAPI.getTasks();
+  window.getAgentView = () => controlAPI.getAgents();
+  window.getDeskView = () => controlAPI.getDeskState();
+  window.getEventView = (limit) => controlAPI.getEventView(limit);
 }

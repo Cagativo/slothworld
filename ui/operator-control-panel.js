@@ -1,23 +1,21 @@
 /**
  * 🚨 ARCHITECTURE LOCK
  *
- * This module participates in the event-sourced execution model.
- *
- * DO NOT:
- * - Infer lifecycle state
- * - Introduce fallback transitions
- * - Derive failure outside TASK_ACKED
- * - Treat any event other than TASK_ACKED as terminal authority
- *
- * ONLY TaskEngine defines lifecycle.
- * TASK_ACKED is the ONLY terminal authority.
- * ONLY events define truth.
- *
- * If something is missing -> FIX EVENT EMISSION, not derivation.
+ * UI module is read-only and selector-driven:
+ * events -> deriveWorldState -> selectors -> rendering
  */
 
-import { getRawEvents, subscribeEventStream } from '../core/world/eventStore.js';
-import { deriveWorldState } from '../core/world/deriveWorldState.js';
+import { subscribeEventStream } from '../core/world/eventStore.js';
+import {
+  getAllTasks,
+  getTaskTimeline,
+  getRecentEvents,
+  filterTasks,
+  getTaskBuckets,
+  getDeskIndexForTask,
+  getDeskPosition
+} from './selectors/taskSelectors.js';
+import { getAllAgents } from './selectors/agentSelectors.js';
 
 const panelState = {
   selectedTaskId: null,
@@ -28,13 +26,6 @@ const panelState = {
   maxEventRows: 100
 };
 
-function formatTime(timestamp) {
-  if (!Number.isFinite(timestamp)) {
-    return 'n/a';
-  }
-  return new Date(timestamp).toLocaleTimeString();
-}
-
 function stringify(value) {
   try {
     return JSON.stringify(value, null, 2);
@@ -43,80 +34,90 @@ function stringify(value) {
   }
 }
 
-function eventTaskId(event) {
-  if (!event || typeof event !== 'object') {
-    return null;
+function formatIso(timestamp) {
+  if (!Number.isFinite(timestamp)) {
+    return 'n/a';
   }
-
-  if (event.taskId) {
-    return String(event.taskId);
-  }
-
-  if (event.task && event.task.id) {
-    return String(event.task.id);
-  }
-
-  if (event.payload && event.payload.taskId) {
-    return String(event.payload.taskId);
-  }
-
-  return null;
+  return new Date(timestamp).toISOString();
 }
 
-function eventTypeLabel(event) {
-  if (!event || typeof event !== 'object') {
-    return 'UNKNOWN';
+function taskTone(status) {
+  if (status === 'failed') {
+    return 'failed';
   }
-
-  if (typeof event.type === 'string') {
-    return event.type;
+  if (status === 'awaiting_ack') {
+    return 'pending';
   }
-
-  if (event.task && event.task.status) {
-    return `TASK_SNAPSHOT:${event.task.status}`;
+  if (status === 'claimed' || status === 'executing') {
+    return 'active';
   }
-
-  return 'UNKNOWN';
+  if (status === 'completed' || status === 'acknowledged') {
+    return 'done';
+  }
+  return 'queued';
 }
 
-function deskAnchor(desk) {
-  if (!desk) {
-    return null;
+function taskIcon(status) {
+  if (status === 'failed') {
+    return '✖';
   }
-
-  return {
-    x: Number(desk.x),
-    y: Number(desk.y) + 34
-  };
+  if (status === 'awaiting_ack') {
+    return '⧗';
+  }
+  if (status === 'claimed') {
+    return '➤';
+  }
+  if (status === 'executing') {
+    return '⚙';
+  }
+  if (status === 'completed' || status === 'acknowledged') {
+    return '✔';
+  }
+  return '•';
 }
 
-function computeDerivedAgentPosition(agent, desksById, frameNow) {
-  if (!agent) {
-    return null;
+function renderTaskList(listElement, tasks, selectedTaskId) {
+  listElement.innerHTML = '';
+
+  if (!tasks.length) {
+    const empty = document.createElement('li');
+    empty.className = 'ocp-empty';
+    empty.textContent = 'none';
+    listElement.appendChild(empty);
+    return;
   }
 
-  const homeDesk = agent.deskId ? desksById.get(agent.deskId) : null;
-  const targetDesk = agent.targetDeskId ? desksById.get(agent.targetDeskId) : null;
-  const home = deskAnchor(homeDesk || targetDesk);
-  const target = deskAnchor(targetDesk || homeDesk);
+  tasks.slice(0, 25).forEach((task) => {
+    const li = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `ocp-item ocp-task-${taskTone(task.status)}${selectedTaskId === task.id ? ' is-selected' : ''}`;
+    button.dataset.taskId = task.id;
+    const label = `${task.title} | ${task.status}${task.assignedAgentId ? ` | ${task.assignedAgentId}` : ''}`;
+    button.textContent = `${taskIcon(task.status)} ${label}`;
+    li.appendChild(button);
+    listElement.appendChild(li);
+  });
+}
 
-  if (!home && !target) {
-    return null;
+function agentPoint(agent, index, selectedTaskDesk) {
+  const value = String(agent && agent.id ? agent.id : index);
+  let seed = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    seed = (seed * 31 + value.charCodeAt(i)) >>> 0;
   }
 
-  const start = home || target;
-  const end = target || home;
-  const seed = String(agent.id || 'agent').length;
-  const phase = ((frameNow / 1000) + (seed % 11) * 0.13) % 1;
-
-  if (agent.state === 'moving') {
+  if (selectedTaskDesk && agent && agent.currentTaskId) {
     return {
-      x: start.x + (end.x - start.x) * phase,
-      y: start.y + (end.y - start.y) * phase
+      x: selectedTaskDesk.x + Math.sin(seed) * 12,
+      y: selectedTaskDesk.y + 28 + Math.cos(seed) * 6
     };
   }
 
-  return end;
+  return {
+    x: 120 + (index % 6) * 96,
+    y: 540 - Math.floor(index / 6) * 56
+  };
 }
 
 function ensureSelectionOverlay() {
@@ -139,24 +140,13 @@ function ensureSelectionOverlay() {
     overlay = document.createElement('canvas');
     overlay.dataset.role = 'task-selection-overlay';
     overlay.style.position = 'absolute';
-    overlay.style.left = `${canvas.offsetLeft}px`;
-    overlay.style.top = `${canvas.offsetTop}px`;
-    overlay.style.width = `${canvas.clientWidth}px`;
-    overlay.style.height = `${canvas.clientHeight}px`;
     overlay.style.pointerEvents = 'none';
     overlay.style.zIndex = '4';
     parent.appendChild(overlay);
   }
 
-  const width = canvas.width;
-  const height = canvas.height;
-  if (overlay.width !== width) {
-    overlay.width = width;
-  }
-  if (overlay.height !== height) {
-    overlay.height = height;
-  }
-
+  overlay.width = canvas.width;
+  overlay.height = canvas.height;
   overlay.style.left = `${canvas.offsetLeft}px`;
   overlay.style.top = `${canvas.offsetTop}px`;
   overlay.style.width = `${canvas.clientWidth}px`;
@@ -165,7 +155,7 @@ function ensureSelectionOverlay() {
   return overlay;
 }
 
-function drawTaskSelectionOverlay(worldState, selectedTaskId) {
+function drawTaskSelectionOverlay(tasks, agents, selectedTaskId) {
   const overlay = ensureSelectionOverlay();
   if (!(overlay instanceof HTMLCanvasElement)) {
     return;
@@ -177,60 +167,50 @@ function drawTaskSelectionOverlay(worldState, selectedTaskId) {
   }
 
   octx.clearRect(0, 0, overlay.width, overlay.height);
-
   if (!selectedTaskId) {
     return;
   }
 
-  const tasks = Array.isArray(worldState && worldState.tasks) ? worldState.tasks : [];
-  const desks = Array.isArray(worldState && worldState.desks) ? worldState.desks : [];
-  const agents = Array.isArray(worldState && worldState.agents) ? worldState.agents : [];
-
-  const task = tasks.find((item) => item && item.id === selectedTaskId);
+  const task = tasks.find((item) => item.id === selectedTaskId);
   if (!task) {
     return;
   }
 
-  const desksById = new Map(desks.map((desk) => [desk.id, desk]));
-  const selectedDesk = task.deskId ? desksById.get(task.deskId) : null;
-  const deskPoint = deskAnchor(selectedDesk);
-  const selectedAgent = agents.find((agent) => {
-    if (!agent) {
-      return false;
-    }
+  const desk = getDeskPosition(getDeskIndexForTask(task));
+  const selectedAgentIndex = agents.findIndex((agent) => agent.currentTaskId === selectedTaskId || agent.id === task.assignedAgentId);
+  const selectedAgent = selectedAgentIndex >= 0 ? agents[selectedAgentIndex] : null;
+  const point = selectedAgent ? agentPoint(selectedAgent, selectedAgentIndex, desk) : null;
 
-    if (task.assignedAgentId && agent.id === task.assignedAgentId) {
-      return true;
-    }
+  octx.strokeStyle = 'rgba(56, 189, 248, 0.95)';
+  octx.lineWidth = 2;
+  octx.strokeRect(desk.x - 52, desk.y - 34, 104, 68);
 
-    return agent.currentTaskId && agent.currentTaskId === task.id;
-  }) || null;
-  const agentPoint = computeDerivedAgentPosition(selectedAgent, desksById, Date.now());
-
-  if (deskPoint) {
-    octx.strokeStyle = 'rgba(56, 189, 248, 0.95)';
-    octx.lineWidth = 2;
-    octx.strokeRect(deskPoint.x - 52, deskPoint.y - 34, 104, 68);
-  }
-
-  if (agentPoint) {
+  if (point) {
     octx.strokeStyle = 'rgba(34, 197, 94, 0.95)';
-    octx.lineWidth = 2;
     octx.beginPath();
-    octx.arc(agentPoint.x, agentPoint.y, 16, 0, Math.PI * 2);
+    octx.arc(point.x, point.y, 16, 0, Math.PI * 2);
     octx.stroke();
-  }
 
-  if (deskPoint && agentPoint) {
     octx.strokeStyle = 'rgba(251, 191, 36, 0.9)';
-    octx.lineWidth = 2;
     octx.setLineDash([6, 4]);
     octx.beginPath();
-    octx.moveTo(deskPoint.x, deskPoint.y);
-    octx.lineTo(agentPoint.x, agentPoint.y);
+    octx.moveTo(desk.x, desk.y);
+    octx.lineTo(point.x, point.y);
     octx.stroke();
     octx.setLineDash([]);
   }
+}
+
+function getIndexedWorldSnapshot() {
+  if (window.controlAPI && typeof window.controlAPI.getWorldState === 'function') {
+    return window.controlAPI.getWorldState();
+  }
+
+  return {
+    events: [],
+    eventsByTaskId: new Map(),
+    eventsByWorkerId: new Map()
+  };
 }
 
 function createPanelRoot() {
@@ -239,7 +219,7 @@ function createPanelRoot() {
   panel.innerHTML = `
     <div class="ocp-header">
       <h2>Operator Control Panel</h2>
-      <p>Derived world observer (event-sourced)</p>
+      <p>Selector-driven observer (event-sourced)</p>
     </div>
 
     <section class="ocp-section" data-section="tasks">
@@ -291,7 +271,7 @@ function createPanelRoot() {
     </section>
 
     <section class="ocp-section" data-section="events">
-      <h3>Raw Event Stream</h3>
+      <h3>Event Stream</h3>
       <div class="ocp-toolbar">
         <label class="ocp-control">
           Show last
@@ -308,111 +288,6 @@ function createPanelRoot() {
   `;
 
   return panel;
-}
-
-function renderTaskList(listElement, tasks, selectedTaskId, builder) {
-  listElement.innerHTML = '';
-
-  if (!tasks.length) {
-    const empty = document.createElement('li');
-    empty.className = 'ocp-empty';
-    empty.textContent = 'none';
-    listElement.appendChild(empty);
-    return;
-  }
-
-  tasks.slice(0, 25).forEach((task) => {
-    const li = document.createElement('li');
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `ocp-item${selectedTaskId === task.id ? ' is-selected' : ''}`;
-    button.dataset.taskId = task.id;
-    const itemView = builder(task);
-    button.classList.add(`ocp-task-${itemView.tone}`);
-    button.textContent = `${itemView.icon} ${itemView.label}`;
-    li.appendChild(button);
-    listElement.appendChild(li);
-  });
-}
-
-function isTaskActive(task) {
-  return task.status === 'claimed' || task.status === 'executing' || task.status === 'awaiting_ack';
-}
-
-function isTaskTerminal(task) {
-  return task.status === 'completed' || task.status === 'acknowledged' || task.status === 'failed';
-}
-
-function taskLabelView(task, section) {
-  const agentHint = task.assignedAgentId ? ` | claimed by ${task.assignedAgentId}` : '';
-  if (section === 'failed') {
-    return {
-      icon: '✖',
-      tone: 'failed',
-      label: `${task.id} | failed${task.error ? ` | ${task.error}` : ''}`
-    };
-  }
-
-  if (task.status === 'awaiting_ack') {
-    return { icon: '⧗', tone: 'pending', label: `${task.title} | awaiting_ack` };
-  }
-  if (task.status === 'executing') {
-    return { icon: '⚙', tone: 'active', label: `${task.title} | executing${agentHint}` };
-  }
-  if (task.status === 'claimed') {
-    return { icon: '➤', tone: 'active', label: `${task.title} | claimed${agentHint}` };
-  }
-  if (task.status === 'acknowledged' || task.status === 'completed') {
-    return { icon: '✔', tone: 'done', label: `${task.id} | ${task.status}` };
-  }
-
-  return { icon: '•', tone: 'queued', label: `${task.title} | ${task.status}` };
-}
-
-function filterTasks(tasks, now) {
-  let filtered = tasks;
-
-  if (panelState.activeTasksOnly) {
-    filtered = filtered.filter((task) => isTaskActive(task));
-  }
-
-  if (panelState.recentSeconds > 0) {
-    const cutoff = now - panelState.recentSeconds * 1000;
-    filtered = filtered.filter((task) => {
-      const touchedAt = Number.isFinite(task.updatedAt) ? task.updatedAt : task.createdAt;
-      return isTaskActive(task) || (Number.isFinite(touchedAt) && touchedAt >= cutoff);
-    });
-  }
-
-  return filtered;
-}
-
-function classifyTasks(tasks) {
-  const queued = [];
-  const active = [];
-  const done = [];
-  const failed = [];
-
-  for (const task of tasks) {
-    if (task.status === 'failed') {
-      failed.push(task);
-      continue;
-    }
-
-    if (task.status === 'acknowledged' || task.status === 'completed') {
-      done.push(task);
-      continue;
-    }
-
-    if (task.status === 'claimed' || task.status === 'executing' || task.status === 'awaiting_ack') {
-      active.push(task);
-      continue;
-    }
-
-    queued.push(task);
-  }
-
-  return { queued, active, done, failed };
 }
 
 export function initOperatorControlPanel() {
@@ -457,19 +332,19 @@ export function initOperatorControlPanel() {
     if (target.dataset.taskId) {
       panelState.selectedTaskId = target.dataset.taskId;
       panelState.selectedTimelineIndex = null;
-      renderPanel(getRawEvents());
+      renderPanel();
       return;
     }
 
     if (target.dataset.agentId) {
       panelState.selectedAgentId = target.dataset.agentId;
-      renderPanel(getRawEvents());
+      renderPanel();
       return;
     }
 
     if (target.dataset.timelineIndex) {
       panelState.selectedTimelineIndex = Number(target.dataset.timelineIndex);
-      renderPanel(getRawEvents());
+      renderPanel();
     }
   });
 
@@ -481,34 +356,56 @@ export function initOperatorControlPanel() {
 
     if (target.matches('[data-control="active-only"]')) {
       panelState.activeTasksOnly = Boolean(target.checked);
-      renderPanel(getRawEvents());
+      renderPanel();
       return;
     }
 
     if (target.matches('[data-control="recent-seconds"]')) {
       panelState.recentSeconds = Number(target.value) || 0;
-      renderPanel(getRawEvents());
+      renderPanel();
       return;
     }
 
     if (target.matches('[data-control="max-events"]')) {
       panelState.maxEventRows = Math.max(1, Number(target.value) || 100);
-      renderPanel(getRawEvents());
+      renderPanel();
     }
   });
 
-  function renderPanel(eventStreamSnapshot) {
-    const events = Array.isArray(eventStreamSnapshot) ? eventStreamSnapshot : getRawEvents();
-    const worldState = deriveWorldState(events);
-    const allTasks = Array.isArray(worldState.tasks) ? worldState.tasks : [];
-    const tasks = filterTasks(allTasks, Date.now());
-    const agents = Array.isArray(worldState.agents) ? worldState.agents : [];
-    const buckets = classifyTasks(tasks);
+  function renderPanel() {
+    const indexedWorld = getIndexedWorldSnapshot();
+    const allTasks = getAllTasks(indexedWorld);
+    const tasks = filterTasks(indexedWorld, {
+      activeOnly: panelState.activeTasksOnly,
+      recentSeconds: panelState.recentSeconds,
+      now: Date.now()
+    });
+    const agents = getAllAgents(indexedWorld);
+    const buckets = getTaskBuckets(indexedWorld, { tasks });
 
-    renderTaskList(queuedList, buckets.queued, panelState.selectedTaskId, (task) => taskLabelView(task, 'queued'));
-    renderTaskList(activeList, buckets.active, panelState.selectedTaskId, (task) => taskLabelView(task, 'active'));
-    renderTaskList(doneList, buckets.done, panelState.selectedTaskId, (task) => taskLabelView(task, 'done'));
-    renderTaskList(failedList, buckets.failed, panelState.selectedTaskId, (task) => taskLabelView(task, 'failed'));
+    renderTaskList(queuedList, buckets.queued, panelState.selectedTaskId);
+    renderTaskList(activeList, buckets.active, panelState.selectedTaskId);
+    renderTaskList(doneList, buckets.done, panelState.selectedTaskId);
+    renderTaskList(failedList, buckets.failed, panelState.selectedTaskId);
+
+    const recentEvents = getRecentEvents(indexedWorld, panelState.maxEventRows).reverse();
+    eventsList.innerHTML = '';
+    if (!recentEvents.length) {
+      const empty = document.createElement('li');
+      empty.className = 'ocp-empty';
+      empty.textContent = 'none';
+      eventsList.appendChild(empty);
+    } else {
+      recentEvents.forEach((entry) => {
+        const li = document.createElement('li');
+        li.className = 'ocp-event';
+        li.textContent = `${formatIso(entry.timestamp)} | ${entry.type} ${entry.taskId || ''}`.trim();
+        if (panelState.selectedTaskId && entry.taskId === panelState.selectedTaskId) {
+          li.classList.add('is-selected');
+        }
+        eventsList.appendChild(li);
+      });
+    }
 
     agentsList.innerHTML = '';
     if (!agents.length) {
@@ -521,120 +418,61 @@ export function initOperatorControlPanel() {
         const li = document.createElement('li');
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'ocp-item';
-        button.dataset.agentId = agent.id;
-        const selectedTaskId = panelState.selectedTaskId;
-        const selectedTask = selectedTaskId ? allTasks.find((task) => task.id === selectedTaskId) : null;
-        const isSelectedTaskWorker = !!(
-          selectedTask
-          && (
-            (selectedTask.assignedAgentId && selectedTask.assignedAgentId === agent.id)
-            || (agent.currentTaskId && agent.currentTaskId === selectedTask.id)
-          )
-        );
-
-        if (isSelectedTaskWorker) {
+        button.className = `ocp-item${panelState.selectedAgentId === agent.id ? ' is-selected' : ''}`;
+        if (panelState.selectedTaskId && agent.currentTaskId === panelState.selectedTaskId) {
           button.classList.add('ocp-agent-active');
         }
-        if (panelState.selectedAgentId === agent.id) {
-          button.classList.add('is-selected');
-        }
-
-        button.textContent = `${isSelectedTaskWorker ? '▶ ' : ''}${agent.id} | ${agent.state} | desk ${agent.deskId}`;
-        if (agent.state === 'working') {
-          button.classList.add('ocp-agent-working');
-        } else if (agent.state === 'delivering') {
-          button.classList.add('ocp-agent-delivering');
-        } else if (agent.state === 'error') {
-          button.classList.add('ocp-agent-error');
-        }
+        button.dataset.agentId = agent.id;
+        button.textContent = `${agent.id} | ${agent.state} | task ${agent.currentTaskId || 'none'}`;
         li.appendChild(button);
         agentsList.appendChild(li);
       });
     }
 
-    const recentEvents = events.slice(-panelState.maxEventRows).reverse();
-    eventsList.innerHTML = '';
-    if (!recentEvents.length) {
-      const empty = document.createElement('li');
-      empty.className = 'ocp-empty';
-      empty.textContent = 'none';
-      eventsList.appendChild(empty);
-    } else {
-      recentEvents.forEach((event) => {
-        const li = document.createElement('li');
-        li.className = 'ocp-event';
-        const eventType = eventTypeLabel(event);
-        const taskId = eventTaskId(event) || '';
-        const stamp = Number.isFinite(event.timestamp) ? new Date(event.timestamp).toISOString() : 'n/a';
-        li.textContent = `${stamp} | ${eventType} ${taskId}`.trim();
-        if (panelState.selectedTaskId && taskId === panelState.selectedTaskId) {
-          li.classList.add('is-selected');
-        }
-        eventsList.appendChild(li);
-      });
-    }
-
     if (panelState.selectedTaskId) {
-      const selectedTask = allTasks.find((task) => task.id === panelState.selectedTaskId);
+      const selectedTask = allTasks.find((task) => task.id === panelState.selectedTaskId) || null;
       if (!selectedTask) {
-        taskDetail.textContent = 'Selected task not found in derived world.';
+        taskDetail.textContent = 'Selected task not found.';
         eventDetail.textContent = 'Selected event not found.';
         timelineList.innerHTML = '';
-        const empty = document.createElement('li');
-        empty.className = 'ocp-empty';
-        empty.textContent = 'No timeline available.';
-        timelineList.appendChild(empty);
       } else {
-        const timeline = events
-          .filter((event) => eventTaskId(event) === selectedTask.id)
-          .slice(-20)
-          .map((event, index) => ({
-            index,
-            timestamp: Number.isFinite(event.timestamp) ? event.timestamp : null,
-            isoTime: Number.isFinite(event.timestamp) ? new Date(event.timestamp).toISOString() : 'n/a',
-            localTime: formatTime(event.timestamp),
-            event: eventTypeLabel(event),
-            payload: event && typeof event.payload === 'object' ? event.payload : null,
-            taskId: eventTaskId(event)
-          }));
+        const timeline = getTaskTimeline(indexedWorld, selectedTask.id).slice(-20);
+        const timelineRows = timeline.map((entry, index) => ({
+          ...entry,
+          index,
+          isoTime: formatIso(entry.timestamp)
+        }));
 
-        if (!timeline.some((entry) => entry.index === panelState.selectedTimelineIndex)) {
-          panelState.selectedTimelineIndex = timeline.length ? timeline[timeline.length - 1].index : null;
+        if (!timelineRows.some((entry) => entry.index === panelState.selectedTimelineIndex)) {
+          panelState.selectedTimelineIndex = timelineRows.length ? timelineRows[timelineRows.length - 1].index : null;
         }
 
         timelineList.innerHTML = '';
-        if (!timeline.length) {
+        if (!timelineRows.length) {
           const empty = document.createElement('li');
           empty.className = 'ocp-empty';
           empty.textContent = 'No events observed for this task yet.';
           timelineList.appendChild(empty);
         } else {
-          timeline.forEach((entry) => {
+          timelineRows.forEach((entry) => {
             const li = document.createElement('li');
             li.className = 'ocp-event';
             const button = document.createElement('button');
             button.type = 'button';
             button.className = `ocp-item ocp-event-row${panelState.selectedTimelineIndex === entry.index ? ' is-selected' : ''}`;
             button.dataset.timelineIndex = String(entry.index);
-            button.textContent = `${entry.isoTime} | ${entry.event}`;
+            button.textContent = `${entry.isoTime} | ${entry.type}`;
             li.appendChild(button);
             timelineList.appendChild(li);
           });
 
-          const selectedEntry = timeline.find((entry) => entry.index === panelState.selectedTimelineIndex) || timeline[timeline.length - 1];
-          eventDetail.textContent = stringify({
-            time: selectedEntry.isoTime,
-            localTime: selectedEntry.localTime,
-            event: selectedEntry.event,
-            taskId: selectedEntry.taskId,
-            payload: selectedEntry.payload
-          });
+          const selectedEntry = timelineRows.find((entry) => entry.index === panelState.selectedTimelineIndex) || timelineRows[timelineRows.length - 1];
+          eventDetail.textContent = stringify(selectedEntry);
         }
 
         taskDetail.textContent = stringify({
           ...selectedTask,
-          eventTimeline: timeline
+          timeline: timelineRows
         });
       }
     } else {
@@ -647,21 +485,17 @@ export function initOperatorControlPanel() {
     }
 
     if (panelState.selectedAgentId) {
-      const selectedAgent = agents.find((agent) => agent.id === panelState.selectedAgentId);
-      agentDetail.textContent = selectedAgent ? stringify(selectedAgent) : 'Selected agent not found in derived world.';
+      const selectedAgent = agents.find((agent) => agent.id === panelState.selectedAgentId) || null;
+      agentDetail.textContent = selectedAgent ? stringify(selectedAgent) : 'Selected agent not found.';
+    } else {
+      agentDetail.textContent = 'Click an agent to inspect derived assignment.';
     }
 
-    drawTaskSelectionOverlay(worldState, panelState.selectedTaskId);
+    drawTaskSelectionOverlay(allTasks, agents, panelState.selectedTaskId);
   }
 
-  const initialEvents = getRawEvents();
-  renderPanel(initialEvents);
-  subscribeEventStream((appendedEvents) => {
-    if (!Array.isArray(appendedEvents) || appendedEvents.length === 0) {
-      return;
-    }
-
-    const fullEvents = getRawEvents();
-    renderPanel(fullEvents);
+  renderPanel();
+  subscribeEventStream(() => {
+    renderPanel();
   });
 }

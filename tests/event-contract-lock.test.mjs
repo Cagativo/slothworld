@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { deriveWorldState } from '../core/world/deriveWorldState.js';
+import { getTaskStatus, getTaskEvents } from '../ui/selectors/taskSelectors.js';
 
 test('does NOT mark task failed without TASK_ACKED', () => {
   const events = [
@@ -9,11 +10,12 @@ test('does NOT mark task failed without TASK_ACKED', () => {
   ];
 
   const world = deriveWorldState(events);
-  const task = world.tasks.find((item) => item.id === 't1');
+  const status = getTaskStatus(world, 't1');
+  const taskEvents = getTaskEvents(world, 't1');
 
-  assert.ok(task, 'task should be present in world state');
-  assert.equal(task.status, 'awaiting_ack');
-  assert.notEqual(task.status, 'failed');
+  assert.ok(taskEvents.length > 0, 'task should be present in indexed world');
+  assert.equal(status, 'awaiting_ack');
+  assert.notEqual(status, 'failed');
 });
 
 test('marks task failed only when TASK_ACKED payload.status is failed', () => {
@@ -24,10 +26,11 @@ test('marks task failed only when TASK_ACKED payload.status is failed', () => {
   ];
 
   const world = deriveWorldState(events);
-  const task = world.tasks.find((item) => item.id === 't2');
+  const status = getTaskStatus(world, 't2');
+  const taskEvents = getTaskEvents(world, 't2');
 
-  assert.ok(task, 'task should be present in world state');
-  assert.equal(task.status, 'failed');
+  assert.ok(taskEvents.length > 0, 'task should be present in indexed world');
+  assert.equal(status, 'failed');
 });
 
 test('ignores TASK_FAILED without ACK', () => {
@@ -37,11 +40,12 @@ test('ignores TASK_FAILED without ACK', () => {
   ];
 
   const world = deriveWorldState(events);
-  const task = world.tasks.find((item) => item.id === 't3');
+  const status = getTaskStatus(world, 't3');
+  const taskEvents = getTaskEvents(world, 't3');
 
-  assert.ok(task, 'task should be present in world state');
-  assert.notEqual(task.status, 'failed');
-  assert.equal(task.status, 'created');
+  assert.ok(taskEvents.length > 0, 'task should be present in indexed world');
+  assert.notEqual(status, 'failed');
+  assert.equal(status, 'created');
 });
 
 test('ACK always produces terminal state', () => {
@@ -52,10 +56,11 @@ test('ACK always produces terminal state', () => {
   ];
 
   const world = deriveWorldState(events);
-  const task = world.tasks.find((item) => item.id === 't4');
+  const status = getTaskStatus(world, 't4');
+  const taskEvents = getTaskEvents(world, 't4');
 
-  assert.ok(task, 'task should be present in world state');
-  assert.ok(['completed', 'failed'].includes(task.status), 'ACK should produce a terminal state');
+  assert.ok(taskEvents.length > 0, 'task should be present in indexed world');
+  assert.ok(['completed', 'failed'].includes(status), 'ACK should produce a terminal state');
 });
 
 test('does NOT mark task completed without TASK_ACKED', () => {
@@ -65,10 +70,11 @@ test('does NOT mark task completed without TASK_ACKED', () => {
   ];
 
   const world = deriveWorldState(events);
-  const task = world.tasks.find((item) => item.id === 't5');
+  const status = getTaskStatus(world, 't5');
+  const taskEvents = getTaskEvents(world, 't5');
 
-  assert.ok(task, 'task should be present in world state');
-  assert.equal(task.status, 'awaiting_ack');
-  assert.notEqual(task.status, 'completed');
-  assert.notEqual(task.status, 'failed');
+  assert.ok(taskEvents.length > 0, 'task should be present in indexed world');
+  assert.equal(status, 'awaiting_ack');
+  assert.notEqual(status, 'completed');
+  assert.notEqual(status, 'failed');
 });

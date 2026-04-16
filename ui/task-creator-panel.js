@@ -1,6 +1,19 @@
-import { subscribeEventStream, getRawEvents } from '../core/world/eventStore.js';
+import { subscribeEventStream } from '../core/world/eventStore.js';
+import { getTaskStatus } from './selectors/taskSelectors.js';
 
 export function initTaskCreatorPanel() {
+    function getIndexedWorldSnapshot() {
+      if (window.controlAPI && typeof window.controlAPI.getWorldState === 'function') {
+        return window.controlAPI.getWorldState();
+      }
+
+      return {
+        events: [],
+        eventsByTaskId: new Map(),
+        eventsByWorkerId: new Map()
+      };
+    }
+
   const FIXED_DISCORD_CHANNEL_ID = '1491500223288184964';
 
   const panelRuntime = {
@@ -9,56 +22,29 @@ export function initTaskCreatorPanel() {
     observedLifecycleByTaskId: new Map()
   };
 
-  function eventTaskId(event) {
-    if (!event || typeof event !== 'object') {
-      return null;
-    }
-
-    if (event.taskId) {
-      return String(event.taskId);
-    }
-
-    if (event.task && event.task.id) {
-      return String(event.task.id);
-    }
-
-    if (event.payload && event.payload.taskId) {
-      return String(event.payload.taskId);
-    }
-
-    return null;
-  }
-
-  function lifecycleFromEvent(event) {
-    if (!event || typeof event !== 'object') {
-      return null;
-    }
-
-    const type = typeof event.type === 'string' ? event.type : null;
-    if (type === 'TASK_CREATED') {
+  function lifecycleFromStatus(status) {
+    if (status === 'created') {
       return { code: 'created', label: 'created' };
     }
-    if (type === 'TASK_ENQUEUED') {
+    if (status === 'queued') {
       return { code: 'queued', label: 'queued' };
     }
-    if (type === 'TASK_CLAIMED') {
-      const payload = event.payload && typeof event.payload === 'object' ? event.payload : {};
-      const agentId = payload.agentId || payload.workerId || 'unknown';
-      return { code: 'claimed', label: `claimed by agent ${agentId}` };
+    if (status === 'claimed') {
+      return { code: 'claimed', label: 'claimed' };
     }
-    if (type === 'TASK_EXECUTE_STARTED') {
+    if (status === 'executing') {
       return { code: 'executing', label: 'executing' };
     }
-    if (type === 'TASK_EXECUTE_FINISHED') {
+    if (status === 'awaiting_ack') {
       return { code: 'finished', label: 'finished' };
     }
-    if (type === 'TASK_ACKED') {
-      const payload = event.payload && typeof event.payload === 'object' ? event.payload : {};
-      if (payload && payload.status === 'failed') {
-        return { code: 'failed', label: 'failed' };
-      }
+    if (status === 'failed') {
+      return { code: 'failed', label: 'failed' };
+    }
+    if (status === 'completed' || status === 'acknowledged') {
       return { code: 'completed', label: 'completed' };
     }
+
     return null;
   }
 
@@ -133,36 +119,32 @@ export function initTaskCreatorPanel() {
       statusDiv.className = 'tcp-status tcp-success';
     }
 
-    function observeLifecycleEvents(events) {
-      if (!Array.isArray(events) || events.length === 0) {
+    function observeLifecycleEvents() {
+      const indexedWorld = getIndexedWorldSnapshot();
+      const pendingTaskId = panelRuntime.pendingTaskId;
+      if (!pendingTaskId) {
         return;
       }
 
-      for (const event of events) {
-        const taskId = eventTaskId(event);
-        if (!taskId) {
-          continue;
-        }
-
-        const lifecycle = lifecycleFromEvent(event);
-        if (!lifecycle) {
-          continue;
-        }
-
-        panelRuntime.observedLifecycleByTaskId.set(taskId, lifecycle);
-
-        if (panelRuntime.pendingTaskId === taskId && panelRuntime.waitingForCreated && lifecycle.code === 'created') {
-          panelRuntime.waitingForCreated = false;
-        }
-
-        if (panelRuntime.pendingTaskId === taskId) {
-          renderLifecycleStatus(taskId);
-        }
+      const status = getTaskStatus(indexedWorld, pendingTaskId);
+      const lifecycle = lifecycleFromStatus(status);
+      if (!lifecycle) {
+        return;
       }
+
+      panelRuntime.observedLifecycleByTaskId.set(pendingTaskId, lifecycle);
+
+      if (panelRuntime.waitingForCreated && lifecycle.code === 'created') {
+        panelRuntime.waitingForCreated = false;
+      }
+
+      renderLifecycleStatus(pendingTaskId);
     }
 
-    observeLifecycleEvents(getRawEvents());
-    subscribeEventStream(observeLifecycleEvents);
+    observeLifecycleEvents();
+    subscribeEventStream(() => {
+      observeLifecycleEvents();
+    });
 
   const createProductButton = panel.querySelector('#tcp-create-product');
   const productPromptInput = panel.querySelector('#tcp-product-prompt');
