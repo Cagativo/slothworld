@@ -1,3 +1,11 @@
+ :root {
+  --status-idle-neutral: #94a3b8;
+  --status-working-blue: #38bdf8;
+  --status-delivering-green: #22c55e;
+  --status-error-red: #ef4444;
+  --status-awaiting-ack-amber: #f59e0b;
+}
+
 body {
   margin: 0;
   background: #111;
@@ -99,6 +107,30 @@ canvas {
   gap: 8px;
 }
 
+.ocp-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.ocp-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.ocp-control select {
+  background: #1c2129;
+  color: #d1d5db;
+  border: 1px solid #3a424f;
+  font: 10px monospace;
+  padding: 2px 4px;
+}
+
 .ocp-list {
   margin: 0;
   padding: 0;
@@ -131,6 +163,54 @@ canvas {
 .ocp-item.ocp-agent-active {
   border-color: #86efac;
   box-shadow: inset 0 0 0 1px rgba(134, 239, 172, 0.35);
+}
+
+.ocp-item.ocp-task-queued {
+  border-left: 3px solid var(--status-idle-neutral);
+}
+
+.ocp-item.ocp-task-active,
+.ocp-item.ocp-task-pending {
+  border-left: 3px solid var(--status-awaiting-ack-amber);
+}
+
+.ocp-item.ocp-task-done {
+  border-left: 3px solid var(--status-delivering-green);
+}
+
+.ocp-item.ocp-task-failed {
+  border-left: 3px solid var(--status-error-red);
+}
+
+.ocp-event-row {
+  font-size: 10px;
+}
+
+.ocp-agent-working {
+  animation: ocpPulse 1.3s ease-in-out infinite;
+}
+
+.ocp-agent-delivering {
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.45);
+}
+
+.ocp-agent-error {
+  animation: ocpShake 0.4s linear 2;
+  border-color: #ef4444;
+}
+
+@keyframes ocpPulse {
+  0% { box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.25); }
+  50% { box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.65); }
+  100% { box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.25); }
+}
+
+@keyframes ocpShake {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  50% { transform: translateX(2px); }
+  75% { transform: translateX(-1px); }
+  100% { transform: translateX(0); }
 }
 
 .ocp-empty,

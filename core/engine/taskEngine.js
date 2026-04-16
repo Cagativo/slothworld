@@ -1,3 +1,21 @@
+/**
+ * 🚨 ARCHITECTURE LOCK
+ *
+ * This module participates in the event-sourced execution model.
+ *
+ * DO NOT:
+ * - Infer lifecycle state
+ * - Introduce fallback transitions
+ * - Derive failure outside TASK_ACKED
+ * - Treat any event other than TASK_ACKED as terminal authority
+ *
+ * ONLY TaskEngine defines lifecycle.
+ * TASK_ACKED is the ONLY terminal authority.
+ * ONLY events define truth.
+ *
+ * If something is missing -> FIX EVENT EMISSION, not derivation.
+ */
+
 import { registerTaskEngineCallerKey, runInTaskEngineExecutionContext } from './enforcementRuntime.js';
 const DEFAULT_NOW = () => Date.now();
 

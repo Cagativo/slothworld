@@ -148,7 +148,14 @@ export function createEventBus(options = {}) {
       } else if (event.type === 'TASK_EXECUTE_FINISHED') {
         state.status = 'awaiting_ack';
       } else if (event.type === 'TASK_ACKED') {
-        state.status = event.payload?.success ? 'acknowledged' : 'failed';
+        const ackStatus = event && event.payload && typeof event.payload.status === 'string'
+          ? event.payload.status
+          : null;
+        if (ackStatus === 'failed') {
+          state.status = 'failed';
+        } else if (ackStatus) {
+          state.status = 'acknowledged';
+        }
       }
     }
 

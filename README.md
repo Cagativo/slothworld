@@ -233,6 +233,21 @@ Interpretation rule:
 - Derived failed tasks may include historical failures unless replay is scoped by recency window or execution cycle.
 - This does not change architecture authority: TaskEngine owns lifecycle transitions, Bridge is intake-only, workers execute, providers generate, and ACK finalizes state.
 
+## UI Architecture & Event-Driven Rendering Model
+
+- TaskEngine is the lifecycle authority.
+- `TASK_ACKED` is the sole terminal source of truth.
+- `deriveWorldState` is a deterministic event reducer.
+- Renderer is a pure projection layer (`events -> deriveWorldState(events) -> render(worldState)`).
+- UI is fully event-driven and stateless.
+- No lifecycle logic exists in the rendering layer.
+
+Additional UI/runtime notes:
+
+- Visual states include queued and awaiting_ack in the derived task/agent projection.
+- The operator debug panel provides event timeline inspection (clickable events, payload inspector, selected-task highlighting, and event/task window filters).
+- Invariants are enforced in tests, including: no terminal state without ACK, `TASK_FAILED` non-authoritative for terminal failure, `TASK_EXECUTE_FINISHED(success:false)` stays awaiting_ack, and `TASK_ACKED(status:"failed")` commits terminal failed.
+
 ## Boundary Summary
 
 - UI is intent-only.
