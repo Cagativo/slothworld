@@ -355,4 +355,81 @@ canvas {
   body {
     overflow: auto;
   }
+
+  #raccoon-feeder-panel {
+    width: 100%;
+    box-sizing: border-box;
+    background: rgba(18, 22, 30, 0.72);
+    border: 1px solid #2f343d;
+    border-radius: 4px;
+    padding: 10px;
+  }
+
+  .rfp-header h2 {
+    margin: 0;
+    font-size: 14px;
+  }
+
+  .rfp-header p {
+    margin: 4px 0 10px;
+    color: #9ca3af;
+    font-size: 11px;
+  }
+
+  .rfp-section {
+    border: 1px solid #313741;
+    padding: 8px;
+  }
+
+  .rfp-section h3 {
+    margin: 0 0 8px;
+    font-size: 12px;
+  }
+
+  .rfp-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 150px;
+    overflow-y: auto;
+  }
+
+  .rfp-item {
+    width: 100%;
+    background: #1c2129;
+    color: #d1d5db;
+    border: 1px solid #3a424f;
+    text-align: left;
+    padding: 4px;
+    margin-bottom: 3px;
+    font: 11px monospace;
+    cursor: pointer;
+  }
+
+  .rfp-item:hover {
+    border-color: #6b7280;
+  }
+
+  .rfp-item.is-selected {
+    border-color: #f59e0b;
+    box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.45);
+  }
+
+  .rfp-empty {
+    font-size: 11px;
+    color: #9ca3af;
+    padding: 2px 0;
+  }
+
+  .rfp-detail {
+    margin: 6px 0 0;
+    background: #0f1318;
+    border: 1px solid #2d3340;
+    padding: 6px;
+    font: 11px/1.35 monospace;
+    color: #cbd5e1;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow: auto;
+  }
 }

@@ -1,6 +1,7 @@
 import { parseCommandInput } from './command-parser.js';
-import { getRawEvents } from '../core/world/eventStore.js';
-import { deriveWorldState } from '../core/world/deriveWorldState.js';
+import { getIndexedWorldSnapshot } from '../core/world/indexedWorldSnapshot.js';
+import { getAllTasks, getAllDesks, getRecentEvents } from './selectors/taskSelectors.js';
+import { getAllAgents } from './selectors/agentSelectors.js';
 
 function toTaskPayload(task) {
   const payload = task && typeof task.payload === 'object' && task.payload !== null
@@ -72,22 +73,23 @@ async function injectTask(task) {
 }
 
 function getWorldState() {
-  return deriveWorldState(getRawEvents());
+  return getIndexedWorldSnapshot();
 }
 
 function getTasks() {
-  const world = getWorldState();
-  return Array.isArray(world.tasks) ? world.tasks : [];
+  return getAllTasks(getWorldState());
 }
 
 function getAgents() {
-  const world = getWorldState();
-  return Array.isArray(world.agents) ? world.agents : [];
+  return getAllAgents(getWorldState());
 }
 
 function getDeskState() {
-  const world = getWorldState();
-  return Array.isArray(world.desks) ? world.desks : [];
+  return getAllDesks(getWorldState());
+}
+
+function getEventView(limit = 100) {
+  return getRecentEvents(getWorldState(), limit);
 }
 
 export const controlAPI = {
@@ -96,7 +98,7 @@ export const controlAPI = {
   getTasks,
   getAgents,
   getDeskState,
-  getRawEvents
+  getEventView
 };
 
 export async function dispatchCommand(inputString) {
