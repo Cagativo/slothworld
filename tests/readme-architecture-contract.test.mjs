@@ -12,18 +12,46 @@ const STANDALONE_V2_RE = /\bv2\b/i;
 assert.equal(basename(readmePath), 'README.md', 'README contract must read README.md explicitly');
 console.log('[readme-contract] resolved README path:', readmePath);
 const readme = readFileSync(readmePath, 'utf8');
+const normalized = readme.normalize('NFKC').replace(/\u200B/g, '');
+
+function findPatternContexts(input, pattern, radius = 30) {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+  const globalPattern = new RegExp(pattern.source, flags);
+  const contexts = [];
+  let match;
+
+  while ((match = globalPattern.exec(input)) !== null) {
+    const start = Math.max(0, match.index - radius);
+    const end = Math.min(input.length, match.index + match[0].length + radius);
+    contexts.push({
+      index: match.index,
+      match: match[0],
+      context: input.slice(start, end)
+    });
+  }
+
+  return contexts;
+}
 
 function requireText(text, message) {
-  assert.equal(readme.includes(text), true, message || `Missing required README contract text: ${text}`);
+  assert.equal(normalized.includes(text), true, message || `Missing required README contract text: ${text}`);
 }
 
 function forbidPattern(pattern, message) {
-  assert.equal(pattern.test(readme), false, message || `Forbidden README architecture drift detected: ${pattern}`);
+  assert.equal(pattern.test(normalized), false, message || `Forbidden README architecture drift detected: ${pattern}`);
 }
 
 test('README forbids versioned architecture language', () => {
   forbidPattern(/\bv1\b/i, 'README must not mention v1');
-  forbidPattern(STANDALONE_V2_RE, 'README must not mention v2');
+  const v2Contexts = findPatternContexts(normalized, STANDALONE_V2_RE).map((entry) => ({
+    ...entry,
+    context: JSON.stringify(entry.context)
+  }));
+  assert.equal(
+    v2Contexts.length,
+    0,
+    `README must not mention v2. Matches: ${JSON.stringify(v2Contexts)}`
+  );
   forbidPattern(/versioned architecture|architecture evolution|evolution language/i, 'README must not drift into versioned architecture language');
 });
 
