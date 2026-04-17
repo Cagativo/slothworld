@@ -177,6 +177,27 @@ Selector Layer is the ONLY semantic layer.
 - lifecycle logic outside selectors.
 - system events affecting lifecycle.
 
+## UI Architecture (v2)
+
+- UI remains event-driven end-to-end.
+- `deriveWorldState` is index-only (`events`, `eventsByTaskId`, `eventsByWorkerId`).
+- Selector modules are the only semantic layer (`taskSelectors`, `agentSelectors`, `metricsSelectors`, `anomalySelectors`).
+- Lifecycle meaning is derived only from canonical lifecycle events.
+- System events are observability-only and do not affect lifecycle derivation.
+- UI components are read-only projections over selector outputs.
+- Renderer is deterministic and does not inspect raw event payload semantics.
+- Anomaly detection is clustered via `getIncidentClusters`.
+- Canvas excludes system events (`includeSystemEvents: false`).
+- Raccoon Feeder includes system events (`includeSystemEvents: true`).
+
+## Forbidden Patterns
+
+- UI reading raw events for lifecycle meaning.
+- UI logic branching directly on `event.type`.
+- UI logic branching directly on `payload.status`.
+- Lifecycle derivation outside selector modules.
+- System events affecting lifecycle status or transitions.
+
 ## Boundary Summary
 
 - UI = projection only
