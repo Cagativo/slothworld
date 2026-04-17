@@ -1,12 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const currentFilePath = fileURLToPath(import.meta.url);
 const currentDir = dirname(currentFilePath);
 const readmePath = resolve(currentDir, '..', 'README.md');
+const STANDALONE_V2_RE = /\bv2\b/i;
+
+assert.equal(basename(readmePath), 'README.md', 'README contract must read README.md explicitly');
 console.log('[readme-contract] resolved README path:', readmePath);
 const readme = readFileSync(readmePath, 'utf8');
 
@@ -20,8 +23,15 @@ function forbidPattern(pattern, message) {
 
 test('README forbids versioned architecture language', () => {
   forbidPattern(/\bv1\b/i, 'README must not mention v1');
-  forbidPattern(/\bv2\b/i, 'README must not mention v2');
+  forbidPattern(STANDALONE_V2_RE, 'README must not mention v2');
   forbidPattern(/versioned architecture|architecture evolution|evolution language/i, 'README must not drift into versioned architecture language');
+});
+
+test('v2 check matches standalone word only', () => {
+  assert.equal(STANDALONE_V2_RE.test('v2'), true);
+  assert.equal(STANDALONE_V2_RE.test('dev2'), false);
+  assert.equal(STANDALONE_V2_RE.test('v20'), false);
+  assert.equal(STANDALONE_V2_RE.test('env2'), false);
 });
 
 test('README declares selector semantics ownership explicitly', () => {
