@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const readmePath = resolve(process.cwd(), 'README.md');
+const currentFilePath = fileURLToPath(import.meta.url);
+const currentDir = dirname(currentFilePath);
+const readmePath = resolve(currentDir, '..', 'README.md');
+console.log('[readme-contract] resolved README path:', readmePath);
 const readme = readFileSync(readmePath, 'utf8');
 
 function requireText(text, message) {
