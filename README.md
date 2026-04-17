@@ -237,7 +237,10 @@ Interpretation rule:
 
 - TaskEngine is the lifecycle authority.
 - `TASK_ACKED` is the sole terminal source of truth.
-- `deriveWorldState` is a deterministic event reducer.
+- `deriveWorldState` is Indexer Only.
+- `deriveWorldState` returns `events`, `eventsByTaskId`, and `eventsByWorkerId`.
+- `deriveWorldState` MUST NOT derive lifecycle state, metrics, or anomalies.
+- `deriveWorldState` MUST NOT perform lifecycle derivation.
 - Renderer is a pure projection layer (`events -> deriveWorldState(events) -> render(worldState)`).
 - UI is fully event-driven and stateless.
 - No lifecycle logic exists in the rendering layer.
@@ -248,18 +251,37 @@ Additional UI/runtime notes:
 - The operator debug panel provides event timeline inspection (clickable events, payload inspector, selected-task highlighting, and event/task window filters).
 - Invariants are enforced in tests, including: no terminal state without ACK, `TASK_FAILED` non-authoritative for terminal failure, `TASK_EXECUTE_FINISHED(success:false)` stays awaiting_ack, and `TASK_ACKED(status:"failed")` commits terminal failed.
 
-## UI Architecture (v2)
+## Selector Layer
 
-- UI remains event-driven end-to-end.
-- `deriveWorldState` is index-only (`events`, `eventsByTaskId`, `eventsByWorkerId`).
-- Selector modules are the only semantic layer (`taskSelectors`, `agentSelectors`, `metricsSelectors`, `anomalySelectors`).
-- Lifecycle meaning is derived only from canonical lifecycle events.
-- System events are observability-only and do not affect lifecycle derivation.
+- Selector Layer is the ONLY semantic layer.
+- `taskSelectors` owns lifecycle derivation.
+- `metricsSelectors` owns metrics aggregation.
+- `anomalySelectors` owns anomaly clustering and observability interpretation.
 - UI components are read-only projections over selector outputs.
-- Renderer is deterministic and does not inspect raw event payload semantics.
-- Anomaly detection is clustered via `getIncidentClusters`.
+- UI and rendering MUST NOT interpret raw events.
 - Canvas excludes system events (`includeSystemEvents: false`).
 - Raccoon Feeder includes system events (`includeSystemEvents: true`).
+
+## Event Taxonomy
+
+### Lifecycle Events
+
+- `TASK_CREATED`
+- `TASK_ENQUEUED`
+- `TASK_CLAIMED`
+- `TASK_EXECUTE_STARTED`
+- `TASK_EXECUTE_FINISHED`
+- `TASK_ACKED`
+
+### System Events
+
+System Events are non-lifecycle, observability only.
+
+- `TASK_NOTIFICATION_SENT`
+- `TASK_NOTIFICATION_SKIPPED`
+- `TASK_NOTIFICATION_FAILED`
+
+- System events MUST NOT affect lifecycle.
 
 ## Forbidden Patterns
 

@@ -8,6 +8,8 @@
     "start": "node bridge-server.js",
     "test": "npm run test:enforcement",
     "test:enforcement": "node --test tests/adversarial-enforcement.test.mjs",
+    "test:architecture": "node --test tests/selector-contract-freeze.test.mjs tests/taxonomy-contract.test.mjs tests/anomaly-cluster-contract.test.mjs",
+    "test:readme-contract": "node --test tests/readme-architecture-contract.test.mjs",
     "test:golden-path": "node --test tests/golden-path.test.mjs",
     "test:adversarial": "node --test tests/adversarial-enforcement.test.mjs",
     "events:list": "node cli/event-stream.js list",
