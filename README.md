@@ -177,7 +177,7 @@ Selector Layer is the ONLY semantic layer.
 - lifecycle logic outside selectors.
 - system events affecting lifecycle.
 
-## UI Architecture (v2)
+## UI Architecture
 
 - UI remains event-driven end-to-end.
 - `deriveWorldState` is index-only (`events`, `eventsByTaskId`, `eventsByWorkerId`).
