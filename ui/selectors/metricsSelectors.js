@@ -1,5 +1,6 @@
-import { getTaskEvents } from './taskSelectors.js';
+import { getTaskEvents, getLifecycleEvents } from './taskSelectors.js';
 import { getAllTasks } from './taskSelectors.js';
+import { assertNoSystemEventInLifecycleDerivation } from './eventTaxonomyInvariant.js';
 
 function firstTimestamp(events, type) {
   const match = events.find((event) => event && event.type === type);
@@ -7,9 +8,10 @@ function firstTimestamp(events, type) {
 }
 
 export function getQueueTime(indexedWorld, taskId) {
-  const events = getTaskEvents(indexedWorld, taskId);
+  const events = getLifecycleEvents(getTaskEvents(indexedWorld, taskId));
+  assertNoSystemEventInLifecycleDerivation(events, 'metrics:getQueueTime');
   const createdAt = firstTimestamp(events, 'TASK_CREATED');
-  const startedAt = firstTimestamp(events, 'TASK_EXECUTE_STARTED') || firstTimestamp(events, 'TASK_STARTED');
+  const startedAt = firstTimestamp(events, 'TASK_EXECUTE_STARTED');
 
   if (!Number.isFinite(createdAt) || !Number.isFinite(startedAt)) {
     return null;
@@ -19,8 +21,9 @@ export function getQueueTime(indexedWorld, taskId) {
 }
 
 export function getExecutionDuration(indexedWorld, taskId) {
-  const events = getTaskEvents(indexedWorld, taskId);
-  const startedAt = firstTimestamp(events, 'TASK_EXECUTE_STARTED') || firstTimestamp(events, 'TASK_STARTED');
+  const events = getLifecycleEvents(getTaskEvents(indexedWorld, taskId));
+  assertNoSystemEventInLifecycleDerivation(events, 'metrics:getExecutionDuration');
+  const startedAt = firstTimestamp(events, 'TASK_EXECUTE_STARTED');
   const finishedAt = firstTimestamp(events, 'TASK_EXECUTE_FINISHED');
 
   if (!Number.isFinite(startedAt) || !Number.isFinite(finishedAt)) {
@@ -31,7 +34,8 @@ export function getExecutionDuration(indexedWorld, taskId) {
 }
 
 export function getAckLatency(indexedWorld, taskId) {
-  const events = getTaskEvents(indexedWorld, taskId);
+  const events = getLifecycleEvents(getTaskEvents(indexedWorld, taskId));
+  assertNoSystemEventInLifecycleDerivation(events, 'metrics:getAckLatency');
   const finishedAt = firstTimestamp(events, 'TASK_EXECUTE_FINISHED');
   const ackedAt = firstTimestamp(events, 'TASK_ACKED');
 

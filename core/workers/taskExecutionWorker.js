@@ -42,15 +42,12 @@ async function executeDiscordTask(task, { getDiscordClient, taskTriggeredMessage
   const discordClient = typeof getDiscordClient === 'function' ? getDiscordClient() : null;
   const { channelId, messageId, content } = task.payload || {};
 
-  if (!isDiscordSnowflake(channelId) || !isDiscordSnowflake(messageId)) {
-    return ok({
-      skipped: true,
-      note: 'discord_target_unavailable'
-    });
-  }
-
   if (!discordClient || !discordClient.isReady || !discordClient.isReady()) {
     return fail('discordClient is not configured');
+  }
+
+  if (!isDiscordSnowflake(channelId)) {
+    return fail('payload.channelId must be a Discord snowflake');
   }
 
   try {
@@ -62,6 +59,20 @@ async function executeDiscordTask(task, { getDiscordClient, taskTriggeredMessage
     }
 
     const channel = await discordClient.channels.fetch(channelId);
+
+    if (task.action === 'send_channel_message') {
+      const sentMessage = await channel.send(String(content || ''));
+      if (sentMessage && sentMessage.id && taskTriggeredMessageIds) {
+        taskTriggeredMessageIds.add(sentMessage.id);
+      }
+
+      return ok({ sent: true });
+    }
+
+    if (!isDiscordSnowflake(messageId)) {
+      return fail('payload.messageId must be a Discord snowflake for reply_to_message');
+    }
+
     const message = await channel.messages.fetch(messageId);
 
     const replyMessage = await message.reply(content);
@@ -199,7 +210,13 @@ export function createTaskExecutionWorker({ getDiscordClient, taskTriggeredMessa
         const action = String(task.action || '').toLowerCase();
 
         if (
-          action === 'reply_to_message'
+          action === 'send_channel_message'
+          || action === 'discord.send_channel_message'
+          || action === 'discord_message'
+          || action === 'discord.message'
+          || action === 'reply_to_message'
+          || action === 'discord_reply'
+          || action === 'discord.reply'
           || action === 'summarize_message'
           || action === 'classify_intent'
           || action === 'fetch_order'

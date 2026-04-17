@@ -15,24 +15,12 @@ function toTaskPayload(task) {
     payload
   };
 
-  if (typeof task.action === 'string' && task.action.trim()) {
-    normalized.action = task.action.trim();
+  if (typeof task.intent === 'string' && task.intent.trim()) {
+    normalized.intent = task.intent.trim();
   }
 
   if (Number.isFinite(task && task.priority)) {
     normalized.priority = Number(task.priority);
-  }
-
-  if (typeof task.productId === 'string') {
-    normalized.productId = task.productId;
-  }
-
-  if (typeof task.provider === 'string') {
-    normalized.provider = task.provider;
-  }
-
-  if (task && task.designIntent && typeof task.designIntent === 'object') {
-    normalized.designIntent = { ...task.designIntent };
   }
 
   return normalized;
@@ -62,6 +50,8 @@ async function injectTask(task) {
     // UI intent ends here — engine auto-drives enqueue → claim → execute → ack.
     return {
       success: true,
+      statusCode: response.status,
+      body: body || null,
       data: body && body.task ? body.task : body
     };
   } catch (error) {
@@ -118,7 +108,7 @@ export async function dispatchCommand(inputString) {
         ...(await controlAPI.injectTask({
           type: 'discord',
           title: 'Manual inject',
-          action: 'reply_to_message',
+          intent: parsed.messageId ? 'discord_reply' : 'discord_message',
           payload: {
             channelId: parsed.channelId || null,
             messageId: parsed.messageId || null,
@@ -133,7 +123,7 @@ export async function dispatchCommand(inputString) {
       ...(await controlAPI.injectTask({
         type: 'shopify',
         title: parsed.message,
-        action: 'process_order',
+        intent: 'shopify_process_order',
         payload: {
           note: parsed.message
         }

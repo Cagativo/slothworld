@@ -4,38 +4,66 @@ export const agentVisualConfig = {
     animations: {
       idle: {
         key: 'julia_idle',
+        sprite: 'Julia-Idle.png',
         frameWidth: 32,
         frameHeight: 32,
         frameCount: 4,
-        frameDurationMs: 220
+        fps: 5,
+        loop: true
+      },
+      queued: {
+        key: 'julia_idle',
+        sprite: 'Julia-Idle.png',
+        frameWidth: 32,
+        frameHeight: 32,
+        frameCount: 4,
+        fps: 4,
+        loop: true
       },
       moving: {
         key: 'julia_walk',
+        sprite: 'Julia_walk_Foward.png',
         frameWidth: 64,
         frameHeight: 64,
         frameCount: 4,
-        frameDurationMs: 140
+        fps: 8,
+        loop: true
       },
       working: {
         key: 'julia_typing',
+        sprite: 'Julia_PC.png',
         frameWidth: 64,
         frameHeight: 64,
         frameCount: 6,
-        frameDurationMs: 120
+        fps: 9,
+        loop: true
+      },
+      awaiting_ack: {
+        key: 'julia_typing',
+        sprite: 'Julia_PC.png',
+        frameWidth: 64,
+        frameHeight: 64,
+        frameCount: 6,
+        fps: 5,
+        loop: true
       },
       delivering: {
         key: 'julia_walk',
+        sprite: 'Julia_walk_Foward.png',
         frameWidth: 64,
         frameHeight: 64,
         frameCount: 4,
-        frameDurationMs: 140
+        fps: 8,
+        loop: true
       },
       error: {
         key: 'julia_error',
+        sprite: 'Julia.png',
         frameWidth: 32,
         frameHeight: 32,
         frameCount: 4,
-        frameDurationMs: 180
+        fps: 7,
+        loop: true
       }
     }
   }
@@ -70,10 +98,14 @@ export function resolveAgentVisual(role, state) {
     state: stateKey,
     baseSprite: visualByRole ? visualByRole.baseSprite : null,
     animation: animationKey,
-    spriteFilename,
+    spriteFilename: normalizedAnimation && normalizedAnimation.sprite ? normalizedAnimation.sprite : spriteFilename,
     frameWidth: normalizedAnimation && Number.isFinite(normalizedAnimation.frameWidth) ? normalizedAnimation.frameWidth : null,
     frameHeight: normalizedAnimation && Number.isFinite(normalizedAnimation.frameHeight) ? normalizedAnimation.frameHeight : null,
     frameCount: normalizedAnimation && Number.isFinite(normalizedAnimation.frameCount) ? normalizedAnimation.frameCount : 1,
-    frameDurationMs: normalizedAnimation && Number.isFinite(normalizedAnimation.frameDurationMs) ? normalizedAnimation.frameDurationMs : 200
+    fps: normalizedAnimation && Number.isFinite(normalizedAnimation.fps) ? normalizedAnimation.fps : 5,
+    loop: normalizedAnimation && typeof normalizedAnimation.loop === 'boolean' ? normalizedAnimation.loop : true,
+    frameDurationMs: normalizedAnimation && Number.isFinite(normalizedAnimation.fps) && normalizedAnimation.fps > 0
+      ? Math.round(1000 / normalizedAnimation.fps)
+      : 200
   };
 }

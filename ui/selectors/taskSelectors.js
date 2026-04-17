@@ -1,3 +1,7 @@
+import { officeLayout } from '../config/officeLayout.js';
+import { isLifecycleEvent } from '../../core/world/eventTaxonomy.js';
+import { assertNoSystemEventInLifecycleDerivation } from './eventTaxonomyInvariant.js';
+
 function normalizeTaskId(taskId) {
   return taskId === null || taskId === undefined ? null : String(taskId);
 }
@@ -56,15 +60,7 @@ export function isActiveTaskStatus(status) {
   return status === 'claimed' || status === 'executing' || status === 'awaiting_ack';
 }
 
-export function getTaskIds(indexedWorld) {
-  if (!indexedWorld || !(indexedWorld.eventsByTaskId instanceof Map)) {
-    return [];
-  }
-
-  return Array.from(indexedWorld.eventsByTaskId.keys());
-}
-
-export function getTaskEvents(indexedWorld, taskId) {
+function getRawTaskEvents(indexedWorld, taskId) {
   const id = normalizeTaskId(taskId);
   if (!id || !indexedWorld || !(indexedWorld.eventsByTaskId instanceof Map)) {
     return [];
@@ -74,8 +70,36 @@ export function getTaskEvents(indexedWorld, taskId) {
   return Array.isArray(events) ? events : [];
 }
 
+export function getLifecycleEvents(events) {
+  if (!Array.isArray(events)) {
+    return [];
+  }
+
+  return events.filter((event) => isLifecycleEvent(event && event.type));
+}
+
+function getLifecycleTaskEvents(indexedWorld, taskId, context) {
+  const rawEvents = getRawTaskEvents(indexedWorld, taskId);
+  const lifecycleEvents = getLifecycleEvents(rawEvents);
+  assertNoSystemEventInLifecycleDerivation(lifecycleEvents, context);
+  return lifecycleEvents;
+}
+
+export function getTaskIds(indexedWorld) {
+  if (!indexedWorld || !(indexedWorld.eventsByTaskId instanceof Map)) {
+    return [];
+  }
+
+  return Array.from(indexedWorld.eventsByTaskId.keys())
+    .filter((taskId) => getLifecycleTaskEvents(indexedWorld, taskId, 'getTaskIds').length > 0);
+}
+
+export function getTaskEvents(indexedWorld, taskId) {
+  return getLifecycleTaskEvents(indexedWorld, taskId, 'getTaskEvents');
+}
+
 export function getTaskStatus(indexedWorld, taskId) {
-  const events = getTaskEvents(indexedWorld, taskId);
+  const events = getLifecycleTaskEvents(indexedWorld, taskId, 'getTaskStatus');
   let status = 'unknown';
 
   for (const event of events) {
@@ -85,7 +109,7 @@ export function getTaskStatus(indexedWorld, taskId) {
       continue;
     }
 
-    if (type === 'TASK_ENQUEUED' || type === 'TASK_QUEUED') {
+    if (type === 'TASK_ENQUEUED') {
       status = 'queued';
       continue;
     }
@@ -95,7 +119,7 @@ export function getTaskStatus(indexedWorld, taskId) {
       continue;
     }
 
-    if (type === 'TASK_EXECUTE_STARTED' || type === 'TASK_STARTED') {
+    if (type === 'TASK_EXECUTE_STARTED') {
       status = 'executing';
       continue;
     }
@@ -119,7 +143,7 @@ export function getTaskStatus(indexedWorld, taskId) {
 }
 
 export function getTaskTimeline(indexedWorld, taskId) {
-  const events = getTaskEvents(indexedWorld, taskId);
+  const events = getLifecycleTaskEvents(indexedWorld, taskId, 'getTaskTimeline');
   let previousTimestamp = null;
 
   return events
@@ -148,7 +172,7 @@ export function getTaskSnapshot(indexedWorld, taskId) {
     return null;
   }
 
-  const events = getTaskEvents(indexedWorld, id);
+  const events = getLifecycleTaskEvents(indexedWorld, id, 'getTaskSnapshot');
   if (!events.length) {
     return null;
   }
@@ -288,7 +312,48 @@ export function getTaskById(indexedWorld, taskId) {
   return getTaskSnapshot(indexedWorld, id);
 }
 
-export function getDeskIndexForTask(task, deskCount = 6) {
+function resolveOfficePoint(value, fallback) {
+  if (!value || typeof value !== 'object') {
+    return { ...fallback };
+  }
+
+  const x = Number.isFinite(value.x) ? Number(value.x) : fallback.x;
+  const y = Number.isFinite(value.y) ? Number(value.y) : fallback.y;
+  return { x, y };
+}
+
+function resolveWorkerDeskPositions() {
+  const fallback = [
+    { x: 208, y: 220 },
+    { x: 348, y: 220 },
+    { x: 488, y: 220 },
+    { x: 208, y: 360 },
+    { x: 348, y: 360 },
+    { x: 488, y: 360 }
+  ];
+
+  const configured = officeLayout && Array.isArray(officeLayout.workerDesks)
+    ? officeLayout.workerDesks
+    : [];
+
+  if (!configured.length) {
+    return fallback;
+  }
+
+  return configured.map((desk, index) => resolveOfficePoint(desk, fallback[index % fallback.length]));
+}
+
+export function getOfficeLayoutSnapshot() {
+  const workerDesks = resolveWorkerDeskPositions();
+  return {
+    intakeDesk: resolveOfficePoint(officeLayout && officeLayout.intakeDesk, { x: 120, y: 220 }),
+    workerDesks,
+    executionZone: resolveOfficePoint(officeLayout && officeLayout.executionZone, { x: 640, y: 220 }),
+    deliveryZone: resolveOfficePoint(officeLayout && officeLayout.deliveryZone, { x: 640, y: 360 })
+  };
+}
+
+export function getDeskIndexForTask(task, deskCount = resolveWorkerDeskPositions().length) {
   const safeDeskCount = Math.max(1, Number.isFinite(deskCount) ? Number(deskCount) : 6);
   const fallbackTaskId = task && task.id ? String(task.id) : 'task';
   const rawDeskId = task && task.deskId ? String(task.deskId) : `desk-${hashString(fallbackTaskId) % safeDeskCount}`;
@@ -300,20 +365,111 @@ export function getDeskIndexForTask(task, deskCount = 6) {
   return hashString(rawDeskId) % safeDeskCount;
 }
 
-export function getDeskPosition(index, deskCount = 6) {
-  const cols = [208, 348, 488];
-  const rows = [220, 360];
+export function getDeskPosition(index, deskCount = resolveWorkerDeskPositions().length) {
+  const workerDesks = resolveWorkerDeskPositions();
   const safeDeskCount = Math.max(1, Number.isFinite(deskCount) ? Number(deskCount) : 6);
   const i = Math.max(0, Number.isFinite(index) ? Number(index) : 0) % safeDeskCount;
+  const fallback = workerDesks[Math.min(i, workerDesks.length - 1)] || { x: 208, y: 220 };
+  const desk = workerDesks[i] || fallback;
 
   return {
-    x: cols[i % cols.length],
-    y: rows[Math.floor(i / cols.length)]
+    x: desk.x,
+    y: desk.y
   };
 }
 
+export function getTaskOfficeRoute(task, options = {}) {
+  const layout = getOfficeLayoutSnapshot();
+  const deskCount = Math.max(1, Number.isFinite(options && options.deskCount) ? Number(options.deskCount) : layout.workerDesks.length || 1);
+  const deskIndex = getDeskIndexForTask(task, deskCount);
+  const workerDesk = getDeskPosition(deskIndex, deskCount);
+
+  return {
+    intakeDesk: layout.intakeDesk,
+    workerDesk,
+    executionZone: layout.executionZone,
+    deliveryZone: layout.deliveryZone,
+    deskIndex
+  };
+}
+
+export function getTaskVisualTarget(task, options = {}) {
+  const route = getTaskOfficeRoute(task, options);
+  const status = task && typeof task.status === 'string' ? task.status : 'unknown';
+
+  if (status === 'queued' || status === 'created' || status === 'unknown') {
+    return route.intakeDesk;
+  }
+
+  if (status === 'claimed') {
+    return route.workerDesk;
+  }
+
+  if (status === 'executing') {
+    return route.executionZone;
+  }
+
+  if (status === 'awaiting_ack' || status === 'completed' || status === 'acknowledged' || status === 'failed') {
+    return route.deliveryZone;
+  }
+
+  return route.workerDesk;
+}
+
+export function getTaskTransitionTimestamps(indexedWorld, taskId) {
+  const events = getLifecycleTaskEvents(indexedWorld, taskId, 'getTaskTransitionTimestamps');
+  const transitions = {
+    createdAt: null,
+    queuedAt: null,
+    claimedAt: null,
+    executingAt: null,
+    awaitingAckAt: null,
+    ackedAt: null
+  };
+
+  for (const event of events) {
+    const type = typeof event.type === 'string' ? event.type : null;
+    const ts = Number.isFinite(event && event.timestamp) ? Number(event.timestamp) : null;
+    if (!Number.isFinite(ts) || !type) {
+      continue;
+    }
+
+    if (type === 'TASK_CREATED' && !Number.isFinite(transitions.createdAt)) {
+      transitions.createdAt = ts;
+      continue;
+    }
+
+    if (type === 'TASK_ENQUEUED' && !Number.isFinite(transitions.queuedAt)) {
+      transitions.queuedAt = ts;
+      continue;
+    }
+
+    if (type === 'TASK_CLAIMED' && !Number.isFinite(transitions.claimedAt)) {
+      transitions.claimedAt = ts;
+      continue;
+    }
+
+    if (type === 'TASK_EXECUTE_STARTED' && !Number.isFinite(transitions.executingAt)) {
+      transitions.executingAt = ts;
+      continue;
+    }
+
+    if (type === 'TASK_EXECUTE_FINISHED' && !Number.isFinite(transitions.awaitingAckAt)) {
+      transitions.awaitingAckAt = ts;
+      continue;
+    }
+
+    if (type === 'TASK_ACKED' && !Number.isFinite(transitions.ackedAt)) {
+      transitions.ackedAt = ts;
+    }
+  }
+
+  return transitions;
+}
+
 export function getAllDesks(indexedWorld, options = {}) {
-  const deskCount = Math.max(1, Number.isFinite(options && options.deskCount) ? Number(options.deskCount) : 6);
+  const layout = getOfficeLayoutSnapshot();
+  const deskCount = Math.max(1, Number.isFinite(options && options.deskCount) ? Number(options.deskCount) : layout.workerDesks.length || 1);
   const tasks = getAllTasks(indexedWorld);
   const buckets = Array.from({ length: deskCount }, (_, idx) => ({
     id: `desk-${idx}`,
@@ -345,7 +501,9 @@ export function getAllDesks(indexedWorld, options = {}) {
 
 export function getRecentEvents(indexedWorld, limit = 100) {
   const events = indexedWorld && Array.isArray(indexedWorld.events) ? indexedWorld.events : [];
-  const capped = events.slice(-Math.max(1, Number(limit) || 100));
+  const lifecycleOnly = getLifecycleEvents(events);
+  const capped = lifecycleOnly.slice(-Math.max(1, Number(limit) || 100));
+  assertNoSystemEventInLifecycleDerivation(capped, 'getRecentEvents');
 
   return capped.map((event) => ({
     id: Number.isFinite(event && event.id) ? Number(event.id) : null,

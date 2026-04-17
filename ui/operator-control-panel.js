@@ -23,7 +23,10 @@ const panelState = {
   selectedTimelineIndex: null,
   activeTasksOnly: false,
   recentSeconds: 0,
-  maxEventRows: 100
+  maxEventRows: 100,
+  createTaskPending: false,
+  createTaskMessage: '',
+  createTaskTone: ''
 };
 
 function stringify(value) {
@@ -76,7 +79,83 @@ function taskIcon(status) {
   return '•';
 }
 
-function renderTaskList(listElement, tasks, selectedTaskId) {
+function extractTaskError(task = {}, timeline = []) {
+  const directCandidates = [
+    task.error,
+    task.lastError,
+    task.executionResult && task.executionResult.error,
+    task.executionResult && task.executionResult.result && task.executionResult.result.error,
+    task.payload && task.payload.error
+  ];
+
+  for (const candidate of directCandidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  for (let i = timeline.length - 1; i >= 0; i -= 1) {
+    const entry = timeline[i];
+    const payload = entry && entry.payload && typeof entry.payload === 'object' ? entry.payload : {};
+    const payloadError = payload && typeof payload.error === 'string' ? payload.error.trim() : '';
+    if (payloadError) {
+      return payloadError;
+    }
+  }
+
+  return null;
+}
+
+function formatTaskErrorMessage(task, rawError) {
+  if (!rawError) {
+    return null;
+  }
+
+  if (rawError.startsWith('provider_timeout:')) {
+    const timeoutMs = rawError.split(':')[1] || 'unknown';
+    return `provider timeout (${timeoutMs}ms)`;
+  }
+
+  if (rawError === 'openai_api_key_missing') {
+    return 'OpenAI API key missing';
+  }
+
+  if (rawError === 'huggingface_api_key_missing') {
+    return 'HuggingFace API key missing';
+  }
+
+  if (task && task.type === 'image_render') {
+    return `image render failed: ${rawError}`;
+  }
+
+  return rawError;
+}
+
+function buildExecutionTrace(timeline = []) {
+  return timeline.map((entry) => {
+    const payload = entry && entry.payload && typeof entry.payload === 'object' ? entry.payload : {};
+    const trace = {
+      at: formatIso(entry.timestamp),
+      event: entry.type
+    };
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'success')) {
+      trace.success = payload.success;
+    }
+
+    if (typeof payload.error === 'string' && payload.error.trim()) {
+      trace.error = payload.error.trim();
+    }
+
+    if (typeof payload.attempts === 'number') {
+      trace.attempts = payload.attempts;
+    }
+
+    return trace;
+  });
+}
+
+function renderTaskList(listElement, tasks, selectedTaskId, indexedWorld) {
   listElement.innerHTML = '';
 
   if (!tasks.length) {
@@ -88,13 +167,24 @@ function renderTaskList(listElement, tasks, selectedTaskId) {
   }
 
   tasks.slice(0, 25).forEach((task) => {
+    const timeline = indexedWorld ? getTaskTimeline(indexedWorld, task.id).slice(-20) : [];
+    const rawError = extractTaskError(task, timeline);
+    const displayError = formatTaskErrorMessage(task, rawError);
+
     const li = document.createElement('li');
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `ocp-item ocp-task-${taskTone(task.status)}${selectedTaskId === task.id ? ' is-selected' : ''}`;
     button.dataset.taskId = task.id;
-    const label = `${task.title} | ${task.status}${task.assignedAgentId ? ` | ${task.assignedAgentId}` : ''}`;
+    const statusLabel = `status:${task.status || 'unknown'}`;
+    const errorLabel = displayError ? ` | error:${displayError}` : '';
+    const label = `${task.title} | ${statusLabel}${task.assignedAgentId ? ` | ${task.assignedAgentId}` : ''}${errorLabel}`;
     button.textContent = `${taskIcon(task.status)} ${label}`;
+
+    if (task.type === 'image_render' && displayError) {
+      button.classList.add('ocp-task-image-failed');
+    }
+
     li.appendChild(button);
     listElement.appendChild(li);
   });
@@ -224,6 +314,10 @@ function createPanelRoot() {
 
     <section class="ocp-section" data-section="tasks">
       <h3>Tasks (Derived)</h3>
+      <div class="ocp-debug-actions">
+        <button type="button" class="ocp-debug-create" data-action="create-test-task">+ Create Test Task</button>
+        <span class="ocp-debug-indicator" data-role="create-task-indicator"></span>
+      </div>
       <div class="ocp-toolbar">
         <label class="ocp-control">
           <input type="checkbox" data-control="active-only" />
@@ -312,6 +406,8 @@ export function initOperatorControlPanel() {
   const activeOnlyInput = panel.querySelector('[data-control="active-only"]');
   const recentSecondsSelect = panel.querySelector('[data-control="recent-seconds"]');
   const maxEventsSelect = panel.querySelector('[data-control="max-events"]');
+  const createTaskButton = panel.querySelector('[data-action="create-test-task"]');
+  const createTaskIndicator = panel.querySelector('[data-role="create-task-indicator"]');
 
   if (activeOnlyInput) {
     activeOnlyInput.checked = panelState.activeTasksOnly;
@@ -345,6 +441,11 @@ export function initOperatorControlPanel() {
     if (target.dataset.timelineIndex) {
       panelState.selectedTimelineIndex = Number(target.dataset.timelineIndex);
       renderPanel();
+      return;
+    }
+
+    if (target.matches('[data-action="create-test-task"]')) {
+      createTestTask();
     }
   });
 
@@ -383,10 +484,10 @@ export function initOperatorControlPanel() {
     const agents = getAllAgents(indexedWorld);
     const buckets = getTaskBuckets(indexedWorld, { tasks });
 
-    renderTaskList(queuedList, buckets.queued, panelState.selectedTaskId);
-    renderTaskList(activeList, buckets.active, panelState.selectedTaskId);
-    renderTaskList(doneList, buckets.done, panelState.selectedTaskId);
-    renderTaskList(failedList, buckets.failed, panelState.selectedTaskId);
+    renderTaskList(queuedList, buckets.queued, panelState.selectedTaskId, indexedWorld);
+    renderTaskList(activeList, buckets.active, panelState.selectedTaskId, indexedWorld);
+    renderTaskList(doneList, buckets.done, panelState.selectedTaskId, indexedWorld);
+    renderTaskList(failedList, buckets.failed, panelState.selectedTaskId, indexedWorld);
 
     const recentEvents = getRecentEvents(indexedWorld, panelState.maxEventRows).reverse();
     eventsList.innerHTML = '';
@@ -470,7 +571,22 @@ export function initOperatorControlPanel() {
           eventDetail.textContent = stringify(selectedEntry);
         }
 
+        const rawError = extractTaskError(selectedTask, timelineRows);
+        const displayError = formatTaskErrorMessage(selectedTask, rawError);
+        const executionTrace = buildExecutionTrace(timelineRows);
+
         taskDetail.textContent = stringify({
+          id: selectedTask.id,
+          type: selectedTask.type,
+          title: selectedTask.title,
+          status: selectedTask.status,
+          engineStatus: selectedTask.engineStatus || null,
+          taskError: displayError,
+          executionResult: selectedTask.executionResult || null,
+          provider: selectedTask.provider || (selectedTask.payload && selectedTask.payload.provider) || null,
+          attempts: selectedTask.attempts || null,
+          durationMs: selectedTask.durationMs || selectedTask.executionDurationMs || null,
+          executionTrace,
           ...selectedTask,
           timeline: timelineRows
         });
@@ -491,7 +607,76 @@ export function initOperatorControlPanel() {
       agentDetail.textContent = 'Click an agent to inspect derived assignment.';
     }
 
+    if (createTaskButton) {
+      createTaskButton.disabled = panelState.createTaskPending;
+      createTaskButton.textContent = panelState.createTaskPending
+        ? 'Creating...'
+        : '+ Create Test Task';
+    }
+
+    if (createTaskIndicator) {
+      createTaskIndicator.textContent = panelState.createTaskMessage;
+      createTaskIndicator.className = panelState.createTaskMessage
+        ? `ocp-debug-indicator is-visible ${panelState.createTaskTone === 'error' ? 'is-error' : 'is-success'}`
+        : 'ocp-debug-indicator';
+    }
+
     drawTaskSelectionOverlay(allTasks, agents, panelState.selectedTaskId);
+  }
+
+  async function createTestTask() {
+    if (panelState.createTaskPending) {
+      return;
+    }
+
+    if (!window.controlAPI || typeof window.controlAPI.injectTask !== 'function') {
+      panelState.createTaskMessage = 'Create failed: controlAPI unavailable';
+      panelState.createTaskTone = 'error';
+      renderPanel();
+      console.error('[CreateTestTask] controlAPI.injectTask unavailable');
+      return;
+    }
+
+    panelState.createTaskPending = true;
+    panelState.createTaskMessage = '';
+    panelState.createTaskTone = '';
+    renderPanel();
+
+    try {
+      const response = await window.controlAPI.injectTask({
+        type: 'image_render',
+        title: 'Test Task',
+        intent: 'render_product_image',
+        payload: {
+          source: 'operator_control_panel',
+          prompt: 'minimal product test render'
+        }
+      });
+
+      console.log('[CreateTestTask] /task response', {
+        success: response && response.success === true,
+        statusCode: response && response.statusCode ? response.statusCode : null,
+        body: response && Object.prototype.hasOwnProperty.call(response, 'body') ? response.body : (response && response.data ? response.data : null),
+        error: response && response.error ? response.error : null
+      });
+
+      if (!response || !response.success) {
+        const status = response && response.statusCode ? ` (${response.statusCode})` : '';
+        const detail = response && response.data ? ` ${stringify(response.data)}` : (response && response.error ? ` ${response.error}` : '');
+        panelState.createTaskMessage = `Create failed${status}${detail}`;
+        panelState.createTaskTone = 'error';
+      } else {
+        panelState.createTaskMessage = `Task created (${response.statusCode || 200}) ${stringify(response.body || response.data || {})}`;
+        panelState.createTaskTone = 'success';
+      }
+    } catch (error) {
+      console.error('[CreateTestTask] request_failed', error);
+      panelState.createTaskMessage = `Create failed ${error && error.message ? error.message : 'request_failed'}`;
+      panelState.createTaskTone = 'error';
+    } finally {
+      panelState.createTaskPending = false;
+      renderPanel();
+    }
   }
 
   renderPanel();
