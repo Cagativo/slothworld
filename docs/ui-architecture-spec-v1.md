@@ -1,425 +1,181 @@
-Here is your **clean, consolidated, production-grade UI Architecture Spec v2** — combining everything you already built plus the missing enforcement layer so Copilot stops drifting.
+# Slothworld UI Architecture
 
-You can paste this directly into:
+This document reflects the current architecture. It is versionless by design.
 
-```text
-docs/ui-architecture-spec-v2.md
-```
+Historical evolution (v1 → v2) has been fully consolidated into this spec.
 
 ---
 
-# 🎨 SLOTHWORLD — UI ARCHITECTURE SPEC v2
+## Purpose
+
+The Slothworld UI is a deterministic, read-only projection of an event-driven system.
+
+- The event log is the only source of truth
+- `deriveWorldState` indexes events (no meaning)
+- selectors define all semantic meaning
+- UI renders selector output
+
+No UI component may interpret raw events directly.
 
 ---
 
-# 🧠 PURPOSE
+## deriveWorldState (Pure Indexer)
 
-The Slothworld UI is a **read-only observability system** for a deterministic event-driven execution engine.
+`deriveWorldState` is a pure indexer.
 
-It is NOT:
+It returns indexed event containers without applying lifecycle semantics, metrics, or anomaly logic.
 
-* a game
-* a simulation
-* a control system
-* a workflow orchestrator
+Returned structure:
+- `events`: ordered raw event list
+- `eventsByTaskId`: task-scoped event index
+- `eventsByWorkerId`: worker-scoped event index
 
-It is:
-
-> a real-time visual debugger for TaskEngine execution
-
----
-
-# 🧠 ABSOLUTE UI TRUTH
-
-The UI has NO authority over system state.
-
-It only renders truth derived from:
-
-```text
-event stream → deriveWorldState → selectors → UI views
-```
+Hard boundary:
+- Must not derive lifecycle status
+- Must not compute metrics
+- Must not infer anomalies
+- Must not classify success or failure
 
 ---
 
-# 🧱 UI DESIGN PRINCIPLES (NON-NEGOTIABLE)
+## Selector Layer (Single Source of Meaning)
 
-## 1. Event-first architecture
+Selectors are the only semantic layer.
 
-All UI originates from the immutable event stream.
+Selectors are pure functions.
 
-No UI state is authoritative.
+They must:
+- depend only on input data
+- produce deterministic outputs
+- contain all lifecycle and anomaly meaning
 
----
+No other layer is allowed to define semantic meaning.
 
-## 2. Read-only system
+UI and rendering modules must consume selector outputs and never reinterpret event meaning.
 
-UI MUST NOT:
+### taskSelectors
+Lifecycle derivation and task-level projections.
+Examples:
+- task status
+- task snapshots
+- transitions
+- task timelines
 
-* mutate tasks
-* trigger execution
-* influence engine behavior
-* call providers or backend actions
+### agentSelectors
+Agent projections derived from indexed world state.
+Examples:
+- active task association
+- visual state projection
+- workload views
 
----
+### metricsSelectors
+Aggregations derived from lifecycle-safe selector inputs.
+Examples:
+- queue time
+- execution duration
+- ack latency
+- throughput counts
 
-## 3. Multi-view consistency
+### anomalySelectors
+Clustered incident derivation for observability.
 
-All panels represent the SAME underlying truth.
+Examples:
+- execution failures
+- stalled tasks
+- notification issues
 
-Different views ≠ different interpretations.
-
----
-
-## 4. No hidden logic
-
-UI may:
-
-* filter
-* group
-* visualize
-* highlight
-
-UI may NOT:
-
-* infer lifecycle meaning beyond spec
-* invent new system concepts
-* create workflow behavior
-* introduce decision systems
-
----
-
-# 🧩 UI SYSTEM MODULES
-
----
-
-# 1. 🧠 EVENT STREAM CORE
-
-## Role
-
-Immutable backbone of UI.
-
-### Input
-
-* append-only event log
-
-### Output
-
-* normalized event objects
-
-### Rules
-
-* immutable
-* chronological ordering guaranteed
-* no interpretation logic
-
-### Consumers
-
-* Task Inspector
-* Raccoon Feeder
-* Canvas Renderer
-* Dashboard
+Clusters are the only allowed anomaly output format.
+UI must not construct or infer incidents manually.
 
 ---
 
-# 2. 📜 TASK LIFECYCLE INSPECTOR (PRIMARY DEBUG VIEW)
+## Event Taxonomy
 
-## Role
+Event taxonomy is strict and explicit.
 
-Explains a single task’s full history.
+### Lifecycle events:
+- `TASK_CREATED`
+- `TASK_ENQUEUED`
+- `TASK_CLAIMED`
+- `TASK_EXECUTE_STARTED`
+- `TASK_EXECUTE_FINISHED`
+- `TASK_ACKED`
 
-### Shows:
+### System events (observability only):
+- `TASK_NOTIFICATION_SENT`
+- `TASK_NOTIFICATION_SKIPPED`
+- `TASK_NOTIFICATION_FAILED`
 
-* full event chain
-* timestamps between transitions
-* worker involvement
-* execution duration
-* ACK outcome
-
-### Canonical flow:
-
-```text
-TASK_CREATED
-→ TASK_ENQUEUED
-→ TASK_CLAIMED
-→ TASK_EXECUTE_STARTED
-→ TASK_EXECUTE_FINISHED
-→ TASK_ACKED
-```
-
-### Rules:
-
-* derived ONLY from events
-* no inferred states
-* must flag missing transitions
+Rule:
+- Lifecycle derivation must operate on lifecycle events only
+- System events MUST NOT affect lifecycle derivation
 
 ---
 
-# 3. 🦝 RACCOON FEEDER (EXCEPTION VIEW)
+## UI Consumption Rules
 
-## Role
+Strictly forbidden in UI and renderer modules:
 
-Read-only anomaly aggregation dashboard.
+- Reading `event.type` directly
+- Reading `payload.status` directly
+- Re-deriving lifecycle meaning outside selectors
+- Re-deriving anomaly meaning outside selectors
 
-### Input (ONLY event filters)
-
-* TASK_ACKED failures
-* stalled ACK windows
-* execution timeouts
-* missing transitions
-* enforcement violations
-
-### Output
-
-Grouped incident clusters:
-
-* failed_tasks
-* stalled_tasks
-* unacked_tasks
-* execution_timeouts
+Required:
+- UI components consume selector outputs only
+- Rendering consumes projection models only
+- Renderer behavior is deterministic for a given indexed input
 
 ---
 
-## 🚫 HARD RULES
+## Anomaly Clustering Model
 
-The Raccoon Feeder MUST NOT:
+`getIncidentClusters(indexedWorld, options)` returns:
 
-* trigger retries
-* modify tasks
-* execute actions
-* act as a control system
 
-It is:
-
-> a log intelligence view, not an operator system
-
----
-
-# 4. 🎮 CANVAS OFFICE RENDERER (SPATIAL VIEW)
-
-## Role
-
-Visual metaphor of execution state.
-
-### Entities (derived only)
-
-* workers
-* tasks
-* desks
-* movement paths
-
----
-
-## Event mapping:
-
-| Event                 | Visual              |
-| --------------------- | ------------------- |
-| TASK_CREATED          | ticket spawns       |
-| TASK_ENQUEUED         | queued              |
-| TASK_CLAIMED          | worker moves        |
-| TASK_EXECUTE_STARTED  | working animation   |
-| TASK_EXECUTE_FINISHED | processing complete |
-| TASK_ACKED            | terminal animation  |
-
----
-
-## Rules:
-
-* no lifecycle inference
-* no stored state
-* no logic decisions
-
----
-
-# 5. 🧭 SYSTEM OVERVIEW DASHBOARD
-
-## Role
-
-High-level system observability.
-
-### Displays:
-
-* active tasks
-* throughput
-* ACK success/failure rate
-* worker utilization
-* queue depth
-* execution latency
-
----
-
-## Rules:
-
-* aggregation only
-* no per-task mutation
-* no semantic inference
-
----
-
-# 🧍 AGENT VISUAL MODEL (UI ONLY)
-
-Agents DO NOT exist in backend.
-
-They are derived views:
-
-```ts
-AgentViewModel = {
-  agentId: string,
-  role: "researcher" | "designer" | "operator" | "executor",
-  state: "idle" | "moving" | "working" | "error" | "delivering",
-  position: { x: number, y: number },
-  currentTaskId?: string
+{
+  type,
+  severity,
+  taskIds,
+  summary,
+  representativeEvents
 }
-```
+
+Field contract:
+
+type: cluster identifier string
+severity: "low" | "medium" | "high"
+taskIds: array of related task IDs
+summary: human-readable cluster summary
+representativeEvents: array of representative events for inspection
+
+System-event inclusion rules:
+- Canvas renderer must call with `includeSystemEvents: false`
+- Raccoon Feeder must call with `includeSystemEvents: true`
 
 ---
 
-## RULES
+## Observability Events (Non-Lifecycle)
 
-* NOT persisted
-* NOT authoritative
-* NOT system actors
+Notification observability is expressed through system events and must not modify lifecycle state.
 
-Agents are:
+Events:
+- `TASK_NOTIFICATION_SENT`: notification dispatch succeeded
+- `TASK_NOTIFICATION_SKIPPED`: notification intentionally not sent
+- `TASK_NOTIFICATION_FAILED`: notification attempted but failed
 
-> animated projections of worker activity
-
----
-
-# 📊 UI SEMANTIC REGISTRY (STRICT DEFINITION LAYER)
-
-UI is ONLY allowed to use semantics defined here.
+Purpose:
+- operational visibility
+- anomaly clustering support
+- diagnostics without affecting lifecycle
 
 ---
 
-## 1. TASK DERIVED STATES
-
-Allowed derived states:
-
-* active_task
-* executing_task
-* pending_ack_task
-* completed_task (TASK_ACKED success)
-* failed_task (TASK_ACKED failure)
-
----
-
-## 2. TIME METRICS (STRICT)
-
-Only allowed timing calculations:
-
-* queue_time
-  = TASK_CREATED → TASK_CLAIMED
-
-* execution_duration
-  = TASK_EXECUTE_STARTED → TASK_EXECUTE_FINISHED
-
-* ack_latency
-  = TASK_EXECUTE_FINISHED → TASK_ACKED
-
-NO other timing interpretations allowed.
-
----
-
-## 3. ANOMALY DEFINITIONS (STRICT RULES)
-
-Only valid anomalies:
-
-* stalled_ack
-  TASK_EXECUTE_FINISHED exists AND no TASK_ACKED after threshold
-
-* execution_missing_finish
-  TASK_EXECUTE_STARTED exists AND no TASK_EXECUTE_FINISHED
-
-* duplicate_ack
-  multiple TASK_ACKED for same taskId
-
----
-
-## 🚫 PROHIBITED SEMANTICS
-
-UI MUST NOT invent:
-
-* retry storms
-* failure clusters
-* behavioral intelligence layers
-* system health heuristics
-* execution irregularities (unless defined above)
-
-If not in registry → it does not exist.
-
----
-
-# 🔁 DATA FLOW MODEL
-
-```text
-Event Stream
-   ↓
-Event Normalizer
-   ↓
-deriveWorldState()
-   ↓
-Semantic Selectors (REGISTRY ONLY)
-   ↓
-UI Panels
-```
-
----
-
-# 🎨 VISUAL DESIGN RULES
-
-* same event = same meaning everywhere
-* no panel may reinterpret lifecycle independently
-* animation is representation, not state
-
----
-
-# 🚫 FORBIDDEN UI PATTERNS
-
-DO NOT:
-
-* mutate tasks
-* introduce control actions
-* store hidden state per panel
-* build smart agents
-* infer lifecycle transitions
-* create new semantics outside registry
-* introduce UI-driven workflows
-
----
-
-# 🧠 CORE UI MINDSET
-
-The UI is:
-
-> a deterministic observability system for a workflow engine
-
-NOT:
-
-> an interactive simulation of agents
-
----
-
-# 🧠 FINAL RULE
+## Final Constraint
 
 If a feature requires:
+- new semantic interpretation
+- lifecycle changes
+- or state authority
 
-* new lifecycle meaning
-* new semantic category
-* execution influence
-* or system authority
-
-👉 it does NOT belong in UI.
-
----
-
-# 🧭 VERSION GUARANTEE
-
-This spec is:
-
-* deterministic
-* event-bound
-* Copilot-safe
-* implementation-constrained
-* extension-controlled via registry only
-
----
+it must be implemented in selectors, not in UI or rendering layers.
