@@ -101,6 +101,50 @@ canvas {
   color: #9ca3af;
 }
 
+.ocp-debug-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ocp-debug-create {
+  background: #2f6b43;
+  color: #ecfdf5;
+  border: 1px solid #3f8256;
+  font: 11px monospace;
+  padding: 4px 8px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.ocp-debug-create:hover {
+  background: #3f8256;
+}
+
+.ocp-debug-create:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ocp-debug-indicator {
+  min-height: 14px;
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.ocp-debug-indicator.is-visible {
+  color: #86efac;
+}
+
+.ocp-debug-indicator.is-visible.is-success {
+  color: #86efac;
+}
+
+.ocp-debug-indicator.is-visible.is-error {
+  color: #fca5a5;
+}
+
 .ocp-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -180,6 +224,11 @@ canvas {
 
 .ocp-item.ocp-task-failed {
   border-left: 3px solid var(--status-error-red);
+}
+
+.ocp-item.ocp-task-image-failed {
+  border-color: #ef4444;
+  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.4);
 }
 
 .ocp-event-row {

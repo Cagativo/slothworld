@@ -197,14 +197,16 @@ export function initTaskCreatorPanel() {
       };
 
       if (type === 'discord') {
-        taskPayload.action = 'reply_to_message';
+        taskPayload.intent = 'discord_message';
         taskPayload.payload = {
+          source: 'task_creator_panel',
           channelId,
-          content: content || 'Task created from UI'
+          content
         };
       } else if (type === 'shopify') {
-        taskPayload.action = 'process_order';
+        taskPayload.intent = 'shopify_process_order';
         taskPayload.payload = {
+          source: 'task_creator_panel',
           note: content
         };
       }
@@ -258,7 +260,10 @@ export function initTaskCreatorPanel() {
         return;
       }
 
-      const result = await window.createTestProduct({ promptText });
+      const result = await window.createTestProduct({
+        promptText,
+        channelId: FIXED_DISCORD_CHANNEL_ID
+      });
       if (result && result.result && result.result.success) {
         statusDiv.textContent = `✓ Product render task created: ${result.productId}`;
         statusDiv.className = 'tcp-status tcp-success';

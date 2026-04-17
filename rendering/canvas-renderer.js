@@ -2,7 +2,14 @@ import { canvas, ctx } from '../core/app-state.js';
 import { loadedAssets } from './assets.js';
 import { spriteConfigs } from '../core/constants.js';
 import { resolveAgentVisual } from '../ui/config/agentVisualConfig.js';
-import { getAllTasks, getAllDesks } from '../ui/selectors/taskSelectors.js';
+import {
+  getAllTasks,
+  getAllDesks,
+  getTaskOfficeRoute,
+  getTaskVisualTarget,
+  getTaskTransitionTimestamps,
+  getOfficeLayoutSnapshot
+} from '../ui/selectors/taskSelectors.js';
 import { getAllAgents } from '../ui/selectors/agentSelectors.js';
 import { getTaskCounts } from '../ui/selectors/metricsSelectors.js';
 import { getIncidentClusters } from '../ui/selectors/anomalySelectors.js';
@@ -47,6 +54,16 @@ function easeInOutSine(t) {
 function easeOutCubic(t) {
   const x = clamp01(t);
   return 1 - Math.pow(1 - x, 3);
+}
+
+const PHASE_DURATIONS = {
+  claim: 1200,
+  execute: 2000,
+  deliver: 1400
+};
+
+function lerp(a, b, t) {
+  return a + (b - a) * clamp01(t);
 }
 
 function isRenderDebugEnabled() {
@@ -101,6 +118,43 @@ function deskAnchor(desk) {
   return { x: desk.x, y: desk.y + 34 };
 }
 
+function zoneAnchor(zone) {
+  if (!zone) {
+    return { x: 30, y: 30 };
+  }
+
+  return { x: zone.x, y: zone.y + 24 };
+}
+
+function transitionProgress(startAt, frameNow, durationMs, speedFactor) {
+  if (!Number.isFinite(startAt)) {
+    return 0;
+  }
+
+  const safeDuration = Math.max(1, durationMs * speedFactor);
+  return clamp01((frameNow - startAt) / safeDuration);
+}
+
+function quadraticBezierPoint(start, control, end, t) {
+  const x = (1 - t) * (1 - t) * start.x
+    + 2 * (1 - t) * t * control.x
+    + t * t * end.x;
+  const y = (1 - t) * (1 - t) * start.y
+    + 2 * (1 - t) * t * control.y
+    + t * t * end.y;
+
+  return { x, y };
+}
+
+function arcLerp(start, end, t, arcLift = 20) {
+  const mid = {
+    x: lerp(start.x, end.x, 0.5),
+    y: lerp(start.y, end.y, 0.5) - arcLift
+  };
+
+  return quadraticBezierPoint(start, mid, end, clamp01(t));
+}
+
 function findTask(tasksById, taskId) {
   if (!taskId) {
     return null;
@@ -116,50 +170,101 @@ function getAgentVisualState(agent) {
   return agent.state;
 }
 
-function getAgentPosition(agent, frameNow, desksById, tasksById) {
+function getAgentPosition(agent, frameNow, desksById, tasksById, transitionByTaskId, deskCount) {
   const visualState = getAgentVisualState(agent);
   const homeDesk = agent && agent.deskId ? desksById.get(agent.deskId) : null;
   const targetDesk = agent && agent.targetDeskId ? desksById.get(agent.targetDeskId) : null;
   const task = findTask(tasksById, agent && agent.currentTaskId);
 
-  const home = deskAnchor(homeDesk || targetDesk);
-  const target = deskAnchor(targetDesk || homeDesk);
-
   const idHash = hashString(agent && agent.id);
-  const phase = ((frameNow / 1000) + (idHash % 11) * 0.13) % 1;
-  const easedPhase = easeInOutSine(phase);
-  const wobble = Math.sin(frameNow * 0.02 + (idHash % 13)) * 1.2;
+  const speedFactor = 0.9 + ((idHash % 200) / 1000);
   const idleWave = Math.sin(frameNow * 0.0028 + (idHash % 29)) * 2.2;
   const idleDrift = Math.cos(frameNow * 0.0019 + (idHash % 37)) * 1.4;
 
+  const route = task
+    ? getTaskOfficeRoute(task, { deskCount })
+    : {
+      intakeDesk: homeDesk || targetDesk,
+      workerDesk: homeDesk || targetDesk,
+      executionZone: homeDesk || targetDesk,
+      deliveryZone: homeDesk || targetDesk
+    };
+  const transitions = task ? (transitionByTaskId.get(task.id) || {}) : null;
+
+  const intake = deskAnchor(route.intakeDesk || homeDesk || targetDesk);
+  const worker = deskAnchor(route.workerDesk || targetDesk || homeDesk);
+  const execution = zoneAnchor(route.executionZone || targetDesk || homeDesk);
+  const delivery = zoneAnchor(route.deliveryZone || targetDesk || homeDesk);
+  const home = deskAnchor(homeDesk || route.workerDesk || route.intakeDesk);
+
+  const queueToDesk = transitionProgress(
+    transitions && Number.isFinite(transitions.claimedAt) ? transitions.claimedAt : null,
+    frameNow,
+    PHASE_DURATIONS.claim,
+    speedFactor
+  );
+  const deskToExec = transitionProgress(
+    transitions && Number.isFinite(transitions.executingAt) ? transitions.executingAt : null,
+    frameNow,
+    PHASE_DURATIONS.execute,
+    speedFactor
+  );
+  const execToDelivery = easeInOutSine(transitionProgress(
+    transitions && Number.isFinite(transitions.awaitingAckAt) ? transitions.awaitingAckAt : null,
+    frameNow,
+    PHASE_DURATIONS.deliver,
+    speedFactor
+  ));
+
   if (visualState === 'moving') {
+    const p = easeOutCubic(queueToDesk);
+    const path = arcLerp(intake, worker, p, 20);
     return {
-      x: home.x + (target.x - home.x) * easedPhase,
-      y: home.y + (target.y - home.y) * easedPhase + wobble
+      x: path.x,
+      y: path.y
     };
   }
 
   if (visualState === 'working') {
-    const workPulse = easeOutCubic((Math.sin(frameNow * 0.0034 + (idHash % 17)) + 1) / 2);
+    const workPulse = easeOutCubic((Math.sin(frameNow * 0.0028 + (idHash % 17)) + 1) / 2);
+    const path = arcLerp(worker, execution, deskToExec, 10);
     return {
-      x: target.x,
-      y: target.y + (workPulse - 0.5) * 3.2
+      x: path.x,
+      y: path.y + (workPulse - 0.5) * 2.2
     };
   }
 
   if (visualState === 'delivering') {
-    const arc = Math.sin(frameNow * 0.02 + (hashString(agent.id) % 19));
+    const t = execToDelivery;
+    const path = arcLerp(execution, delivery, t, 20);
     return {
-      x: target.x + arc * 8,
-      y: target.y - 10 - Math.abs(arc) * 8
+      x: path.x,
+      y: path.y
     };
   }
 
   if (visualState === 'error') {
-    const jitter = Math.sin(frameNow * 0.11 + (hashString(agent.id) % 23)) * 2;
+    const jitter = Math.sin(frameNow * 0.13 + (hashString(agent.id) % 23)) * 2.4;
     return {
-      x: target.x + jitter,
-      y: target.y
+      x: delivery.x + jitter,
+      y: delivery.y
+    };
+  }
+
+  if (visualState === 'awaiting_ack') {
+    const ackPulse = Math.sin(frameNow * 0.004 + (idHash % 31));
+    const ackX = lerp(execution.x, delivery.x, execToDelivery);
+    const ackY = lerp(execution.y, delivery.y, execToDelivery);
+    return {
+      x: ackX,
+      y: ackY + ackPulse * 1.6
+    };
+  }
+
+  if (visualState === 'queued') {
+    return {
+      x: intake.x + idleDrift * 0.5,
+      y: intake.y + idleWave * 0.5
     };
   }
 
@@ -173,6 +278,48 @@ function getAgentPosition(agent, frameNow, desksById, tasksById) {
     x: home.x + idleDrift,
     y: home.y + idleWave
   };
+}
+
+function drawOfficeFlow(layout) {
+  const intake = layout && layout.intakeDesk ? layout.intakeDesk : { x: 120, y: 220 };
+  const workerDesks = layout && Array.isArray(layout.workerDesks) ? layout.workerDesks : [];
+  const execution = layout && layout.executionZone ? layout.executionZone : { x: 640, y: 220 };
+  const delivery = layout && layout.deliveryZone ? layout.deliveryZone : { x: 640, y: 360 };
+
+  ctx.save();
+  ctx.setLineDash([5, 4]);
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(intake.x + 42, intake.y + 4);
+  ctx.lineTo(execution.x - 46, execution.y + 4);
+  ctx.lineTo(delivery.x - 46, delivery.y + 4);
+  ctx.stroke();
+
+  for (const desk of workerDesks) {
+    ctx.beginPath();
+    ctx.moveTo(intake.x + 26, intake.y + 10);
+    ctx.lineTo(desk.x - 20, desk.y + 10);
+    ctx.lineTo(execution.x - 26, execution.y + 10);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  const drawZone = (label, zone, color) => {
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.5)';
+    ctx.fillRect(zone.x - 50, zone.y - 24, 100, 48);
+    ctx.strokeStyle = color;
+    ctx.strokeRect(zone.x - 50, zone.y - 24, 100, 48);
+    ctx.fillStyle = color;
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, zone.x, zone.y - 30);
+  };
+
+  drawZone('INTAKE', intake, '#94a3b8');
+  drawZone('EXECUTION', execution, '#38bdf8');
+  drawZone('DELIVERY', delivery, '#22c55e');
+  ctx.restore();
 }
 
 function statusColor(status) {
@@ -203,10 +350,16 @@ function resolveSpriteFrame(visual, spriteImage, frameNow, agentId) {
   const frameWidth = Number.isFinite(visual && visual.frameWidth) ? visual.frameWidth : imageWidth;
   const frameHeight = Number.isFinite(visual && visual.frameHeight) ? visual.frameHeight : imageHeight;
   const frameCount = Math.max(1, Number.isFinite(visual && visual.frameCount) ? visual.frameCount : Math.floor(imageWidth / frameWidth) || 1);
-  const frameDurationMs = Math.max(1, Number.isFinite(visual && visual.frameDurationMs) ? visual.frameDurationMs : 200);
+  const fps = Number.isFinite(visual && visual.fps) && visual.fps > 0
+    ? visual.fps
+    : 5;
+  const frameDurationMs = Math.max(1, Math.round(1000 / fps));
+  const loop = !(visual && visual.loop === false);
+  const elapsed = Math.max(0, frameNow + hashString(agentId) * 17);
+  const frameNumber = frameCount <= 1 ? 0 : Math.floor(elapsed / frameDurationMs);
   const frameIndex = frameCount <= 1
     ? 0
-    : Math.floor((frameNow + hashString(agentId) * 17) / frameDurationMs) % frameCount;
+    : (loop ? frameNumber % frameCount : Math.min(frameCount - 1, frameNumber));
 
   return {
     sourceX: frameIndex * frameWidth,
@@ -281,14 +434,14 @@ function drawDesk(desk) {
   ctx.fillText(`Q:${queueCount}`, desk.x, y + height + 12);
 }
 
-function drawTask(task, desk) {
-  if (!desk) {
+function drawTask(task, position) {
+  if (!position) {
     return;
   }
 
   const isActive = task.status === 'claimed' || task.status === 'executing' || task.status === 'awaiting_ack';
-  const baseX = desk.x;
-  const baseY = isActive ? desk.y - 18 : desk.y + 26;
+  const baseX = position.x;
+  const baseY = isActive ? position.y - 22 : position.y + 22;
 
   ctx.fillStyle = statusColor(task.status);
   ctx.fillRect(baseX - 34, baseY - 8, 68, 16);
@@ -300,9 +453,9 @@ function drawTask(task, desk) {
   ctx.fillText(shortId || 'task', baseX, baseY + 3);
 }
 
-function drawAgent(agent, desksById, tasksById, frameNow) {
+function drawAgent(agent, desksById, tasksById, frameNow, transitionByTaskId, deskCount) {
   const visualState = getAgentVisualState(agent);
-  const position = getAgentPosition(agent, frameNow, desksById, tasksById);
+  const position = getAgentPosition(agent, frameNow, desksById, tasksById, transitionByTaskId, deskCount);
   const x = position.x;
   const y = position.y;
 
@@ -320,6 +473,10 @@ function drawAgent(agent, desksById, tasksById, frameNow) {
       && debugPointer.y >= y - drawSize.height
       && debugPointer.y <= y;
 
+    ctx.save();
+    if (visualState === 'queued') {
+      ctx.globalAlpha = 0.58;
+    }
     ctx.drawImage(
       spriteImage,
       frame.sourceX,
@@ -331,6 +488,7 @@ function drawAgent(agent, desksById, tasksById, frameNow) {
       drawSize.width,
       drawSize.height
     );
+    ctx.restore();
 
     drawSpriteDebugOverlay(x, y, drawSize, frame, isHovered);
   } else {
@@ -358,12 +516,41 @@ function drawAgent(agent, desksById, tasksById, frameNow) {
     }
   }
 
+  if (visualState === 'awaiting_ack') {
+    const ackPulse = 0.5 + 0.5 * Math.sin(frameNow * 0.008 + (hashString(agent.id) % 41));
+    ctx.strokeStyle = `rgba(245, 158, 11, ${0.2 + ackPulse * 0.65})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x, y - 8, 12 + ackPulse * 7, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   if (visualState === 'delivering') {
-    const pulse = 0.5 + 0.5 * Math.sin(frameNow * 0.02 + (hashString(agent.id) % 29));
-    ctx.strokeStyle = `rgba(74, 222, 128, ${0.2 + pulse * 0.55})`;
+    const rippleBase = ((frameNow + hashString(agent.id) * 23) % 1800) / 1800;
+    const rippleA = rippleBase;
+    const rippleB = (rippleBase + 0.5) % 1;
+    const drawRipple = (phase) => {
+      const eased = easeOutCubic(phase);
+      const alpha = 0.45 * (1 - eased);
+      ctx.strokeStyle = `rgba(74, 222, 128, ${alpha})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(x, y - 8, 8 + eased * 18, 0, Math.PI * 2);
+      ctx.stroke();
+    };
+    drawRipple(rippleA);
+    drawRipple(rippleB);
+  }
+
+  if (visualState === 'error') {
+    const errJitter = Math.sin(frameNow * 0.12 + hashString(agent.id)) * 2;
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(x, y - 6, 11 + pulse * 4, 0, Math.PI * 2);
+    ctx.moveTo(x - 10 + errJitter, y - 22);
+    ctx.lineTo(x + 10 - errJitter, y - 2);
+    ctx.moveTo(x + 10 - errJitter, y - 22);
+    ctx.lineTo(x - 10 + errJitter, y - 2);
     ctx.stroke();
   }
 
@@ -407,10 +594,12 @@ function drawHud(counts, incidents) {
     return;
   }
 
-  const latest = list[0];
+  const latest = list.find((cluster) => Array.isArray(cluster && cluster.taskIds) && cluster.taskIds.length > 0) || list[0];
   ctx.fillStyle = '#fecaca';
   ctx.font = '10px monospace';
-  ctx.fillText(`Alert: ${latest.category}${latest.taskId ? ` (${latest.taskId})` : ''}`, 18, 40);
+  const clusterLabel = latest && typeof latest.type === 'string' ? latest.type : 'unknown';
+  const taskCount = latest && Array.isArray(latest.taskIds) ? latest.taskIds.length : 0;
+  ctx.fillText(`Alert: ${clusterLabel} (${taskCount} tasks)`, 18, 40);
 }
 
 export function render(indexedWorld) {
@@ -422,10 +611,15 @@ export function render(indexedWorld) {
   const tasks = getAllTasks(safeIndexed);
   const agents = getAllAgents(safeIndexed);
   const counts = getTaskCounts(safeIndexed);
-  const incidents = getIncidentClusters(safeIndexed, { now: Date.now() });
+  const incidents = getIncidentClusters(safeIndexed, {
+    now: Date.now(),
+    includeSystemEvents: false
+  });
+  const officeLayout = getOfficeLayoutSnapshot();
 
   const desksById = new Map(desks.map((desk) => [desk.id, desk]));
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
+  const transitionByTaskId = new Map(tasks.map((task) => [task.id, getTaskTransitionTimestamps(safeIndexed, task.id)]));
   const frameNow = Date.now();
 
   ensureDebugBindings();
@@ -439,13 +633,15 @@ export function render(indexedWorld) {
     drawDesk(desk);
   }
 
+  drawOfficeFlow(officeLayout);
+
   for (const task of tasks) {
-    const desk = desksById.get(task.deskId);
-    drawTask(task, desk);
+    const taskPosition = getTaskVisualTarget(task, { deskCount: desks.length || 1 });
+    drawTask(task, taskPosition);
   }
 
   for (const agent of agents) {
-    drawAgent(agent, desksById, tasksById, frameNow);
+    drawAgent(agent, desksById, tasksById, frameNow, transitionByTaskId, desks.length || (officeLayout.workerDesks && officeLayout.workerDesks.length) || 1);
   }
 
   drawHud(counts, incidents);

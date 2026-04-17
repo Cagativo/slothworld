@@ -96,6 +96,21 @@ function appendEventToLog(event) {
   }
 }
 
+function emitBridgeEvent(event) {
+  const timestamp = Number.isFinite(event && event.timestamp) ? event.timestamp : Date.now();
+  const payload = event && event.payload && typeof event.payload === 'object' ? event.payload : {};
+
+  appendEventToLog({
+    id: nextEventId++,
+    type: event.event,
+    taskId: String(event.taskId),
+    timestamp,
+    payload
+  });
+
+  saveStore();
+}
+
 if (!process.env.DISCORD_BOT_TOKEN) {
   console.error('[DISCORD] Missing DISCORD_BOT_TOKEN. Discord execution is disabled.');
 } else {
@@ -366,6 +381,309 @@ function mapCommandToAction(command) {
   return 'reply_to_message';
 }
 
+function isDiscordSnowflake(value) {
+  return typeof value === 'string' && /^\d{17,20}$/.test(value);
+}
+
+function readPathValue(source, dottedPath) {
+  if (!source || typeof source !== 'object') {
+    return undefined;
+  }
+
+  const parts = String(dottedPath || '').split('.').filter(Boolean);
+  let current = source;
+  for (const part of parts) {
+    if (!current || typeof current !== 'object' || !(part in current)) {
+      return undefined;
+    }
+
+    current = current[part];
+  }
+
+  return current;
+}
+
+function hasPresentValue(value) {
+  if (value === undefined || value === null) {
+    return false;
+  }
+
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  return true;
+}
+
+function collectRequiredFieldAnomalies(requiredFields, input, payload) {
+  if (!Array.isArray(requiredFields) || requiredFields.length === 0) {
+    return [];
+  }
+
+  const root = {
+    payload,
+    designIntent: input && typeof input.designIntent === 'object' && input.designIntent !== null
+      ? input.designIntent
+      : {}
+  };
+
+  const anomalies = [];
+  for (const requirement of requiredFields) {
+    const alternatives = String(requirement || '').split('|').map((part) => part.trim()).filter(Boolean);
+    if (alternatives.length === 0) {
+      continue;
+    }
+
+    const satisfied = alternatives.some((candidate) => hasPresentValue(readPathValue(root, candidate)));
+    if (!satisfied) {
+      anomalies.push(`missing_required_field:${alternatives.join('|')}`);
+    }
+  }
+
+  return anomalies;
+}
+
+function normalizeIntentMode(mode) {
+  if (mode === 'soft' || mode === 'experimental') {
+    return mode;
+  }
+
+  return 'strict';
+}
+
+const INTENT_REGISTRY = Object.freeze({
+  discord_message: Object.freeze({
+    mode: 'soft',
+    requiredFields: Object.freeze(['payload.channelId']),
+    mapAction: () => 'send_channel_message',
+    validate: ({ payload }) => {
+      if (!isDiscordSnowflake(payload.channelId)) {
+        return 'payload.channelId must be a Discord snowflake';
+      }
+
+      return null;
+    },
+    fallback: ({ input, payload }) => {
+      const nextPayload = {
+        ...payload
+      };
+
+      if (typeof nextPayload.content !== 'string' || !nextPayload.content.trim()) {
+        nextPayload.content = input.title || 'Untitled task';
+      }
+
+      return nextPayload;
+    }
+  }),
+  discord_reply: Object.freeze({
+    mode: 'strict',
+    requiredFields: Object.freeze(['payload.channelId', 'payload.messageId']),
+    mapAction: () => 'reply_to_message',
+    validate: ({ payload }) => {
+      if (!isDiscordSnowflake(payload.channelId)) {
+        return 'payload.channelId must be a Discord snowflake';
+      }
+
+      if (!isDiscordSnowflake(payload.messageId)) {
+        return 'payload.messageId must be a Discord snowflake';
+      }
+
+      return null;
+    },
+    fallback: null
+  }),
+  shopify_process_order: Object.freeze({
+    mode: 'soft',
+    requiredFields: Object.freeze([]),
+    mapAction: () => 'process_order',
+    validate: () => null,
+    fallback: null
+  }),
+  render_product_image: Object.freeze({
+    mode: 'experimental',
+    requiredFields: Object.freeze(['payload.prompt|designIntent.prompt']),
+    mapAction: () => 'render_product_image',
+    validate: ({ input, payload }) => {
+      const bodyDesignIntent = input.designIntent && typeof input.designIntent === 'object' ? input.designIntent : {};
+      const payloadDesignIntent = payload.designIntent && typeof payload.designIntent === 'object' ? payload.designIntent : {};
+      const promptFromPayload = typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
+      const promptFromBodyDesignIntent = typeof bodyDesignIntent.prompt === 'string' ? bodyDesignIntent.prompt.trim() : '';
+      const promptFromPayloadDesignIntent = typeof payloadDesignIntent.prompt === 'string' ? payloadDesignIntent.prompt.trim() : '';
+
+      if (!promptFromPayload && !promptFromBodyDesignIntent && !promptFromPayloadDesignIntent) {
+        return 'payload.prompt or designIntent.prompt is required';
+      }
+
+      return null;
+    },
+    fallback: null
+  })
+});
+
+function normalizeIntentName(intent) {
+  if (typeof intent !== 'string') {
+    return '';
+  }
+
+  return intent.trim().toLowerCase();
+}
+
+function getIntentContract(intent) {
+  const normalizedIntent = normalizeIntentName(intent);
+  if (!normalizedIntent) {
+    return null;
+  }
+
+  const contract = INTENT_REGISTRY[normalizedIntent];
+  if (!contract) {
+    return null;
+  }
+
+  return {
+    name: normalizedIntent,
+    mode: normalizeIntentMode(contract.mode),
+    ...contract
+  };
+}
+
+function mapIntentToAction(intent) {
+  const contract = getIntentContract(intent);
+  return contract ? contract.mapAction() : null;
+}
+
+function applyIntentFallback(intentContract, input, payload) {
+  if (!intentContract || typeof intentContract.fallback !== 'function') {
+    return {
+      ...payload
+    };
+  }
+
+  const fallbackPayload = intentContract.fallback({ input, payload: { ...payload } });
+  if (!fallbackPayload || typeof fallbackPayload !== 'object') {
+    return {
+      ...payload
+    };
+  }
+
+  return fallbackPayload;
+}
+
+function validateIntentContract(intentContract, input, payload) {
+  if (!intentContract || typeof intentContract.validate !== 'function') {
+    return null;
+  }
+
+  return intentContract.validate({ input, payload });
+}
+
+function evaluateIntentContractAtIngestion(intentContract, input, payload) {
+  if (!intentContract) {
+    return {
+      accepted: true,
+      payload,
+      anomalies: []
+    };
+  }
+
+  const payloadWithFallback = applyIntentFallback(intentContract, input, payload);
+  const anomalies = collectRequiredFieldAnomalies(intentContract.requiredFields, input, payloadWithFallback);
+  const validationError = validateIntentContract(intentContract, input, payloadWithFallback);
+  if (typeof validationError === 'string' && validationError.trim()) {
+    anomalies.push(`validation_error:${validationError}`);
+  }
+
+  if (anomalies.length === 0) {
+    return {
+      accepted: true,
+      payload: payloadWithFallback,
+      anomalies: []
+    };
+  }
+
+  if (intentContract.mode === 'strict') {
+    return {
+      accepted: false,
+      payload: payloadWithFallback,
+      anomalies,
+      error: `${intentContract.name}: ${anomalies.join('; ')}`
+    };
+  }
+
+  if (intentContract.mode === 'experimental') {
+    console.warn('[INTENT_CONTRACT_ANOMALY]', {
+      intent: intentContract.name,
+      mode: intentContract.mode,
+      anomalies,
+      taskType: input && input.type ? input.type : null
+    });
+  }
+
+  return {
+    accepted: true,
+    payload: payloadWithFallback,
+    anomalies
+  };
+}
+
+function defaultActionForType(type, payload) {
+  if (type === 'discord') {
+    if (typeof payload.messageId === 'string' && payload.messageId.trim()) {
+      return 'reply_to_message';
+    }
+
+    return 'send_channel_message';
+  }
+
+  if (type === 'shopify') {
+    return 'process_order';
+  }
+
+  if (type === 'image_render') {
+    return 'render_product_image';
+  }
+
+  return null;
+}
+
+function resolveActionFromInput(input, payload, intentContract = null) {
+  const contract = intentContract || getIntentContract(input.intent);
+  if (contract) {
+    return contract.mapAction();
+  }
+
+  if (typeof input.action === 'string' && input.action.trim()) {
+    return input.action.trim().toLowerCase();
+  }
+
+  return defaultActionForType(input.type, payload);
+}
+
+function resolveImageRenderFields(input, payload) {
+  const provider = typeof input.provider === 'string' && input.provider.trim()
+    ? input.provider.trim()
+    : (typeof payload.provider === 'string' && payload.provider.trim() ? payload.provider.trim() : 'openai');
+  const productId = typeof input.productId === 'string' && input.productId.trim()
+    ? input.productId.trim()
+    : (typeof payload.productId === 'string' && payload.productId.trim() ? payload.productId.trim() : `product-${generateId()}`);
+  const providedDesignIntent = typeof input.designIntent === 'object' && input.designIntent !== null
+    ? input.designIntent
+    : (typeof payload.designIntent === 'object' && payload.designIntent !== null ? payload.designIntent : {});
+  const promptText = typeof payload.prompt === 'string' && payload.prompt.trim() ? payload.prompt.trim() : null;
+  const designIntent = {
+    ...providedDesignIntent
+  };
+
+  if (!designIntent.prompt && promptText) {
+    designIntent.prompt = promptText;
+  }
+
+  return {
+    provider,
+    productId,
+    designIntent
+  };
+}
+
 function normalizeTask(input) {
   const now = Date.now();
   const requiredRange = input.type === 'shopify' ? [120, 260] : [80, 200];
@@ -376,6 +694,31 @@ function normalizeTask(input) {
   const depth = Math.max(0, Math.floor(toFiniteNumber(input.depth, toFiniteNumber(payload.depth, 0))));
   const internal = input.internal === true || input.domain === 'system' || payload.internal === true || payload.domain === 'system';
 
+  const intentContract = getIntentContract(input.intent);
+  const resolvedAction = resolveActionFromInput(input, payload, intentContract);
+  const payloadWithIntentFallback = applyIntentFallback(intentContract, input, payload);
+  const imageRenderFields = input.type === 'image_render'
+    ? resolveImageRenderFields(input, payloadWithIntentFallback)
+    : null;
+  const normalizedPayload = {
+    ...payloadWithIntentFallback
+  };
+
+  if (input.type === 'discord' && (resolvedAction === 'send_channel_message' || resolvedAction === 'reply_to_message')) {
+    if (typeof normalizedPayload.content !== 'string' || !normalizedPayload.content.trim()) {
+      normalizedPayload.content = input.title || 'Untitled task';
+    }
+  }
+
+  if (imageRenderFields) {
+    normalizedPayload.provider = imageRenderFields.provider;
+    normalizedPayload.productId = imageRenderFields.productId;
+    normalizedPayload.designIntent = imageRenderFields.designIntent;
+    if (!normalizedPayload.prompt && imageRenderFields.designIntent && imageRenderFields.designIntent.prompt) {
+      normalizedPayload.prompt = imageRenderFields.designIntent.prompt;
+    }
+  }
+
   return {
     id: input.id || generateId(),
     type: input.type,
@@ -383,15 +726,17 @@ function normalizeTask(input) {
     priority: [0, 1, 2].includes(input.priority) ? input.priority : inferPriority(input),
     progress: typeof input.progress === 'number' ? input.progress : 0,
     required: typeof input.required === 'number' ? input.required : randomInRange(requiredRange[0], requiredRange[1]),
-    action: typeof input.action === 'string' ? input.action : null,
-    payload,
+    action: resolvedAction,
+    payload: normalizedPayload,
     correlationId,
     depth,
     internal,
     domain: internal ? 'system' : 'external',
-    productId: typeof input.productId === 'string' ? input.productId : null,
-    provider: typeof input.provider === 'string' ? input.provider : null,
-    designIntent: typeof input.designIntent === 'object' && input.designIntent !== null ? input.designIntent : null,
+    productId: imageRenderFields ? imageRenderFields.productId : (typeof input.productId === 'string' ? input.productId : null),
+    provider: imageRenderFields ? imageRenderFields.provider : (typeof input.provider === 'string' ? input.provider : null),
+    designIntent: imageRenderFields
+      ? imageRenderFields.designIntent
+      : (typeof input.designIntent === 'object' && input.designIntent !== null ? input.designIntent : null),
     retries: typeof input.retries === 'number' ? input.retries : 0,
     maxRetries: typeof input.maxRetries === 'number' ? input.maxRetries : 3,
     createdAt: typeof input.createdAt === 'number' ? input.createdAt : now,
@@ -452,6 +797,10 @@ function validateTaskInput(body) {
     return 'action must be a string';
   }
 
+  if (body.intent !== undefined && typeof body.intent !== 'string') {
+    return 'intent must be a string';
+  }
+
   if (body.payload !== undefined && (typeof body.payload !== 'object' || body.payload === null || Array.isArray(body.payload))) {
     return 'payload must be an object';
   }
@@ -468,6 +817,24 @@ function validateTaskInput(body) {
 
   if (body.designIntent !== undefined && (typeof body.designIntent !== 'object' || body.designIntent === null || Array.isArray(body.designIntent))) {
     return 'designIntent must be an object';
+  }
+
+  const payload = body.payload && typeof body.payload === 'object' ? body.payload : {};
+  const intentName = normalizeIntentName(body.intent);
+  const intentContract = intentName ? getIntentContract(intentName) : null;
+  if (intentName && !intentContract) {
+    return 'intent is not supported';
+  }
+
+  const intentEvaluation = evaluateIntentContractAtIngestion(intentContract, body, payload);
+  if (!intentEvaluation.accepted) {
+    return intentEvaluation.error;
+  }
+
+  const resolvedAction = resolveActionFromInput(body, intentEvaluation.payload, intentContract);
+  const messageId = payload && typeof payload.messageId === 'string' ? payload.messageId : null;
+  if (!intentContract && resolvedAction === 'reply_to_message' && !(typeof messageId === 'string' && /^\d{17,20}$/.test(messageId))) {
+    return 'reply_to_message requires payload.messageId as a Discord snowflake';
   }
 
   return null;
@@ -653,7 +1020,8 @@ function readJsonBody(req, options = {}) {
 }
 
 const discordNotificationWorker = createDiscordNotificationWorker({
-  getDiscordClient: () => discordClient
+  getDiscordClient: () => discordClient,
+  emitEvent: emitBridgeEvent
 });
 
 const taskExecutionWorker = createTaskExecutionWorker({
@@ -676,20 +1044,7 @@ const taskEngine = createTaskEngine({
   onTaskAcked: async (task) => {
     await discordNotificationWorker.notifyTaskCompletion(task);
   },
-  emitEvent: (event) => {
-    const timestamp = Number.isFinite(event && event.timestamp) ? event.timestamp : Date.now();
-    const payload = event && event.payload && typeof event.payload === 'object' ? event.payload : {};
-
-    appendEventToLog({
-      id: nextEventId++,
-      type: event.event,
-      taskId: String(event.taskId),
-      timestamp,
-      payload
-    });
-
-    saveStore();
-  }
+  emitEvent: emitBridgeEvent
 });
 
 async function autoExecuteAndAck(taskId) {
@@ -699,8 +1054,26 @@ async function autoExecuteAndAck(taskId) {
       return;
     }
 
+    const taskSource = existing && existing.payload && typeof existing.payload.source === 'string'
+      ? existing.payload.source
+      : 'unknown';
+    console.log('[AUTO_EXECUTE_ACK_START]', {
+      taskId,
+      type: existing.type,
+      action: existing.action,
+      source: taskSource,
+      engineStatusBeforeEnsure: taskEngine.getTask(taskId) ? taskEngine.getTask(taskId).status : null
+    });
+
     const executionStartedAt = Date.now();
-    ensureTaskInEngine(existing);
+    const ensuredTask = ensureTaskInEngine(existing);
+    console.log('[AUTO_EXECUTE_ACK_AFTER_ENSURE]', {
+      taskId,
+      type: existing.type,
+      action: existing.action,
+      source: taskSource,
+      engineStatusAfterEnsure: ensuredTask ? ensuredTask.status : null
+    });
     const taskResult = await taskEngine.executeTask(taskId);
     const execution = mapTaskResultToExecution(taskResult);
     const executionCompletedAt = Date.now();
@@ -713,6 +1086,14 @@ async function autoExecuteAndAck(taskId) {
 
     const engineTaskBeforeAck = taskEngine.getTask(taskId);
     if (engineTaskBeforeAck && engineTaskBeforeAck.status === 'awaiting_ack' && engineTaskBeforeAck.executionRecord) {
+      console.log('[AUTO_EXECUTE_ACK_BEFORE_ACK]', {
+        taskId,
+        type: existing.type,
+        action: existing.action,
+        source: taskSource,
+        engineStatus: engineTaskBeforeAck.status,
+        success: execution.success
+      });
       await taskEngine.ackTask(taskId);
       const engineTask = taskEngine.getTask(taskId);
       const resolvedStatus = mapEngineStatusToPublic(engineTask ? engineTask.status : null);
@@ -737,7 +1118,25 @@ async function autoExecuteAndAck(taskId) {
         error: existing.lastError || null,
         source: 'auto_execute_ack'
       });
+      console.log('[AUTO_EXECUTE_ACK_DONE]', {
+        taskId,
+        type: existing.type,
+        action: existing.action,
+        source: taskSource,
+        resolvedStatus,
+        error: existing.lastError || null
+      });
+      return;
     }
+
+    console.log('[AUTO_EXECUTE_ACK_SKIPPED_ACK]', {
+      taskId,
+      type: existing.type,
+      action: existing.action,
+      source: taskSource,
+      engineStatus: engineTaskBeforeAck ? engineTaskBeforeAck.status : null,
+      error: execution.error || null
+    });
   } catch (error) {
     console.error('[AUTO_EXECUTE_ACK_ERROR]', taskId, error && error.message ? error.message : error);
   }
@@ -844,8 +1243,28 @@ const server = http.createServer(async (req, res) => {
         deduplicated: !isNew
       });
 
+      console.log('[POST_TASK_ACCEPTED]', {
+        taskId: storedTask && storedTask.id ? storedTask.id : null,
+        type: storedTask && storedTask.type ? storedTask.type : null,
+        action: storedTask && storedTask.action ? storedTask.action : null,
+        source: storedTask && storedTask.payload && typeof storedTask.payload.source === 'string'
+          ? storedTask.payload.source
+          : 'unknown',
+        isNew,
+        engineStatus: taskEngine.getTask(storedTask.id) ? taskEngine.getTask(storedTask.id).status : null
+      });
+
       // Engine owns the full lifecycle — fire execute+ack asynchronously after response.
       if (isNew && storedTask && storedTask.id) {
+        console.log('[POST_TASK_AUTO_EXEC_SCHEDULED]', {
+          taskId: storedTask.id,
+          type: storedTask.type,
+          action: storedTask.action,
+          source: storedTask && storedTask.payload && typeof storedTask.payload.source === 'string'
+            ? storedTask.payload.source
+            : 'unknown',
+          engineStatus: taskEngine.getTask(storedTask.id) ? taskEngine.getTask(storedTask.id).status : null
+        });
         setImmediate(() => {
           autoExecuteAndAck(storedTask.id).catch((err) => {
             console.error('[POST_TASK_AUTO_EXEC]', storedTask.id, err && err.message ? err.message : err);

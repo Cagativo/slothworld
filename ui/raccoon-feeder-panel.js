@@ -58,7 +58,7 @@ export function initRaccoonFeederPanel() {
 
   const incidentsList = panel.querySelector('[data-list="incidents"]');
   const incidentDetail = panel.querySelector('[data-detail="incident"]');
-  let selectedIncidentId = null;
+  let selectedClusterType = null;
 
   function getIndexedWorldSnapshot() {
     if (window.controlAPI && typeof window.controlAPI.getWorldState === 'function') {
@@ -78,28 +78,32 @@ export function initRaccoonFeederPanel() {
       return;
     }
 
-    const incidentId = target.dataset.incidentId;
-    if (!incidentId) {
+    const clusterType = target.dataset.clusterType;
+    if (!clusterType) {
       return;
     }
 
-    selectedIncidentId = incidentId;
+    selectedClusterType = clusterType;
     renderPanel();
   });
 
   function renderPanel() {
     const indexedWorld = getIndexedWorldSnapshot();
-    const incidents = getIncidentClusters(indexedWorld, { thresholdMs: STALLED_ACK_MS, now: Date.now() })
+    const incidents = getIncidentClusters(indexedWorld, {
+      thresholdMs: STALLED_ACK_MS,
+      now: Date.now(),
+      includeSystemEvents: true
+    })
       .sort((a, b) => {
         const diff = severityRank(b.severity) - severityRank(a.severity);
         if (diff !== 0) {
           return diff;
         }
-        return String(a.taskId || '').localeCompare(String(b.taskId || ''));
+        return String(a.type || '').localeCompare(String(b.type || ''));
       });
 
-    if (!incidents.some((item) => item.id === selectedIncidentId)) {
-      selectedIncidentId = incidents.length ? incidents[0].id : null;
+    if (!incidents.some((item) => item.type === selectedClusterType)) {
+      selectedClusterType = incidents.length ? incidents[0].type : null;
     }
 
     incidentsList.innerHTML = '';
@@ -116,19 +120,26 @@ export function initRaccoonFeederPanel() {
       const li = document.createElement('li');
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = `rfp-item${incident.id === selectedIncidentId ? ' is-selected' : ''}`;
-      button.dataset.incidentId = incident.id;
-      button.textContent = `${incident.severity.toUpperCase()} | ${incident.category} | ${incident.taskId || 'n/a'}`;
+      button.className = `rfp-item${incident.type === selectedClusterType ? ' is-selected' : ''}`;
+      button.dataset.clusterType = incident.type;
+      const taskCount = Array.isArray(incident.taskIds) ? incident.taskIds.length : 0;
+      button.textContent = `${incident.type} | ${incident.severity.toUpperCase()} | tasks:${taskCount}`;
       li.appendChild(button);
       incidentsList.appendChild(li);
     });
 
-    const selected = incidents.find((item) => item.id === selectedIncidentId) || incidents[0];
-    const selectedTimeline = selected && selected.taskId
-      ? getTaskTimeline(indexedWorld, selected.taskId).slice(-8)
+    const selected = incidents.find((item) => item.type === selectedClusterType) || incidents[0];
+    const selectedTaskId = selected && Array.isArray(selected.taskIds) && selected.taskIds.length
+      ? selected.taskIds[0]
+      : null;
+    const selectedTimeline = selectedTaskId
+      ? getTaskTimeline(indexedWorld, selectedTaskId).slice(-8)
       : [];
     incidentDetail.textContent = stringify({
       ...selected,
+      expandedRepresentativeEvents: selected && Array.isArray(selected.representativeEvents)
+        ? selected.representativeEvents
+        : [],
       timeline: selectedTimeline
     });
   }

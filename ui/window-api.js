@@ -1,47 +1,33 @@
 import { controlAPI, dispatchCommand } from './control-api.js';
 
+const FIXED_DISCORD_CHANNEL_ID = '1491500223288184964';
+
 async function createTestProduct(options = {}) {
   const promptText = typeof options === 'string'
     ? options.trim()
     : (options && typeof options.promptText === 'string' ? options.promptText.trim() : '');
+  const channelId = options && typeof options.channelId === 'string' && options.channelId.trim()
+    ? options.channelId.trim()
+    : FIXED_DISCORD_CHANNEL_ID;
 
   if (!promptText) {
     throw new Error('missing_prompt');
   }
 
-  const productId = `product_${Date.now()}`;
-  const designIntent = {
-    product_name: promptText,
-    style: (options && options.style) || 'modern scandinavian',
-    mood: (options && options.mood) || 'cozy ambient lighting',
-    colors: Array.isArray(options && options.colors) && options.colors.length > 0
-      ? options.colors
-      : ['warm white', 'soft beige'],
-    composition: (options && options.composition) || 'studio product shot',
-    camera: (options && options.camera) || '85mm lens',
-    background: (options && options.background) || 'neutral gradient',
-    prompt: promptText,
-    prompt_hint: promptText
-  };
-
   const result = await controlAPI.injectTask({
     type: 'image_render',
     title: 'Generate Product Image',
-    productId,
-    provider: 'openai',
-    designIntent,
+    intent: 'render_product_image',
     payload: {
       source: 'create_product_button',
-      productId,
-      provider: 'openai',
-      designIntent
+      prompt: promptText,
+      channelId
     }
   });
 
   return {
-    productId,
     promptText,
-    designIntent,
+    productId: result && result.data && result.data.productId ? result.data.productId : null,
     result
   };
 }
