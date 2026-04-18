@@ -1,5 +1,28 @@
+# Environment variables
 .env
+.env.*
+!.env.example
 
 # Runtime state and generated assets
 bridge-store.json
 assets/generated/
+
+# Node.js dependencies — never commit these
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Windows metadata files (Zone.Identifier etc.)
+*:Zone.Identifier
+
+# VS Code workspace and settings
+*.code-workspace
+.vscode/
+
+# macOS
+.DS_Store
+
+# Build output (if applicable)
+dist/
+build/
