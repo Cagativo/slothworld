@@ -690,6 +690,10 @@ function resolveImageRenderFields(input, payload) {
  * Contract: pure transformation only — no I/O, no state mutation, no engine calls.
  * Derives intent, action, depth, correlationId, and image render fields from input.
  *
+ * FORBIDDEN: Bridge must not accept lifecycle timing from external input.
+ * `startedAt`, `completedAt`, and `failedAt` are ALWAYS set to null here.
+ * They are exclusively set by the engine after execution and ACK.
+ *
  * @param {object} input - Raw task input from HTTP body or Discord message.
  * @returns {object} Normalized task object ready for `upsertTask`.
  */
@@ -749,9 +753,11 @@ function normalizeTask(input) {
     retries: typeof input.retries === 'number' ? input.retries : 0,
     maxRetries: typeof input.maxRetries === 'number' ? input.maxRetries : 3,
     createdAt: typeof input.createdAt === 'number' ? input.createdAt : now,
-    startedAt: typeof input.startedAt === 'number' ? input.startedAt : null,
-    completedAt: typeof input.completedAt === 'number' ? input.completedAt : null,
-    failedAt: typeof input.failedAt === 'number' ? input.failedAt : null
+    // Lifecycle timing fields are engine-owned and must never be accepted from external input.
+    // They are set exclusively by the ACK path after TaskEngine finalizes the task.
+    startedAt: null,
+    completedAt: null,
+    failedAt: null
   };
 }
 
@@ -857,6 +863,12 @@ function validateTaskInput(body) {
  * Does NOT call TaskEngine. Does NOT set lifecycle status on the stored record.
  * Bridge is the persistence layer; engine is the lifecycle authority.
  *
+ * When merging with an existing record, lifecycle timing fields (`startedAt`,
+ * `completedAt`, `failedAt`) are preserved from the EXISTING store record only —
+ * they are set by the ACK path, never by intake normalization.
+ *
+ * FORBIDDEN: Must not accept lifecycle status or timing from normalized intake.
+ *
  * @param {object} normalizedTask - Output of `normalizeTask`.
  * @returns {{ task: object, isNew: boolean }}
  */
@@ -889,6 +901,12 @@ function upsertTask(normalizedTask) {
  * Contract: Bridge intake boundary. This is the ONLY entry point for task creation.
  * Guards applied in order: source restriction → depth limit → correlation dedup → circuit breaker.
  * After persistence, delegates lifecycle progression exclusively to TaskEngine via `ensureTaskInEngine`.
+ *
+ * FORBIDDEN:
+ * - Must not execute task logic.
+ * - Must not set lifecycle status, startedAt, completedAt, or failedAt.
+ * - Must not call providers directly.
+ * - Must not derive lifecycle meaning from execution results.
  *
  * @param {object} taskInput - Raw or pre-shaped task input.
  * @param {{ source?: string }} [options]

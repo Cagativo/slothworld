@@ -280,6 +280,66 @@ test('Intake guards', async (t) => {
   });
 });
 
+// ─── Bridge lifecycle non-authority invariant ─────────────────────────────────
+
+test('Bridge lifecycle non-authority invariant', async (t) => {
+  await t.test('Bridge strips startedAt, completedAt, failedAt sent in POST /task body', async () => {
+    const injectedTimestamp = 1000000000000;
+    const response = await postTask({
+      type: 'discord',
+      title: 'lifecycle-timing-strip-test',
+      action: 'reply_to_message',
+      payload: {
+        channelId: '1491500223288184964',
+        messageId: '1491500223288184964',
+        content: 'test'
+      },
+      startedAt: injectedTimestamp,
+      completedAt: injectedTimestamp,
+      failedAt: injectedTimestamp
+    });
+
+    assert.equal(response.ok, true);
+    const { task } = await response.json();
+    assert.ok(task, 'task must be returned');
+
+    // Bridge must never echo back externally-injected lifecycle timing.
+    // Only the engine sets these after execution and ACK.
+    assert.equal(task.startedAt, null, 'startedAt must not be accepted from external input');
+    assert.equal(task.completedAt, null, 'completedAt must not be accepted from external input');
+    assert.equal(task.failedAt, null, 'failedAt must not be accepted from external input');
+  });
+
+  await t.test('GET /tasks never returns engine-internal status strings from store', async () => {
+    const response = await postTask({
+      type: 'discord',
+      title: 'engine-status-isolation-test',
+      action: 'reply_to_message',
+      payload: {
+        channelId: '1491500223288184964',
+        messageId: '1491500223288184964',
+        content: 'test'
+      }
+    });
+
+    assert.equal(response.ok, true);
+    const { task: createdTask } = await response.json();
+
+    const tasks = await getTasks();
+    const task = tasks.find((t) => t && t.id === createdTask.id);
+    assert.ok(task, 'task should appear in GET /tasks');
+
+    // Engine-internal statuses (created, queued, claimed, awaiting_ack, acknowledged)
+    // must never be returned raw — they are remapped through mapEngineStatusToPublic.
+    const engineInternalStatuses = new Set(['created', 'queued', 'claimed', 'awaiting_ack', 'acknowledged']);
+    assert.equal(
+      engineInternalStatuses.has(task.status),
+      false,
+      `task.status '${task.status}' must not expose engine-internal status strings`
+    );
+  });
+});
+
 // ─── Bridge status invariant ──────────────────────────────────────────────────
 
 test('Bridge status invariant', async (t) => {
