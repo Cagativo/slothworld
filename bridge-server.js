@@ -684,6 +684,15 @@ function resolveImageRenderFields(input, payload) {
   };
 }
 
+/**
+ * Normalizes raw task input into the canonical task shape accepted by the Bridge.
+ *
+ * Contract: pure transformation only — no I/O, no state mutation, no engine calls.
+ * Derives intent, action, depth, correlationId, and image render fields from input.
+ *
+ * @param {object} input - Raw task input from HTTP body or Discord message.
+ * @returns {object} Normalized task object ready for `upsertTask`.
+ */
 function normalizeTask(input) {
   const now = Date.now();
   const requiredRange = input.type === 'shopify' ? [120, 260] : [80, 200];
@@ -841,6 +850,16 @@ function validateTaskInput(body) {
 }
 
 
+/**
+ * Persists a normalized task to the Bridge store.
+ *
+ * Contract: idempotent — creates on first call, merges on subsequent calls.
+ * Does NOT call TaskEngine. Does NOT set lifecycle status on the stored record.
+ * Bridge is the persistence layer; engine is the lifecycle authority.
+ *
+ * @param {object} normalizedTask - Output of `normalizeTask`.
+ * @returns {{ task: object, isNew: boolean }}
+ */
 function upsertTask(normalizedTask) {
   const { status: _ignoredStatus, ...taskWithoutStatus } = normalizedTask;
   const existing = taskStore[normalizedTask.id];
@@ -864,6 +883,17 @@ function upsertTask(normalizedTask) {
   return { task: mergedTask, isNew: false };
 }
 
+/**
+ * Normalizes, guards, persists, and registers an incoming task with TaskEngine.
+ *
+ * Contract: Bridge intake boundary. This is the ONLY entry point for task creation.
+ * Guards applied in order: source restriction → depth limit → correlation dedup → circuit breaker.
+ * After persistence, delegates lifecycle progression exclusively to TaskEngine via `ensureTaskInEngine`.
+ *
+ * @param {object} taskInput - Raw or pre-shaped task input.
+ * @param {{ source?: string }} [options]
+ * @returns {{ task: object|null, event: object|null, isNew: boolean, ignored: boolean, reason?: string }}
+ */
 function ingestNormalizedTask(taskInput, options = {}) {
   const source = typeof options.source === 'string' ? options.source : 'unknown';
   const normalizedTask = normalizeTask(taskInput);
@@ -1142,6 +1172,15 @@ async function autoExecuteAndAck(taskId) {
   }
 }
 
+/**
+ * Registers a persisted task with TaskEngine if not already registered, and ensures it is enqueued.
+ *
+ * Contract: Bridge → Engine delegation only. Never executes the task; only creates and enqueues.
+ * TaskEngine is the lifecycle authority — this function hands off control to the engine.
+ *
+ * @param {object} task - A task record from the Bridge store (must have `id`).
+ * @returns {object|null} The engine task, or null if the input is invalid.
+ */
 function ensureTaskInEngine(task) {
   if (!task || !task.id) {
     return null;
@@ -1540,6 +1579,12 @@ const server = http.createServer(async (req, res) => {
         task: projectTaskForRead(existing)
       });
     } catch (error) {
+      if (error && error.message === 'ENGINE_ENFORCEMENT_VIOLATION') {
+        console.error('[EXECUTE_ENFORCEMENT_VIOLATION]', { taskId: req.url });
+        writeJson(res, 409, { error: 'ENGINE_ENFORCEMENT_VIOLATION' });
+        return;
+      }
+
       writeJson(res, 400, { error: error.message || 'Request failed' });
     }
 
