@@ -1,52 +1,17 @@
-import { subscribeEventStream } from '../core/world/eventStore.js';
-import { getTaskStatus } from './selectors/taskSelectors.js';
 
 export function initTaskCreatorPanel() {
-    function getIndexedWorldSnapshot() {
-      if (window.controlAPI && typeof window.controlAPI.getWorldState === 'function') {
-        return window.controlAPI.getWorldState();
-      }
-
-      return {
-        events: [],
-        eventsByTaskId: new Map(),
-        eventsByWorkerId: new Map()
-      };
+  function getGraphSnapshot() {
+    if (window.controlAPI && typeof window.controlAPI.getGraph === 'function') {
+      return window.controlAPI.getGraph();
     }
+    return { nodes: [], edges: [], metadata: {} };
+  }
 
   const FIXED_DISCORD_CHANNEL_ID = '1491500223288184964';
 
   const panelRuntime = {
-    pendingTaskId: null,
-    waitingForCreated: false,
-    observedLifecycleByTaskId: new Map()
+    pendingTaskId: null
   };
-
-  function lifecycleFromStatus(status) {
-    if (status === 'created') {
-      return { code: 'created', label: 'created' };
-    }
-    if (status === 'queued') {
-      return { code: 'queued', label: 'queued' };
-    }
-    if (status === 'claimed') {
-      return { code: 'claimed', label: 'claimed' };
-    }
-    if (status === 'executing') {
-      return { code: 'executing', label: 'executing' };
-    }
-    if (status === 'awaiting_ack') {
-      return { code: 'finished', label: 'finished' };
-    }
-    if (status === 'failed') {
-      return { code: 'failed', label: 'failed' };
-    }
-    if (status === 'completed' || status === 'acknowledged') {
-      return { code: 'completed', label: 'completed' };
-    }
-
-    return null;
-  }
 
   function mountPanel() {
   const panel = document.createElement('div');
@@ -104,46 +69,30 @@ export function initTaskCreatorPanel() {
   const contentInput = panel.querySelector('#tcp-content');
   const channelIdInput = panel.querySelector('#tcp-channel-id');
   const statusDiv = panel.querySelector('#tcp-status');
-    function renderLifecycleStatus(taskId) {
-      const lifecycle = panelRuntime.observedLifecycleByTaskId.get(taskId);
-      if (!lifecycle) {
-        return;
-      }
-
-      statusDiv.textContent = `Task ${taskId}: ${lifecycle.label}`;
-      if (lifecycle.code === 'failed') {
-        statusDiv.className = 'tcp-status tcp-error';
-        return;
-      }
-
-      statusDiv.className = 'tcp-status tcp-success';
-    }
-
-    function observeLifecycleEvents() {
-      const indexedWorld = getIndexedWorldSnapshot();
+    function updatePendingTaskStatus() {
       const pendingTaskId = panelRuntime.pendingTaskId;
       if (!pendingTaskId) {
         return;
       }
-
-      const status = getTaskStatus(indexedWorld, pendingTaskId);
-      const lifecycle = lifecycleFromStatus(status);
-      if (!lifecycle) {
+      const graph = getGraphSnapshot();
+      const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+      const node = nodes.find((n) => n && n.id === pendingTaskId);
+      if (!node) {
         return;
       }
-
-      panelRuntime.observedLifecycleByTaskId.set(pendingTaskId, lifecycle);
-
-      if (panelRuntime.waitingForCreated && lifecycle.code === 'created') {
-        panelRuntime.waitingForCreated = false;
+      statusDiv.textContent = `Task ${pendingTaskId}: ${node.status}`;
+      if (node.status === 'failed') {
+        statusDiv.className = 'tcp-status tcp-error';
+      } else if (node.status === 'completed' || node.status === 'acknowledged') {
+        statusDiv.className = 'tcp-status tcp-success';
+      } else {
+        statusDiv.className = 'tcp-status';
       }
-
-      renderLifecycleStatus(pendingTaskId);
     }
 
-    observeLifecycleEvents();
-    subscribeEventStream(() => {
-      observeLifecycleEvents();
+    updatePendingTaskStatus();
+    window.addEventListener('slothworld:graph', () => {
+      updatePendingTaskStatus();
     });
 
   const createProductButton = panel.querySelector('#tcp-create-product');
@@ -218,7 +167,6 @@ export function initTaskCreatorPanel() {
       if (result && result.success) {
         const taskId = result && result.data && result.data.id ? String(result.data.id) : null;
         panelRuntime.pendingTaskId = taskId;
-        panelRuntime.waitingForCreated = true;
 
         statusDiv.textContent = taskId
           ? `waiting for engine... task ${taskId}`
@@ -227,10 +175,6 @@ export function initTaskCreatorPanel() {
 
         form.reset();
         channelIdInput.value = FIXED_DISCORD_CHANNEL_ID;
-
-        if (taskId) {
-          renderLifecycleStatus(taskId);
-        }
       } else {
         statusDiv.textContent = `Error: ${result.error || 'Task creation failed'}`;
         statusDiv.className = 'tcp-status tcp-error';

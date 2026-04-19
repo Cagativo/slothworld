@@ -1,7 +1,16 @@
 import { parseCommandInput } from './command-parser.js';
-import { getIndexedWorldSnapshot } from '../core/world/indexedWorldSnapshot.js';
-import { getAllTasks, getAllDesks, getRecentEvents } from './selectors/taskSelectors.js';
-import { getAllAgents } from './selectors/agentSelectors.js';
+
+let _latestGraph = { nodes: [], edges: [], metadata: {} };
+
+export function setGraph(graph) {
+  if (graph && typeof graph === 'object') {
+    _latestGraph = graph;
+  }
+}
+
+function getGraph() {
+  return _latestGraph;
+}
 
 function toTaskPayload(task) {
   const payload = task && typeof task.payload === 'object' && task.payload !== null
@@ -62,33 +71,10 @@ async function injectTask(task) {
   }
 }
 
-function getWorldState() {
-  return getIndexedWorldSnapshot();
-}
-
-function getTasks() {
-  return getAllTasks(getWorldState());
-}
-
-function getAgents() {
-  return getAllAgents(getWorldState());
-}
-
-function getDeskState() {
-  return getAllDesks(getWorldState());
-}
-
-function getEventView(limit = 100) {
-  return getRecentEvents(getWorldState(), limit);
-}
-
 export const controlAPI = {
   injectTask,
-  getWorldState,
-  getTasks,
-  getAgents,
-  getDeskState,
-  getEventView
+  getGraph,
+  setGraph
 };
 
 export async function dispatchCommand(inputString) {

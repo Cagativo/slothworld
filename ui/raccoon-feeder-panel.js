@@ -10,11 +10,6 @@
  * - Trigger execution side effects
  */
 
-import { subscribeEventStream } from '../core/world/eventStore.js';
-import { getIncidentClusters } from './selectors/anomalySelectors.js';
-import { getTaskTimeline } from './selectors/taskSelectors.js';
-
-const STALLED_ACK_MS = 15000;
 
 function stringify(value) {
   try {
@@ -32,6 +27,30 @@ function severityRank(severity) {
     return 2;
   }
   return 1;
+}
+
+function collectIncidents(graph) {
+  const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+  const byType = new Map();
+  for (const node of nodes) {
+    const nodeIncidents = node && node.metadata && Array.isArray(node.metadata.incidents)
+      ? node.metadata.incidents
+      : [];
+    for (const inc of nodeIncidents) {
+      if (!inc || !inc.clusterType) { continue; }
+      if (!byType.has(inc.clusterType)) {
+        byType.set(inc.clusterType, { type: inc.clusterType, severity: inc.severity || 'low', taskIds: [] });
+      }
+      const cluster = byType.get(inc.clusterType);
+      if (node.id && !cluster.taskIds.includes(node.id)) {
+        cluster.taskIds.push(node.id);
+      }
+      if (severityRank(inc.severity) > severityRank(cluster.severity)) {
+        cluster.severity = inc.severity;
+      }
+    }
+  }
+  return Array.from(byType.values());
 }
 
 export function initRaccoonFeederPanel() {
@@ -60,16 +79,11 @@ export function initRaccoonFeederPanel() {
   const incidentDetail = panel.querySelector('[data-detail="incident"]');
   let selectedClusterType = null;
 
-  function getIndexedWorldSnapshot() {
-    if (window.controlAPI && typeof window.controlAPI.getWorldState === 'function') {
-      return window.controlAPI.getWorldState();
+  function getGraphSnapshot() {
+    if (window.controlAPI && typeof window.controlAPI.getGraph === 'function') {
+      return window.controlAPI.getGraph();
     }
-
-    return {
-      events: [],
-      eventsByTaskId: new Map(),
-      eventsByWorkerId: new Map()
-    };
+    return { nodes: [], edges: [], metadata: {} };
   }
 
   panel.addEventListener('click', (event) => {
@@ -88,12 +102,8 @@ export function initRaccoonFeederPanel() {
   });
 
   function renderPanel() {
-    const indexedWorld = getIndexedWorldSnapshot();
-    const incidents = getIncidentClusters(indexedWorld, {
-      thresholdMs: STALLED_ACK_MS,
-      now: Date.now(),
-      includeSystemEvents: true
-    })
+    const graph = getGraphSnapshot();
+    const incidents = collectIncidents(graph)
       .sort((a, b) => {
         const diff = severityRank(b.severity) - severityRank(a.severity);
         if (diff !== 0) {
@@ -133,19 +143,23 @@ export function initRaccoonFeederPanel() {
       ? selected.taskIds[0]
       : null;
     const selectedTimeline = selectedTaskId
-      ? getTaskTimeline(indexedWorld, selectedTaskId).slice(-8)
+      ? getGraphSnapshot().edges.filter((e) => e.taskId === selectedTaskId).slice(-8).map((e) => ({
+          from: e.from,
+          to: e.to,
+          fromAt: e.fromAt,
+          toAt: e.toAt
+        }))
       : [];
     incidentDetail.textContent = stringify({
-      ...selected,
-      expandedRepresentativeEvents: selected && Array.isArray(selected.representativeEvents)
-        ? selected.representativeEvents
-        : [],
+      type: selected.type,
+      severity: selected.severity,
+      taskIds: selected.taskIds,
       timeline: selectedTimeline
     });
   }
 
   renderPanel();
-  subscribeEventStream(() => {
+  window.addEventListener('slothworld:graph', () => {
     renderPanel();
   });
 }
