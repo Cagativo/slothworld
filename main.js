@@ -9,6 +9,7 @@ import { appendRawEvents, getRawEvents } from './core/world/eventStore.js';
 import { createInitialEventSeed } from './core/world/initialEventSeed.js';
 import { initUI } from './ui/ui-bootstrap.js';
 import { exposeWindowAPI } from './ui/window-api.js';
+import { buildVisualWorldGraph } from './core/world/buildVisualWorldGraph.js';
 
 function start() {
   // DEV_MODE flag — set before runtime modules use window.DEV_MODE.
@@ -25,7 +26,7 @@ function start() {
 
   function loop() {
     const worldState = deriveWorldState(getRawEvents());
-    renderFrame(worldState);
+    renderFrame(buildVisualWorldGraph(worldState, { now: Date.now() }));
     requestAnimationFrame(loop);
   }
 
