@@ -136,6 +136,10 @@ export function createTaskEngine(options = {}) {
       ? resolveTask(taskOrId)
       : createTask(taskOrId);
 
+    if (task.status === 'acknowledged' || task.status === 'failed') {
+      return task;
+    }
+
     if (!queueContains(task.id)) {
       queue.push(task.id);
     }
