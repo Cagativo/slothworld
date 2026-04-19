@@ -51,6 +51,18 @@ export function renderAllLayers(ctx, components, frame) {
   // Build entity position map once; shared across geometry and sprite layers
   const entityPositions = buildEntityPositionMap(components);
 
+  // Debug log — component counts + entity position map size
+  if (typeof window !== 'undefined' && window.DEV_MODE) {
+    const byType = {};
+    for (const c of components) { byType[c.componentType] = (byType[c.componentType] || 0) + 1; }
+    console.log('[renderAllLayers] frame', frame,
+      '| zones:', byType['zone-background'] || 0,
+      '| entities:', byType['agent-sprite'] || 0,
+      '| connections:', byType['flow-line'] || 0,
+      '| positions computed:', entityPositions.size);
+  }
+
+
   // ── Layer 1: background ─────────────────────────────────────────────────
   renderBackgroundLayer(ctx);
 
@@ -66,15 +78,15 @@ export function renderAllLayers(ctx, components, frame) {
   renderConnectionLayer(ctx, components, entityPositions);
 
   // ── Layer 5: entity ─────────────────────────────────────────────────────
-  renderAllAgentEntities(ctx, components);
-  renderEntityLayer(ctx, components);
+  renderAllAgentEntities(ctx, components, entityPositions);
+  renderEntityLayer(ctx, components, entityPositions);
 
   // ── Layer 6: prop ───────────────────────────────────────────────────────
-  renderPropLayer(ctx, components);
+  renderPropLayer(ctx, components, entityPositions);
 
   // ── Layer 7: effect ─────────────────────────────────────────────────────
-  renderEffectLayer(ctx, components);
+  renderEffectLayer(ctx, components, entityPositions);
 
   // ── Layer 8: UI overlay ─────────────────────────────────────────────────
-  renderUIOverlayLayer(ctx, components);
+  renderUIOverlayLayer(ctx, components, entityPositions);
 }

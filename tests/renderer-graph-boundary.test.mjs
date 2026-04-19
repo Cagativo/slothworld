@@ -208,9 +208,9 @@ test('renderer boundary: render() does not destructure a raw events array from r
 test('renderer boundary: renderer-loop.js passes its argument directly to render() without transformation', () => {
   const loopSrc = sources['rendering/renderer-loop.js'];
 
-  // The only call must be render(renderView) with no intermediate derivation.
-  assert.ok(/render\s*\(\s*renderView\s*\)/.test(loopSrc),
-    'renderer-loop.js must pass renderView directly to render()');
+  // renderFrame must call buildWorldScene with renderView as the only argument.
+  assert.ok(/buildWorldScene\s*\(\s*renderView\s*\)/.test(loopSrc),
+    'renderer-loop.js must pass renderView directly to buildWorldScene()');
 
   // Must not call any selector or world-state function.
   assert.ok(!/getAllTasks|getTask|getAgent|deriveWorld|buildVisual/.test(loopSrc),
