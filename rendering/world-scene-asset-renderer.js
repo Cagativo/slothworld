@@ -73,6 +73,20 @@ const GLOW_SIZE  = 48;   // px — glow orb overlay (square)
 const FLOW_SIZE  = { w: 16, h: 8 };   // px — flow stream sprite
 const UI_SIZE    = { w: 48, h: 24 };  // px — floating display panel
 
+/**
+ * Resolve the canvas position of an entity component.
+ * Prefers the computed slot position from the entity position map;
+ * falls back to the component's own x/y if no map entry exists.
+ *
+ * @param {object} c                                 agent-sprite component
+ * @param {Map<string, {x:number, y:number}>} map    entity position map
+ * @returns {{ x: number, y: number }}
+ */
+function posOf(c, map) {
+  const p = map && map.get(c.id);
+  return p || { x: c.x, y: c.y };
+}
+
 // ---------------------------------------------------------------------------
 // Layer 1 — Background (ground decor, plants)
 // ---------------------------------------------------------------------------
@@ -171,11 +185,19 @@ export function renderConnectionLayer(ctx, components, entityPositions) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {Array<object>} components
  */
-export function renderEntityLayer(ctx, components) {
-  const half = AGENT_SIZE / 2;
+export function renderEntityLayer(ctx, components, entityPositions) {
+  const half     = AGENT_SIZE / 2;
+  const agentKey = ASSET_MAPPING.agents.base;
+  let debugLogged = false;
   for (const c of components) {
     if (c.componentType !== 'agent-sprite') continue;
-    drawIfLoaded(ctx, ASSET_MAPPING.agents.base, c.x - half, c.y - half, AGENT_SIZE, AGENT_SIZE);
+    const { x, y } = posOf(c, entityPositions);
+    if (window.DEV_MODE && !debugLogged) {
+      console.log('[Layer 5] agent key:', agentKey, '| loaded:', !!loadedAssets[agentKey],
+        '| first entity pos:', x, y);
+      debugLogged = true;
+    }
+    drawIfLoaded(ctx, agentKey, x - half, y - half, AGENT_SIZE, AGENT_SIZE);
   }
 }
 
@@ -190,12 +212,25 @@ export function renderEntityLayer(ctx, components) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {Array<object>} components
  */
-export function renderPropLayer(ctx, components) {
-  const propAssets = ASSET_MAPPING.props;
+export function renderPropLayer(ctx, components, entityPositions) {
+  const taskAssets  = ASSET_MAPPING.props.task;
+  const booksAssets = ASSET_MAPPING.props.books;
+  const sample      = taskAssets.slice(0, 5);
+  let   debugLogged = false;
   for (const c of components) {
     if (c.componentType !== 'agent-sprite') continue;
-    const filename = propAssets[deterministicIndex(c.id, propAssets.length)];
-    drawIfLoaded(ctx, filename, c.x + 18, c.y - 10, PROP_SIZE, PROP_SIZE);
+    const { x, y }   = posOf(c, entityPositions);
+    // Task prop — offset to the right of the agent
+    const taskFile   = taskAssets[deterministicIndex(c.id, taskAssets.length)];
+    // Books prop — offset to the left of the agent, selected by id hash
+    const booksFile  = booksAssets[deterministicIndex(c.id, booksAssets.length)];
+    if (window.DEV_MODE && !debugLogged) {
+      console.log('[Layer 6] task prop:', taskFile, '| loaded:', !!loadedAssets[taskFile],
+        '| books prop:', booksFile, '| loaded:', !!loadedAssets[booksFile]);
+      debugLogged = true;
+    }
+    drawIfLoaded(ctx, taskFile,  x + 18, y - 10, PROP_SIZE, PROP_SIZE);
+    drawIfLoaded(ctx, booksFile, x - 18, y - 10, PROP_SIZE, PROP_SIZE);
   }
 }
 
@@ -211,16 +246,21 @@ export function renderPropLayer(ctx, components) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {Array<object>} components
  */
-export function renderEffectLayer(ctx, components) {
+export function renderEffectLayer(ctx, components, entityPositions) {
   const glowAssets = ASSET_MAPPING.effects.glow;
   const halfGlow   = GLOW_SIZE / 2;
+  let   debugLogged = false;
   for (const c of components) {
     if (c.componentType !== 'agent-sprite') continue;
-    // Glow orb overlay
-    const glowFile = glowAssets[deterministicIndex(c.id, glowAssets.length)];
-    drawIfLoaded(ctx, glowFile, c.x - halfGlow, c.y - halfGlow, GLOW_SIZE, GLOW_SIZE);
-    // Lantern — fixed offset to the left and above the agent
-    drawIfLoaded(ctx, ASSET_MAPPING.effects.lantern, c.x - 22, c.y - 14, 14, 20);
+    const { x, y }  = posOf(c, entityPositions);
+    const glowFile   = glowAssets[deterministicIndex(c.id, glowAssets.length)];
+    if (window.DEV_MODE && !debugLogged) {
+      console.log('[Layer 7] glow:', glowFile, '| loaded:', !!loadedAssets[glowFile],
+        '| lantern loaded:', !!loadedAssets[ASSET_MAPPING.effects.lantern]);
+      debugLogged = true;
+    }
+    drawIfLoaded(ctx, glowFile,                    x - halfGlow, y - halfGlow, GLOW_SIZE, GLOW_SIZE);
+    drawIfLoaded(ctx, ASSET_MAPPING.effects.lantern, x - 22,      y - 14,       14,        20);
   }
 }
 
@@ -235,16 +275,17 @@ export function renderEffectLayer(ctx, components) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {Array<object>} components
  */
-export function renderUIOverlayLayer(ctx, components) {
+export function renderUIOverlayLayer(ctx, components, entityPositions) {
   const panelFile = ASSET_MAPPING.effects.ui[0];
   for (const c of components) {
     if (c.componentType !== 'agent-sprite') continue;
+    const { x, y } = posOf(c, entityPositions);
     // Panel centred horizontally above the agent
     drawIfLoaded(
       ctx,
       panelFile,
-      c.x - UI_SIZE.w / 2,
-      c.y - AGENT_SIZE / 2 - UI_SIZE.h - 4,
+      x - UI_SIZE.w / 2,
+      y - AGENT_SIZE / 2 - UI_SIZE.h - 4,
       UI_SIZE.w,
       UI_SIZE.h,
     );

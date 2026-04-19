@@ -94,11 +94,12 @@ export function renderAgentEntity(ctx, component) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {Array<object>} components  Output of toRenderableComponents()
  */
-export function renderAllAgentEntities(ctx, components) {
+export function renderAllAgentEntities(ctx, components, entityPositions) {
   if (!ctx || !Array.isArray(components)) return;
   for (const c of components) {
     if (c && c.componentType === 'agent-sprite') {
-      renderAgentEntity(ctx, c);
+      const p = entityPositions && entityPositions.get(c.id);
+      renderAgentEntity(ctx, p ? { ...c, x: p.x, y: p.y } : c);
     }
   }
 }

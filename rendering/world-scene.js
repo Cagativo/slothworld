@@ -157,7 +157,7 @@ export function buildWorldScene(graph) {
   const nodes = Array.isArray(safeGraph.nodes) ? safeGraph.nodes : [];
   const edges = Array.isArray(safeGraph.edges) ? safeGraph.edges : [];
 
-  const zones = nodes.filter((n) => n && n.type === 'zone');
+  const zones = LIFECYCLE_ZONES;
 
   const entities = nodes
     .filter((n) => n && n.type !== 'zone')

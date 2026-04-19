@@ -187,14 +187,15 @@ describe('WorldScene determinism', () => {
       assert.notEqual(p3.x, p4.x, 't3 and t4 must have different slot x');
     });
 
-    it('entities without a matching zone-background fall back to their own position', () => {
-      // No zone nodes → no zone-background components → fallback to c.x/c.y
+    it('entities in the same zone receive different slot positions', () => {
+      // buildWorldScene always produces zone-background components from LIFECYCLE_ZONES,
+      // so entities sharing a zone are slotted at different x positions within it.
       const posMap = runPositions(clone(GRAPH));
       const p3 = posMap.get('t3');
       const p4 = posMap.get('t4');
       assert.ok(p3 && p4, 'both positions exist');
-      // Both share the CLAIMED zone top-left (440, 160) as their fallback position
-      assert.equal(p3.x, p4.x, 't3 and t4 share fallback x when no zone-background');
+      // t3 (claimed) and t4 (executing → CLAIMED) share the CLAIMED zone; slots differ
+      assert.notEqual(p3.x, p4.x, 't3 and t4 must have different slot x within CLAIMED zone');
     });
 
     it('three runs all produce identical position maps', () => {
