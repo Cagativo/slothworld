@@ -182,3 +182,72 @@ test('TASK_ACKED: task has acknowledgedAt timestamp set after ack', async () => 
   const task = engine.getTask('test-timestamp');
   assert.ok(Number.isFinite(task.acknowledgedAt) && task.acknowledgedAt > 0, 'acknowledgedAt must be a valid timestamp');
 });
+
+// ─── executionRecord prerequisite ────────────────────────────────────────────
+
+test('TASK_ACKED: ackTask throws ENGINE_ENFORCEMENT_VIOLATION when executionRecord is null', async () => {
+  const { engine } = makeEngine();
+  const taskId = 'test-no-execution-record';
+
+  engine.createTask({ id: taskId, type: 'test' });
+  engine.enqueueTask(taskId);
+  engine.claimTask(taskId);
+  await engine.executeTask(taskId);
+
+  // Task is now in awaiting_ack with a valid executionRecord.
+  // Clear it via the internal task reference to simulate the corrupt state.
+  const task = engine.getTask(taskId);
+  task.executionRecord = null;
+
+  await assert.rejects(
+    () => engine.ackTask(taskId),
+    (err) => {
+      assert.ok(err instanceof Error);
+      assert.equal(err.message, 'ENGINE_ENFORCEMENT_VIOLATION');
+      return true;
+    }
+  );
+});
+
+test('TASK_ACKED: ackTask throws ENGINE_ENFORCEMENT_VIOLATION when executionRecord.result is missing', async () => {
+  const { engine } = makeEngine();
+  const taskId = 'test-no-execution-result';
+
+  engine.createTask({ id: taskId, type: 'test' });
+  engine.enqueueTask(taskId);
+  engine.claimTask(taskId);
+  await engine.executeTask(taskId);
+
+  const task = engine.getTask(taskId);
+  task.executionRecord = { completedAt: Date.now() }; // result field absent
+
+  await assert.rejects(
+    () => engine.ackTask(taskId),
+    (err) => {
+      assert.ok(err instanceof Error);
+      assert.equal(err.message, 'ENGINE_ENFORCEMENT_VIOLATION');
+      return true;
+    }
+  );
+});
+
+test('TASK_ACKED: ackTask with missing executionRecord emits no TASK_ACKED event', async () => {
+  const { engine, emittedEvents } = makeEngine();
+  const taskId = 'test-no-record-no-event';
+
+  engine.createTask({ id: taskId, type: 'test' });
+  engine.enqueueTask(taskId);
+  engine.claimTask(taskId);
+  await engine.executeTask(taskId);
+
+  engine.getTask(taskId).executionRecord = null;
+
+  try {
+    await engine.ackTask(taskId);
+  } catch (_err) {
+    // expected
+  }
+
+  const ackedEvents = emittedEvents.filter((e) => e.type === 'TASK_ACKED' && e.taskId === taskId);
+  assert.equal(ackedEvents.length, 0, 'TASK_ACKED must not be emitted when executionRecord is absent');
+});
