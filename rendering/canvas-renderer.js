@@ -51,6 +51,71 @@ const PHASE_DURATIONS = {
   deliver: 1400
 };
 
+// ─── Input contract enforcement ───────────────────────────────────────────────
+
+/**
+ * The only keys render() will accept on its argument.
+ * Any key outside this set indicates a selector output, raw event payload,
+ * or mixed data source — all of which must be rejected.
+ */
+const ALLOWED_RENDER_VIEW_KEYS = new Set(['nodes', 'edges', 'metadata']);
+
+/**
+ * Selector-domain and event-domain keys that indicate a caller is passing the
+ * wrong object to render().  Listed explicitly so error messages are specific.
+ */
+const FORBIDDEN_RENDER_VIEW_KEYS = new Set([
+  // selector / derived-world-state keys
+  'tasks', 'agents', 'desks', 'workflows', 'counts', 'incidents',
+  'officeLayout', 'transitionByTaskId', 'taskRouteByTaskId',
+  'taskVisualTargetByTaskId', 'observability', 'entities',
+  // raw event keys
+  'events', 'eventsByTaskId', 'eventsByWorkerId', 'rawEvents',
+  'payload', 'taskId', 'workerId',
+]);
+
+/**
+ * Assert that the value passed to render() is a pure VisualWorldGraph —
+ * an object containing only { nodes, edges, metadata }.
+ *
+ * Throws TypeError immediately if any forbidden or unrecognised key is present.
+ * Null / undefined are allowed (render() degrades gracefully to an empty view).
+ *
+ * @param {unknown} view
+ */
+function assertGraphShape(view) {
+  if (view == null) {
+    return; // null / undefined — handled downstream by the safeView fallback
+  }
+
+  if (typeof view !== 'object' || Array.isArray(view)) {
+    throw new TypeError(
+      `render() expects a VisualWorldGraph ({ nodes, edges, metadata }) but received ${Array.isArray(view) ? 'an Array' : typeof view}.`
+    );
+  }
+
+  const keys = Object.keys(view);
+
+  // Fast path: check known-bad keys first so the error message is specific.
+  const forbidden = keys.filter((k) => FORBIDDEN_RENDER_VIEW_KEYS.has(k));
+  if (forbidden.length > 0) {
+    throw new TypeError(
+      `render() received forbidden key(s): [${forbidden.join(', ')}]. ` +
+      'Do not pass selector output, event data, or mixed data sources. ' +
+      'Only { nodes, edges, metadata } are accepted.'
+    );
+  }
+
+  // Reject any unrecognised key — also indicates a mixed source.
+  const unknown = keys.filter((k) => !ALLOWED_RENDER_VIEW_KEYS.has(k));
+  if (unknown.length > 0) {
+    throw new TypeError(
+      `render() received unrecognised key(s): [${unknown.join(', ')}]. ` +
+      'Only { nodes, edges, metadata } are accepted.'
+    );
+  }
+}
+
 function lerp(a, b, t) {
   return a + (b - a) * clamp01(t);
 }
@@ -596,21 +661,78 @@ function drawHud(counts, incidents) {
 }
 
 export function render(renderView) {
+  assertGraphShape(renderView);
   const safeView = renderView && typeof renderView === 'object' ? renderView : {};
-  const entities = Array.isArray(safeView.entities) ? safeView.entities : [];
-  const desks = Array.isArray(safeView.desks) ? safeView.desks : [];
-  const tasks = Array.isArray(safeView.tasks) ? safeView.tasks : [];
-  const agents = Array.isArray(safeView.agents) ? safeView.agents : [];
-  const counts = safeView.counts && typeof safeView.counts === 'object' ? safeView.counts : {};
-  const incidents = Array.isArray(safeView.incidents) ? safeView.incidents : [];
-  const officeLayout = safeView.officeLayout && typeof safeView.officeLayout === 'object' ? safeView.officeLayout : {};
-  const transitionByTaskId = safeView.transitionByTaskId instanceof Map ? safeView.transitionByTaskId : new Map();
-  const taskRouteByTaskId = safeView.taskRouteByTaskId instanceof Map ? safeView.taskRouteByTaskId : new Map();
-  const taskVisualTargetByTaskId = safeView.taskVisualTargetByTaskId instanceof Map ? safeView.taskVisualTargetByTaskId : new Map();
+  const nodes = Array.isArray(safeView.nodes) ? safeView.nodes : [];
+  const edges = Array.isArray(safeView.edges) ? safeView.edges : [];
 
-  const desksById = new Map(desks.map((desk) => [desk.id, desk]));
-  const tasksById = new Map(tasks.map((task) => [task.id, task]));
+  const taskNodes   = nodes.filter((n) => n && n.type === 'task');
+  const workerNodes = nodes.filter((n) => n && n.type === 'worker');
+
   const frameNow = Date.now();
+
+  const counts = { queued: 0, active: 0, done: 0, failed: 0 };
+  for (const node of taskNodes) {
+    const s = String(node.status || '').toLowerCase();
+    if (s === 'queued' || s === 'created' || s === 'enqueued') {
+      counts.queued += 1;
+    } else if (s === 'failed' || s === 'error') {
+      counts.failed += 1;
+    } else if (s === 'completed' || s === 'acknowledged') {
+      counts.done += 1;
+    } else {
+      counts.active += 1;
+    }
+  }
+
+  const seenTypes = new Set();
+  const incidents = [];
+  for (const node of nodes) {
+    const nodeIncidents = node && node.metadata && Array.isArray(node.metadata.incidents)
+      ? node.metadata.incidents
+      : [];
+    for (const inc of nodeIncidents) {
+      if (inc && !seenTypes.has(inc.clusterType)) {
+        seenTypes.add(inc.clusterType);
+        incidents.push({ type: inc.clusterType, severity: inc.severity, taskIds: [] });
+      }
+    }
+  }
+
+  const workerCount = workerNodes.length;
+  const workerSpacing = canvas.width / Math.max(workerCount + 1, 2);
+  const syntheticDesksById = new Map();
+  workerNodes.forEach((node, i) => {
+    if (node.metadata && node.metadata.deskId) {
+      syntheticDesksById.set(node.metadata.deskId, {
+        id: node.metadata.deskId,
+        x: workerSpacing * (i + 1),
+        y: 300,
+        queueTaskIds: []
+      });
+    }
+  });
+
+  const syntheticTasksById = new Map();
+  for (const node of taskNodes) {
+    syntheticTasksById.set(node.id, {
+      id: node.id,
+      status: node.status,
+      deskId: node.metadata && node.metadata.deskId
+    });
+  }
+
+  const taskCount = taskNodes.length;
+  const taskSpacing = canvas.width / Math.max(taskCount + 1, 2);
+  const taskPositions = new Map();
+  taskNodes.forEach((node, i) => {
+    const desk = node.metadata && node.metadata.deskId
+      ? syntheticDesksById.get(node.metadata.deskId)
+      : null;
+    taskPositions.set(node.id, desk
+      ? { x: desk.x, y: 160 }
+      : { x: taskSpacing * (i + 1), y: 160 });
+  });
 
   ensureDebugBindings();
   ctx.imageSmoothingEnabled = false;
@@ -619,19 +741,28 @@ export function render(renderView) {
   ctx.fillStyle = '#0b1220';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  for (const desk of desks) {
+  for (const desk of syntheticDesksById.values()) {
     drawDesk(desk);
   }
 
-  drawOfficeFlow(officeLayout);
-
-  for (const entity of entities) {
-    const taskPosition = taskVisualTargetByTaskId.get(entity.id) || null;
-    drawTask(entity, taskPosition);
+  for (const node of taskNodes) {
+    const pos = taskPositions.get(node.id) || null;
+    drawTask(
+      { id: node.id, visualState: node.status, isActive: node.status === 'claimed' || node.status === 'executing' },
+      pos
+    );
   }
 
-  for (const agent of agents) {
-    drawAgent(agent, desksById, tasksById, frameNow, transitionByTaskId, desks.length || (officeLayout.workerDesks && officeLayout.workerDesks.length) || 1, taskRouteByTaskId);
+  for (const node of workerNodes) {
+    drawAgent(
+      { id: node.id, state: node.status, role: node.metadata && node.metadata.role, deskId: node.metadata && node.metadata.deskId, currentTaskId: node.metadata && node.metadata.currentTaskId },
+      syntheticDesksById,
+      syntheticTasksById,
+      frameNow,
+      new Map(),
+      Math.max(workerCount, 1),
+      new Map()
+    );
   }
 
   drawHud(counts, incidents);

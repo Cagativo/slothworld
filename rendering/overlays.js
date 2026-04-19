@@ -1,4 +1,4 @@
-import { canvas, agents, desks, workflows } from '../core/app-state.js';
+import { canvas } from '../core/app-state.js';
 import { spriteConfigs } from '../core/constants.js';
 
 // --- Shared rendering state ---
@@ -60,9 +60,10 @@ function drawSpeechBubble(ctx, agent) {
   ctx.restore();
 }
 
-export function drawSpeechBubbles(ctx) {
-  for (const agent of agents) {
-    drawSpeechBubble(ctx, agent);
+export function drawSpeechBubbles(ctx, workerNodes) {
+  const nodes = Array.isArray(workerNodes) ? workerNodes : [];
+  for (const node of nodes) {
+    drawSpeechBubble(ctx, node);
   }
 }
 
@@ -104,49 +105,49 @@ export function getRoleTint(role) {
 }
 
 export function getAgentStateLabel(agent) {
-  if (agent.visualState === 'working' || agent.visualState === 'waiting') {
+  const status = String(agent.status || '').toLowerCase();
+
+  if (status === 'working' || status === 'executing' || status === 'claimed') {
     return 'WORK';
   }
 
-  if (agent.visualState === 'complete_react') {
-    return 'DONE';
-  }
-
-  if (agent.state === 'working') {
-    return 'WORK';
-  }
-
-  if (agent.state === 'moving') {
+  if (status === 'moving') {
     return 'MOVE';
   }
 
-  if (agent.state === 'sitting') {
-    return 'SEAT';
+  if (status === 'completed' || status === 'acknowledged') {
+    return 'DONE';
   }
 
-  if (agent.targetDesk && agent.targetDesk.lastFailedTask) {
+  if (status === 'failed' || status === 'error') {
     return 'FAIL';
+  }
+
+  if (status === 'sitting') {
+    return 'SEAT';
   }
 
   return 'IDLE';
 }
 
 export function getTaskPriority(task) {
-  if (!task || typeof task.priority !== 'number') {
-    return 0;
-  }
-
-  return Math.max(0, Math.min(2, task.priority));
+  const meta = task && typeof task.metadata === 'object' ? task.metadata : {};
+  const p = typeof meta.priority === 'number' ? meta.priority : 0;
+  return Math.max(0, Math.min(2, p));
 }
 
 // --- Desk overlays ---
+// Desk overlay functions accept a graph-compatible desk view:
+//   { x, y, currentTaskNode: graphNode|null, queuedTaskNodes: graphNode[] }
 export function drawDeskProcessingGlow(ctx, desk, pulse) {
-  const task = desk.currentTask || desk.queue[0];
-  if (!task) {
+  const taskNode = desk.currentTaskNode
+    || (Array.isArray(desk.queuedTaskNodes) && desk.queuedTaskNodes[0])
+    || null;
+  if (!taskNode) {
     return;
   }
 
-  const priority = getTaskPriority(task);
+  const priority = getTaskPriority(taskNode);
   const intensity = 0.12 + priority * 0.08 + pulse * 0.08;
   const radius = 40 + priority * 8 + pulse * 6;
   const gradient = ctx.createRadialGradient(desk.x, desk.y, 8, desk.x, desk.y, radius);
@@ -160,17 +161,17 @@ export function drawDeskProcessingGlow(ctx, desk, pulse) {
 }
 
 export function drawDeskQueueStack(ctx, desk) {
-  const queueCount = desk.queue.length;
-  if (queueCount <= 0) {
+  const queuedNodes = Array.isArray(desk.queuedTaskNodes) ? desk.queuedTaskNodes : [];
+  if (queuedNodes.length <= 0) {
     return;
   }
 
-  const maxVisible = Math.min(queueCount, 5);
+  const maxVisible = Math.min(queuedNodes.length, 5);
   for (let i = 0; i < maxVisible; i += 1) {
-    const queuedTask = desk.queue[i];
+    const taskNode = queuedNodes[i];
     const offsetX = -26 + i * 4;
     const offsetY = 26 - i * 3;
-    const priorityColor = getDeskPriorityColor(getTaskPriority(queuedTask));
+    const priorityColor = getDeskPriorityColor(getTaskPriority(taskNode));
     ctx.fillStyle = priorityColor;
     ctx.fillRect(desk.x + offsetX, desk.y + offsetY, 12, 5);
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
@@ -180,8 +181,11 @@ export function drawDeskQueueStack(ctx, desk) {
 
 export function drawDeskTaskOverlay(ctx, desk) {
   const labelY = desk.y - spriteConfigs.desk.height / 2 - 10;
-  const queueText = `${desk.queue.length}`;
-  const activePriority = desk.currentTask ? desk.currentTask.priority : (desk.queue[0] ? desk.queue[0].priority : null);
+  const queuedNodes = Array.isArray(desk.queuedTaskNodes) ? desk.queuedTaskNodes : [];
+  const queueText = `${queuedNodes.length}`;
+  const activeNode = desk.currentTaskNode || null;
+  const activePriority = activeNode ? getTaskPriority(activeNode)
+    : (queuedNodes[0] ? getTaskPriority(queuedNodes[0]) : null);
 
   if (activePriority !== null) {
     ctx.fillStyle = getDeskPriorityColor(activePriority);
@@ -193,33 +197,28 @@ export function drawDeskTaskOverlay(ctx, desk) {
   ctx.textAlign = 'center';
   ctx.fillText(queueText, desk.x, labelY);
 
-  if (desk.lastFailedTask) {
+  if (desk.failedCount > 0) {
     ctx.fillStyle = '#ff5f5f';
-    ctx.fillText(`FAILED ${desk.failedTasks}`, desk.x, labelY - 14);
+    ctx.fillText(`FAILED ${desk.failedCount}`, desk.x, labelY - 14);
   }
 
-  if (!desk.currentTask) {
+  if (!activeNode) {
     return;
   }
 
   const barWidth = 64;
   const barHeight = 6;
-  const task = desk.currentTask;
-  const rawProgressRatio = task && typeof task.progress === 'number' && typeof task.required === 'number' && task.required > 0
-    ? Math.max(0, Math.min(1, task.progress / task.required))
-    : 0;
-  const status = task && typeof task.status === 'string' ? task.status : 'in_progress';
+  const nodeStatus = String(activeNode.status || '').toLowerCase();
   let progressRatio = 0;
 
-  if (status === 'done' || status === 'failed') {
+  if (nodeStatus === 'completed' || nodeStatus === 'acknowledged' || nodeStatus === 'failed') {
     progressRatio = 1;
-  } else if (status === 'awaiting_ack') {
+  } else if (nodeStatus === 'awaiting_ack') {
     progressRatio = 0.95;
-  } else if (status === 'in_progress' || status === 'running' || status === 'processing') {
-    progressRatio = Math.min(0.9, rawProgressRatio);
-  } else {
-    progressRatio = Math.min(0.9, rawProgressRatio);
+  } else if (nodeStatus === 'executing' || nodeStatus === 'claimed') {
+    progressRatio = 0.6;
   }
+
   const barX = desk.x - barWidth / 2;
   const barY = labelY + 6;
   const pulse = 0.5 + 0.5 * Math.sin(uiFxState.frame * 0.16);
@@ -227,7 +226,10 @@ export function drawDeskTaskOverlay(ctx, desk) {
   ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
   ctx.fillRect(barX, barY, barWidth, barHeight);
   const barGradient = ctx.createLinearGradient(barX, barY, barX + barWidth, barY + barHeight);
-  if (desk.currentTask.type === 'shopify') {
+  const taskType = activeNode.metadata && typeof activeNode.metadata.taskType === 'string'
+    ? activeNode.metadata.taskType
+    : '';
+  if (taskType === 'shopify') {
     barGradient.addColorStop(0, '#2f8e68');
     barGradient.addColorStop(0.5, '#50d890');
     barGradient.addColorStop(1, '#95ffe8');
@@ -298,26 +300,19 @@ export function drawTaskFx(ctx) {
   }
 }
 
-export function refreshTaskFxState() {
+export function refreshTaskFxState(taskNodes) {
+  const nodes = Array.isArray(taskNodes) ? taskNodes : [];
   const currentTasks = new Map();
+  const spacing = canvas.width / Math.max(nodes.length + 1, 2);
 
-  for (const desk of desks) {
-    if (desk.currentTask) {
-      currentTasks.set(desk.currentTask.id, {
-        x: desk.x,
-        y: desk.y,
-        priority: getTaskPriority(desk.currentTask)
-      });
-    }
-
-    for (const queuedTask of desk.queue) {
-      currentTasks.set(queuedTask.id, {
-        x: desk.x,
-        y: desk.y,
-        priority: getTaskPriority(queuedTask)
-      });
-    }
-  }
+  nodes.forEach((node, i) => {
+    if (!node || !node.id) { return; }
+    currentTasks.set(node.id, {
+      x: spacing * (i + 1),
+      y: canvas.height / 2,
+      priority: 0
+    });
+  });
 
   for (const [taskId, info] of currentTasks) {
     if (!uiFxState.knownTasks.has(taskId)) {
@@ -359,8 +354,10 @@ export function refreshTaskFxState() {
 }
 
 // --- Agent identity layer ---
-export function drawAgentIdentityLayer(ctx, agent) {
-  const tint = getRoleTint(agent.role);
+// agent must be a graph worker node: { id, type, status, metadata: { role, currentTaskId, deskId } }
+// currentTaskNode is the optional task graph node currently assigned to this agent
+export function drawAgentIdentityLayer(ctx, agent, currentTaskNode) {
+  const tint = getRoleTint(agent.metadata && agent.metadata.role);
   ctx.fillStyle = tint;
   ctx.beginPath();
   ctx.arc(agent.x, agent.y + 8, 12, 0, Math.PI * 2);
@@ -376,39 +373,30 @@ export function drawAgentIdentityLayer(ctx, agent) {
   ctx.textAlign = 'center';
   ctx.fillText(stateLabel, stateX, stateY - 1);
 
-  const activeTask = agent.targetDesk && agent.targetDesk.currentTask ? agent.targetDesk.currentTask : null;
-  if (!activeTask) {
+  if (!currentTaskNode) {
     return;
   }
 
-  const icon = getTaskIcon(activeTask.type);
+  const taskType = currentTaskNode.metadata && typeof currentTaskNode.metadata.taskType === 'string'
+    ? currentTaskNode.metadata.taskType
+    : null;
+  const icon = getTaskIcon(taskType);
   const iconX = agent.x + 16;
   const iconY = agent.y - 24;
   ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
   ctx.fillRect(iconX - 6, iconY - 8, 12, 12);
-  ctx.fillStyle = activeTask.type === 'shopify' ? '#7ef7b3' : '#7ecfff';
+  ctx.fillStyle = taskType === 'shopify' ? '#7ef7b3' : '#7ecfff';
   ctx.font = '9px monospace';
   ctx.fillText(icon, iconX, iconY + 1);
 }
 
 // --- Global HUD ---
-export function drawGlobalHud(ctx) {
-  let activeTasks = 0;
-  let completedTasks = 0;
-  let failedTasks = 0;
-
-  for (const desk of desks) {
-    activeTasks += desk.queue.length + (desk.currentTask ? 1 : 0);
-    completedTasks += desk.completedTasks;
-    failedTasks += desk.failedTasks;
-  }
-
-  let activeWorkflows = 0;
-  for (const workflow of workflows.values()) {
-    if (workflow.status === 'running') {
-      activeWorkflows += 1;
-    }
-  }
+export function drawGlobalHud(ctx, counts, activeWorkflows) {
+  const safeCounts = counts && typeof counts === 'object' ? counts : {};
+  const activeTasks = safeCounts.active || 0;
+  const completedTasks = safeCounts.done || 0;
+  const failedTasks = safeCounts.failed || 0;
+  const safeActiveWorkflows = typeof activeWorkflows === 'number' ? activeWorkflows : 0;
 
   ctx.fillStyle = 'rgba(10, 14, 24, 0.78)';
   ctx.fillRect(12, 10, 330, 44);
@@ -421,7 +409,7 @@ export function drawGlobalHud(ctx) {
   ctx.fillText(`Active: ${activeTasks}`, 20, 28);
   ctx.fillText(`Done: ${completedTasks}`, 110, 28);
   ctx.fillText(`Failed: ${failedTasks}`, 185, 28);
-  ctx.fillText(`Workflows: ${activeWorkflows}`, 260, 28);
+  ctx.fillText(`Workflows: ${safeActiveWorkflows}`, 260, 28);
 
   ctx.fillStyle = '#8ea8c3';
   ctx.font = '10px monospace';
@@ -429,8 +417,8 @@ export function drawGlobalHud(ctx) {
 }
 
 // --- Workflow overlays ---
-export function drawWorkflowOverlay(ctx) {
-  const activeWorkflowList = Array.from(workflows.values()).filter((workflow) => workflow.status === 'running');
+export function drawWorkflowOverlay(ctx, workflowList) {
+  const activeWorkflowList = Array.isArray(workflowList) ? workflowList : [];
   if (activeWorkflowList.length === 0) {
     return;
   }
@@ -484,8 +472,8 @@ export function drawWorkflowOverlay(ctx) {
   }
 }
 
-export function drawPendingWorkflowsOverlay(ctx) {
-  const pendingWorkflowList = Array.from(workflows.values()).filter((workflow) => workflow.status === 'pending_approval');
+export function drawPendingWorkflowsOverlay(ctx, pendingList) {
+  const pendingWorkflowList = Array.isArray(pendingList) ? pendingList : [];
   if (pendingWorkflowList.length === 0) {
     return;
   }

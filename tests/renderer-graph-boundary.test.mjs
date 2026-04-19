@@ -232,3 +232,69 @@ test('renderer boundary: no rendering file imports from ui/selectors/', () => {
       `${file} must not import directly from ui/selectors/`);
   }
 });
+
+// ─── 7. render() enforces the VisualWorldGraph contract at runtime ────────────
+
+test('renderer boundary: canvas-renderer.js declares ALLOWED_RENDER_VIEW_KEYS', () => {
+  const src = sources['rendering/canvas-renderer.js'];
+  assert.ok(/ALLOWED_RENDER_VIEW_KEYS/.test(src),
+    'canvas-renderer.js must declare ALLOWED_RENDER_VIEW_KEYS to define the accepted graph shape');
+});
+
+test('renderer boundary: ALLOWED_RENDER_VIEW_KEYS contains exactly nodes, edges, metadata', () => {
+  const src = sources['rendering/canvas-renderer.js'];
+  // Find the Set literal for ALLOWED_RENDER_VIEW_KEYS and extract its entries.
+  const match = src.match(/ALLOWED_RENDER_VIEW_KEYS\s*=\s*new Set\(\[([^\]]*)\]\)/);
+  assert.ok(match, 'ALLOWED_RENDER_VIEW_KEYS must be declared as new Set([...])');
+  const entries = match[1].match(/'([^']+)'/g).map((s) => s.replace(/'/g, ''));
+  assert.deepStrictEqual(
+    [...entries].sort(),
+    ['edges', 'metadata', 'nodes'],
+    'ALLOWED_RENDER_VIEW_KEYS must contain exactly "nodes", "edges", "metadata"'
+  );
+});
+
+test('renderer boundary: canvas-renderer.js declares FORBIDDEN_RENDER_VIEW_KEYS', () => {
+  const src = sources['rendering/canvas-renderer.js'];
+  assert.ok(/FORBIDDEN_RENDER_VIEW_KEYS/.test(src),
+    'canvas-renderer.js must declare FORBIDDEN_RENDER_VIEW_KEYS listing selector and event-domain keys');
+});
+
+test('renderer boundary: FORBIDDEN_RENDER_VIEW_KEYS contains selector-domain keys', () => {
+  const src = sources['rendering/canvas-renderer.js'];
+  const match = src.match(/FORBIDDEN_RENDER_VIEW_KEYS\s*=\s*new Set\(\[([^\]]*)\]\)/s);
+  assert.ok(match, 'FORBIDDEN_RENDER_VIEW_KEYS must be declared as new Set([...])');
+  const entries = new Set(match[1].match(/'([^']+)'/g).map((s) => s.replace(/'/g, '')));
+  for (const key of ['tasks', 'agents', 'desks', 'events', 'eventsByTaskId', 'rawEvents']) {
+    assert.ok(entries.has(key),
+      `FORBIDDEN_RENDER_VIEW_KEYS must include the selector/event key "${key}"`);
+  }
+});
+
+test('renderer boundary: canvas-renderer.js defines an assertGraphShape guard function', () => {
+  const src = sources['rendering/canvas-renderer.js'];
+  assert.ok(/function assertGraphShape\s*\(/.test(src),
+    'canvas-renderer.js must define an assertGraphShape() guard function');
+});
+
+test('renderer boundary: assertGraphShape throws TypeError on forbidden keys', () => {
+  const src = sources['rendering/canvas-renderer.js'];
+  // assertGraphShape must reference TypeError and throw it.
+  assert.ok(/throw new TypeError/.test(src),
+    'assertGraphShape() must throw TypeError when the input shape is wrong');
+});
+
+test('renderer boundary: render() calls assertGraphShape before using its argument', () => {
+  const src = sources['rendering/canvas-renderer.js'];
+  // Locate the render() function body and verify assertGraphShape is the first call.
+  const renderMatch = src.match(/export function render\s*\([^)]*\)\s*\{([\s\S]*?)(?=\nexport function|\n\/\/ ─|$)/);
+  assert.ok(renderMatch, 'render() must be defined as an exported function');
+  const body = renderMatch[1];
+  const guardIdx   = body.indexOf('assertGraphShape(');
+  const safeViewIdx = body.indexOf('const safeView');
+  assert.ok(guardIdx !== -1,
+    'render() must call assertGraphShape()');
+  assert.ok(guardIdx < safeViewIdx,
+    'render() must call assertGraphShape() before accessing its argument');
+});
+

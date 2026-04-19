@@ -26,7 +26,17 @@ function start() {
 
   function loop() {
     const worldState = deriveWorldState(getRawEvents());
-    renderFrame(buildVisualWorldGraph(worldState, { now: Date.now() }));
+    const graph = buildVisualWorldGraph(worldState, { now: Date.now() });
+    if (window.controlAPI && typeof window.controlAPI.setGraph === 'function') {
+      window.controlAPI.setGraph(graph);
+    }
+    const renderView = {
+      nodes:    graph.nodes,
+      edges:    graph.edges,
+      metadata: { ...graph.metadata, observability: graph.observability },
+    };
+    renderFrame(renderView);
+    window.dispatchEvent(new CustomEvent('slothworld:graph'));
     requestAnimationFrame(loop);
   }
 

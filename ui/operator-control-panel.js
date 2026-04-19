@@ -5,17 +5,7 @@
  * events -> deriveWorldState -> selectors -> rendering
  */
 
-import { subscribeEventStream } from '../core/world/eventStore.js';
-import {
-  getAllTasks,
-  getTaskTimeline,
-  getRecentEvents,
-  filterTasks,
-  getTaskBuckets,
-  getDeskIndexForTask,
-  getDeskPosition
-} from './selectors/taskSelectors.js';
-import { getAllAgents } from './selectors/agentSelectors.js';
+
 
 const panelState = {
   selectedTaskId: null,
@@ -79,34 +69,7 @@ function taskIcon(status) {
   return '•';
 }
 
-function extractTaskError(task = {}, timeline = []) {
-  const directCandidates = [
-    task.error,
-    task.lastError,
-    task.executionResult && task.executionResult.error,
-    task.executionResult && task.executionResult.result && task.executionResult.result.error,
-    task.payload && task.payload.error
-  ];
-
-  for (const candidate of directCandidates) {
-    if (typeof candidate === 'string' && candidate.trim()) {
-      return candidate.trim();
-    }
-  }
-
-  for (let i = timeline.length - 1; i >= 0; i -= 1) {
-    const entry = timeline[i];
-    const payload = entry && entry.payload && typeof entry.payload === 'object' ? entry.payload : {};
-    const payloadError = payload && typeof payload.error === 'string' ? payload.error.trim() : '';
-    if (payloadError) {
-      return payloadError;
-    }
-  }
-
-  return null;
-}
-
-function formatTaskErrorMessage(task, rawError) {
+function formatTaskErrorMessage(taskType, rawError) {
   if (!rawError) {
     return null;
   }
@@ -124,41 +87,50 @@ function formatTaskErrorMessage(task, rawError) {
     return 'HuggingFace API key missing';
   }
 
-  if (task && task.type === 'image_render') {
+  if (taskType === 'image_render') {
     return `image render failed: ${rawError}`;
   }
 
   return rawError;
 }
 
-function buildExecutionTrace(timeline = []) {
-  return timeline.map((entry) => {
-    const payload = entry && entry.payload && typeof entry.payload === 'object' ? entry.payload : {};
-    const trace = {
-      at: formatIso(entry.timestamp),
-      event: entry.type
-    };
-
-    if (Object.prototype.hasOwnProperty.call(payload, 'success')) {
-      trace.success = payload.success;
-    }
-
-    if (typeof payload.error === 'string' && payload.error.trim()) {
-      trace.error = payload.error.trim();
-    }
-
-    if (typeof payload.attempts === 'number') {
-      trace.attempts = payload.attempts;
-    }
-
-    return trace;
-  });
+function buildExecutionTrace(edges) {
+  return (Array.isArray(edges) ? edges : []).map((edge) => ({
+    from: edge.from,
+    to: edge.to,
+    fromAt: formatIso(edge.fromAt),
+    toAt: formatIso(edge.toAt)
+  }));
 }
 
-function renderTaskList(listElement, tasks, selectedTaskId, indexedWorld) {
+function isActiveNodeStatus(status) {
+  return status === 'claimed' || status === 'executing' || status === 'awaiting_ack';
+}
+
+function bucketNodesByStatus(taskNodes) {
+  const queued = [];
+  const active = [];
+  const done = [];
+  const failed = [];
+  for (const node of taskNodes) {
+    const s = String(node.status || '').toLowerCase();
+    if (s === 'failed' || s === 'error') {
+      failed.push(node);
+    } else if (s === 'completed' || s === 'acknowledged') {
+      done.push(node);
+    } else if (isActiveNodeStatus(s)) {
+      active.push(node);
+    } else {
+      queued.push(node);
+    }
+  }
+  return { queued, active, done, failed };
+}
+
+function renderTaskList(listElement, nodes, selectedTaskId) {
   listElement.innerHTML = '';
 
-  if (!tasks.length) {
+  if (!nodes.length) {
     const empty = document.createElement('li');
     empty.className = 'ocp-empty';
     empty.textContent = 'none';
@@ -166,22 +138,22 @@ function renderTaskList(listElement, tasks, selectedTaskId, indexedWorld) {
     return;
   }
 
-  tasks.slice(0, 25).forEach((task) => {
-    const timeline = indexedWorld ? getTaskTimeline(indexedWorld, task.id).slice(-20) : [];
-    const rawError = extractTaskError(task, timeline);
-    const displayError = formatTaskErrorMessage(task, rawError);
+  nodes.slice(0, 25).forEach((node) => {
+    const meta = node.metadata || {};
+    const rawError = typeof meta.error === 'string' && meta.error ? meta.error : null;
+    const displayError = formatTaskErrorMessage(meta.taskType, rawError);
 
     const li = document.createElement('li');
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `ocp-item ocp-task-${taskTone(task.status)}${selectedTaskId === task.id ? ' is-selected' : ''}`;
-    button.dataset.taskId = task.id;
-    const statusLabel = `status:${task.status || 'unknown'}`;
+    button.className = `ocp-item ocp-task-${taskTone(node.status)}${selectedTaskId === node.id ? ' is-selected' : ''}`;
+    button.dataset.taskId = node.id;
+    const statusLabel = `status:${node.status || 'unknown'}`;
     const errorLabel = displayError ? ` | error:${displayError}` : '';
-    const label = `${task.title} | ${statusLabel}${task.assignedAgentId ? ` | ${task.assignedAgentId}` : ''}${errorLabel}`;
-    button.textContent = `${taskIcon(task.status)} ${label}`;
+    const label = `${meta.title || node.id} | ${statusLabel}${meta.assignedAgentId ? ` | ${meta.assignedAgentId}` : ''}${errorLabel}`;
+    button.textContent = `${taskIcon(node.status)} ${label}`;
 
-    if (task.type === 'image_render' && displayError) {
+    if (meta.taskType === 'image_render' && displayError) {
       button.classList.add('ocp-task-image-failed');
     }
 
@@ -190,117 +162,11 @@ function renderTaskList(listElement, tasks, selectedTaskId, indexedWorld) {
   });
 }
 
-function agentPoint(agent, index, selectedTaskDesk) {
-  const value = String(agent && agent.id ? agent.id : index);
-  let seed = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    seed = (seed * 31 + value.charCodeAt(i)) >>> 0;
+function getGraphSnapshot() {
+  if (window.controlAPI && typeof window.controlAPI.getGraph === 'function') {
+    return window.controlAPI.getGraph();
   }
-
-  if (selectedTaskDesk && agent && agent.currentTaskId) {
-    return {
-      x: selectedTaskDesk.x + Math.sin(seed) * 12,
-      y: selectedTaskDesk.y + 28 + Math.cos(seed) * 6
-    };
-  }
-
-  return {
-    x: 120 + (index % 6) * 96,
-    y: 540 - Math.floor(index / 6) * 56
-  };
-}
-
-function ensureSelectionOverlay() {
-  const canvas = document.querySelector('canvas');
-  if (!(canvas instanceof HTMLCanvasElement)) {
-    return null;
-  }
-
-  const parent = canvas.parentElement;
-  if (!parent) {
-    return null;
-  }
-
-  if (getComputedStyle(parent).position === 'static') {
-    parent.style.position = 'relative';
-  }
-
-  let overlay = parent.querySelector('[data-role="task-selection-overlay"]');
-  if (!(overlay instanceof HTMLCanvasElement)) {
-    overlay = document.createElement('canvas');
-    overlay.dataset.role = 'task-selection-overlay';
-    overlay.style.position = 'absolute';
-    overlay.style.pointerEvents = 'none';
-    overlay.style.zIndex = '4';
-    parent.appendChild(overlay);
-  }
-
-  overlay.width = canvas.width;
-  overlay.height = canvas.height;
-  overlay.style.left = `${canvas.offsetLeft}px`;
-  overlay.style.top = `${canvas.offsetTop}px`;
-  overlay.style.width = `${canvas.clientWidth}px`;
-  overlay.style.height = `${canvas.clientHeight}px`;
-
-  return overlay;
-}
-
-function drawTaskSelectionOverlay(tasks, agents, selectedTaskId) {
-  const overlay = ensureSelectionOverlay();
-  if (!(overlay instanceof HTMLCanvasElement)) {
-    return;
-  }
-
-  const octx = overlay.getContext('2d');
-  if (!octx) {
-    return;
-  }
-
-  octx.clearRect(0, 0, overlay.width, overlay.height);
-  if (!selectedTaskId) {
-    return;
-  }
-
-  const task = tasks.find((item) => item.id === selectedTaskId);
-  if (!task) {
-    return;
-  }
-
-  const desk = getDeskPosition(getDeskIndexForTask(task));
-  const selectedAgentIndex = agents.findIndex((agent) => agent.currentTaskId === selectedTaskId || agent.id === task.assignedAgentId);
-  const selectedAgent = selectedAgentIndex >= 0 ? agents[selectedAgentIndex] : null;
-  const point = selectedAgent ? agentPoint(selectedAgent, selectedAgentIndex, desk) : null;
-
-  octx.strokeStyle = 'rgba(56, 189, 248, 0.95)';
-  octx.lineWidth = 2;
-  octx.strokeRect(desk.x - 52, desk.y - 34, 104, 68);
-
-  if (point) {
-    octx.strokeStyle = 'rgba(34, 197, 94, 0.95)';
-    octx.beginPath();
-    octx.arc(point.x, point.y, 16, 0, Math.PI * 2);
-    octx.stroke();
-
-    octx.strokeStyle = 'rgba(251, 191, 36, 0.9)';
-    octx.setLineDash([6, 4]);
-    octx.beginPath();
-    octx.moveTo(desk.x, desk.y);
-    octx.lineTo(point.x, point.y);
-    octx.stroke();
-    octx.setLineDash([]);
-  }
-}
-
-function getIndexedWorldSnapshot() {
-  if (window.controlAPI && typeof window.controlAPI.getWorldState === 'function') {
-    return window.controlAPI.getWorldState();
-  }
-
-  return {
-    events: [],
-    eventsByTaskId: new Map(),
-    eventsByWorkerId: new Map()
-  };
+  return { nodes: [], edges: [], metadata: {} };
 }
 
 function createPanelRoot() {
@@ -474,74 +340,92 @@ export function initOperatorControlPanel() {
   });
 
   function renderPanel() {
-    const indexedWorld = getIndexedWorldSnapshot();
-    const allTasks = getAllTasks(indexedWorld);
-    const tasks = filterTasks(indexedWorld, {
-      activeOnly: panelState.activeTasksOnly,
-      recentSeconds: panelState.recentSeconds,
-      now: Date.now()
-    });
-    const agents = getAllAgents(indexedWorld);
-    const buckets = getTaskBuckets(indexedWorld, { tasks });
+    const graph = getGraphSnapshot();
+    const allNodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+    const graphEdges = Array.isArray(graph.edges) ? graph.edges : [];
 
-    renderTaskList(queuedList, buckets.queued, panelState.selectedTaskId, indexedWorld);
-    renderTaskList(activeList, buckets.active, panelState.selectedTaskId, indexedWorld);
-    renderTaskList(doneList, buckets.done, panelState.selectedTaskId, indexedWorld);
-    renderTaskList(failedList, buckets.failed, panelState.selectedTaskId, indexedWorld);
+    const taskNodes = allNodes.filter((n) => n && n.type === 'task');
+    const workerNodes = allNodes.filter((n) => n && n.type === 'worker');
 
-    const recentEvents = getRecentEvents(indexedWorld, panelState.maxEventRows).reverse();
-    eventsList.innerHTML = '';
-    if (!recentEvents.length) {
-      const empty = document.createElement('li');
-      empty.className = 'ocp-empty';
-      empty.textContent = 'none';
-      eventsList.appendChild(empty);
-    } else {
-      recentEvents.forEach((entry) => {
-        const li = document.createElement('li');
-        li.className = 'ocp-event';
-        li.textContent = `${formatIso(entry.timestamp)} | ${entry.type} ${entry.taskId || ''}`.trim();
-        if (panelState.selectedTaskId && entry.taskId === panelState.selectedTaskId) {
-          li.classList.add('is-selected');
-        }
-        eventsList.appendChild(li);
+    // Apply filters using already-computed node.status — no derivation from events.
+    let filteredTaskNodes = taskNodes;
+    if (panelState.activeTasksOnly) {
+      filteredTaskNodes = taskNodes.filter((n) => isActiveNodeStatus(n.status));
+    }
+    if (panelState.recentSeconds > 0) {
+      const cutoff = Date.now() - panelState.recentSeconds * 1000;
+      filteredTaskNodes = filteredTaskNodes.filter((n) => {
+        if (isActiveNodeStatus(n.status)) { return true; }
+        const meta = n.metadata || {};
+        const t = meta.updatedAt || meta.createdAt;
+        return Number.isFinite(t) && t >= cutoff;
       });
     }
 
+    const buckets = bucketNodesByStatus(filteredTaskNodes);
+    renderTaskList(queuedList, buckets.queued, panelState.selectedTaskId);
+    renderTaskList(activeList, buckets.active, panelState.selectedTaskId);
+    renderTaskList(doneList, buckets.done, panelState.selectedTaskId);
+    renderTaskList(failedList, buckets.failed, panelState.selectedTaskId);
+
+    eventsList.innerHTML = '';
+    {
+      const edgeRows = graphEdges.slice(-panelState.maxEventRows).reverse();
+      if (!edgeRows.length) {
+        const empty = document.createElement('li');
+        empty.className = 'ocp-empty';
+        empty.textContent = 'none';
+        eventsList.appendChild(empty);
+      } else {
+        edgeRows.forEach((edge) => {
+          const li = document.createElement('li');
+          li.className = 'ocp-event';
+          li.textContent = `${formatIso(edge.fromAt)} | ${edge.from}->${edge.to} ${edge.taskId || ''}`.trim();
+          if (panelState.selectedTaskId && edge.taskId === panelState.selectedTaskId) {
+            li.classList.add('is-selected');
+          }
+          eventsList.appendChild(li);
+        });
+      }
+    }
+
     agentsList.innerHTML = '';
-    if (!agents.length) {
+    if (!workerNodes.length) {
       const empty = document.createElement('li');
       empty.className = 'ocp-empty';
       empty.textContent = 'none';
       agentsList.appendChild(empty);
     } else {
-      agents.forEach((agent) => {
+      workerNodes.forEach((node) => {
+        const meta = node.metadata || {};
         const li = document.createElement('li');
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = `ocp-item${panelState.selectedAgentId === agent.id ? ' is-selected' : ''}`;
-        if (panelState.selectedTaskId && agent.currentTaskId === panelState.selectedTaskId) {
+        button.className = `ocp-item${panelState.selectedAgentId === node.id ? ' is-selected' : ''}`;
+        if (panelState.selectedTaskId && meta.currentTaskId === panelState.selectedTaskId) {
           button.classList.add('ocp-agent-active');
         }
-        button.dataset.agentId = agent.id;
-        button.textContent = `${agent.id} | ${agent.state} | task ${agent.currentTaskId || 'none'}`;
+        button.dataset.agentId = node.id;
+        button.textContent = `${node.id} | ${node.status} | task ${meta.currentTaskId || 'none'}`;
         li.appendChild(button);
         agentsList.appendChild(li);
       });
     }
 
     if (panelState.selectedTaskId) {
-      const selectedTask = allTasks.find((task) => task.id === panelState.selectedTaskId) || null;
-      if (!selectedTask) {
+      const selectedNode = allNodes.find((n) => n && n.id === panelState.selectedTaskId) || null;
+      if (!selectedNode) {
         taskDetail.textContent = 'Selected task not found.';
         eventDetail.textContent = 'Selected event not found.';
         timelineList.innerHTML = '';
       } else {
-        const timeline = getTaskTimeline(indexedWorld, selectedTask.id).slice(-20);
-        const timelineRows = timeline.map((entry, index) => ({
-          ...entry,
+        const taskEdges = graphEdges.filter((e) => e.taskId === selectedNode.id).slice(-20);
+        const timelineRows = taskEdges.map((edge, index) => ({
           index,
-          isoTime: formatIso(entry.timestamp)
+          from: edge.from,
+          to: edge.to,
+          fromAt: formatIso(edge.fromAt),
+          toAt: formatIso(edge.toAt)
         }));
 
         if (!timelineRows.some((entry) => entry.index === panelState.selectedTimelineIndex)) {
@@ -552,7 +436,7 @@ export function initOperatorControlPanel() {
         if (!timelineRows.length) {
           const empty = document.createElement('li');
           empty.className = 'ocp-empty';
-          empty.textContent = 'No events observed for this task yet.';
+          empty.textContent = 'No transitions observed for this task yet.';
           timelineList.appendChild(empty);
         } else {
           timelineRows.forEach((entry) => {
@@ -562,7 +446,7 @@ export function initOperatorControlPanel() {
             button.type = 'button';
             button.className = `ocp-item ocp-event-row${panelState.selectedTimelineIndex === entry.index ? ' is-selected' : ''}`;
             button.dataset.timelineIndex = String(entry.index);
-            button.textContent = `${entry.isoTime} | ${entry.type}`;
+            button.textContent = `${entry.fromAt} | ${entry.from}->${entry.to}`;
             li.appendChild(button);
             timelineList.appendChild(li);
           });
@@ -571,23 +455,26 @@ export function initOperatorControlPanel() {
           eventDetail.textContent = stringify(selectedEntry);
         }
 
-        const rawError = extractTaskError(selectedTask, timelineRows);
-        const displayError = formatTaskErrorMessage(selectedTask, rawError);
-        const executionTrace = buildExecutionTrace(timelineRows);
+        const meta = selectedNode.metadata || {};
+        const rawError = typeof meta.error === 'string' && meta.error ? meta.error : null;
+        const displayError = formatTaskErrorMessage(meta.taskType, rawError);
+        const executionTrace = buildExecutionTrace(taskEdges);
 
         taskDetail.textContent = stringify({
-          id: selectedTask.id,
-          type: selectedTask.type,
-          title: selectedTask.title,
-          status: selectedTask.status,
-          engineStatus: selectedTask.engineStatus || null,
-          taskError: displayError,
-          executionResult: selectedTask.executionResult || null,
-          provider: selectedTask.provider || (selectedTask.payload && selectedTask.payload.provider) || null,
-          attempts: selectedTask.attempts || null,
-          durationMs: selectedTask.durationMs || selectedTask.executionDurationMs || null,
+          id: selectedNode.id,
+          status: selectedNode.status,
+          title: meta.title,
+          taskType: meta.taskType,
+          assignedAgentId: meta.assignedAgentId,
+          deskId: meta.deskId,
+          error: displayError,
+          createdAt: formatIso(meta.createdAt),
+          updatedAt: formatIso(meta.updatedAt),
+          queueTime: meta.queueTime,
+          duration: meta.duration,
+          ackLatency: meta.ackLatency,
+          incidents: meta.incidents,
           executionTrace,
-          ...selectedTask,
           timeline: timelineRows
         });
       }
@@ -601,8 +488,8 @@ export function initOperatorControlPanel() {
     }
 
     if (panelState.selectedAgentId) {
-      const selectedAgent = agents.find((agent) => agent.id === panelState.selectedAgentId) || null;
-      agentDetail.textContent = selectedAgent ? stringify(selectedAgent) : 'Selected agent not found.';
+      const selectedWorker = workerNodes.find((n) => n.id === panelState.selectedAgentId) || null;
+      agentDetail.textContent = selectedWorker ? stringify(selectedWorker) : 'Selected agent not found.';
     } else {
       agentDetail.textContent = 'Click an agent to inspect derived assignment.';
     }
@@ -620,8 +507,6 @@ export function initOperatorControlPanel() {
         ? `ocp-debug-indicator is-visible ${panelState.createTaskTone === 'error' ? 'is-error' : 'is-success'}`
         : 'ocp-debug-indicator';
     }
-
-    drawTaskSelectionOverlay(allTasks, agents, panelState.selectedTaskId);
   }
 
   async function createTestTask() {
@@ -680,7 +565,7 @@ export function initOperatorControlPanel() {
   }
 
   renderPanel();
-  subscribeEventStream(() => {
+  window.addEventListener('slothworld:graph', () => {
     renderPanel();
   });
 }
