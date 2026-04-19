@@ -62,6 +62,7 @@ export function renderAllLayers(ctx, components, frame) {
       '| positions computed:', entityPositions.size);
   }
 
+
   // ── Layer 1: background ─────────────────────────────────────────────────
   renderBackgroundLayer(ctx);
 
