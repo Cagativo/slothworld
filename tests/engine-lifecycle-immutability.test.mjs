@@ -332,3 +332,73 @@ test('Worker: direct status mutation after execution does not skip ackTask requi
   const ackedEventsAfter = emittedEvents.filter((e) => e.type === 'TASK_ACKED');
   assert.equal(ackedEventsAfter.length, 1, 'TASK_ACKED must only be emitted by TaskEngine via ackTask');
 });
+
+// ─── ACK invalid without executionRecord ever being set ──────────────────────
+
+test('ACK prerequisite: ackTask rejects when awaiting_ack reached without executeTask (executionRecord never set)', async () => {
+  // Scenario: task is created and claimed, but executeTask is never called.
+  // A direct status mutation forces awaiting_ack, simulating a partial/skipped
+  // execution path. executionRecord remains null (its initial value).
+  const { engine } = makeEngine();
+  const taskId = 'test-ack-no-execute';
+
+  engine.createTask({ id: taskId, type: 'test' });
+  engine.enqueueTask(taskId);
+  engine.claimTask(taskId);
+
+  // Skip executeTask entirely — force the status without going through the engine.
+  const task = engine.getTask(taskId);
+  assert.equal(task.executionRecord, null, 'executionRecord must be null before executeTask is called');
+  task.status = 'awaiting_ack';
+
+  await assert.rejects(
+    () => engine.ackTask(taskId),
+    (err) => {
+      assert.ok(err instanceof Error);
+      assert.equal(err.message, 'ENGINE_ENFORCEMENT_VIOLATION');
+      return true;
+    }
+  );
+});
+
+test('ACK prerequisite: no TASK_ACKED event emitted when executionRecord was never set', async () => {
+  const { engine, emittedEvents } = makeEngine();
+  const taskId = 'test-ack-no-execute-no-event';
+
+  engine.createTask({ id: taskId, type: 'test' });
+  engine.enqueueTask(taskId);
+  engine.claimTask(taskId);
+
+  engine.getTask(taskId).status = 'awaiting_ack';
+
+  try {
+    await engine.ackTask(taskId);
+  } catch (_err) {
+    // expected rejection
+  }
+
+  const ackedEvents = emittedEvents.filter((e) => e.type === 'TASK_ACKED' && e.taskId === taskId);
+  assert.equal(ackedEvents.length, 0, 'TASK_ACKED must not be emitted without a stored executionRecord');
+});
+
+test('ACK prerequisite: task status remains awaiting_ack after failed ack with no executionRecord', async () => {
+  const { engine } = makeEngine();
+  const taskId = 'test-ack-no-execute-status-preserved';
+
+  engine.createTask({ id: taskId, type: 'test' });
+  engine.enqueueTask(taskId);
+  engine.claimTask(taskId);
+
+  engine.getTask(taskId).status = 'awaiting_ack';
+
+  try {
+    await engine.ackTask(taskId);
+  } catch (_err) {
+    // expected rejection
+  }
+
+  // The engine must not have advanced the status; the task stays in awaiting_ack.
+  const task = engine.getTask(taskId);
+  assert.equal(task.status, 'awaiting_ack', 'Task status must remain awaiting_ack after a rejected ack attempt');
+  assert.equal(task.executionRecord, null, 'executionRecord must still be null after rejected ack');
+});
