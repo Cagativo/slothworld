@@ -251,3 +251,84 @@ test('TASK_ACKED: ackTask with missing executionRecord emits no TASK_ACKED event
   const ackedEvents = emittedEvents.filter((e) => e.type === 'TASK_ACKED' && e.taskId === taskId);
   assert.equal(ackedEvents.length, 0, 'TASK_ACKED must not be emitted when executionRecord is absent');
 });
+
+// ─── Worker mutation bypass ───────────────────────────────────────────────────
+
+test('Worker: returning a mutated status field in result does not change task lifecycle state', async () => {
+  // A worker that tries to smuggle a lifecycle status via its result output.
+  const { engine } = makeEngine({
+    executor: async (task) => ({
+      success: true,
+      output: {
+        taskId: task.id,
+        // Attempting to inject a status transition via result payload.
+        status: 'acknowledged',
+        lifecycle: 'completed'
+      }
+    })
+  });
+
+  const taskId = 'test-worker-status-smuggle';
+  engine.createTask({ id: taskId, type: 'test' });
+  engine.enqueueTask(taskId);
+  engine.claimTask(taskId);
+  await engine.executeTask(taskId);
+
+  // Engine must not have applied the worker-supplied status.
+  const task = engine.getTask(taskId);
+  assert.equal(task.status, 'awaiting_ack', 'Task must be awaiting_ack; worker result must not alter lifecycle state');
+});
+
+test('Worker: directly writing task.status during execution does not bypass ackTask requirement', async () => {
+  let capturedTask = null;
+
+  // Executor captures the task reference and attempts a direct status mutation.
+  const { engine, emittedEvents } = makeEngine({
+    executor: async (task) => {
+      capturedTask = task;
+      task.status = 'acknowledged'; // direct mutation attempt
+      return { success: true, output: { taskId: task.id } };
+    }
+  });
+
+  const taskId = 'test-worker-direct-mutate';
+  engine.createTask({ id: taskId, type: 'test' });
+  engine.enqueueTask(taskId);
+  engine.claimTask(taskId);
+  await engine.executeTask(taskId);
+
+  // The engine overwrites task.status to 'awaiting_ack' after the executor resolves.
+  const task = engine.getTask(taskId);
+  assert.equal(task.status, 'awaiting_ack', 'Engine must overwrite worker-mutated status to awaiting_ack');
+
+  // TASK_ACKED must not have been emitted — ackTask was never called.
+  const ackedEvents = emittedEvents.filter((e) => e.type === 'TASK_ACKED');
+  assert.equal(ackedEvents.length, 0, 'TASK_ACKED must not be emitted due to a worker direct mutation');
+});
+
+test('Worker: direct status mutation after execution does not skip ackTask requirement', async () => {
+  const { engine, emittedEvents } = makeEngine();
+
+  const taskId = 'test-worker-post-exec-mutate';
+  engine.createTask({ id: taskId, type: 'test' });
+  engine.enqueueTask(taskId);
+  engine.claimTask(taskId);
+  await engine.executeTask(taskId);
+
+  // Simulate a worker/external actor obtaining the task reference and mutating it.
+  const task = engine.getTask(taskId);
+  task.status = 'acknowledged';
+
+  // Even after the forced mutation, TASK_ACKED must not have been emitted.
+  const ackedEvents = emittedEvents.filter((e) => e.type === 'TASK_ACKED');
+  assert.equal(ackedEvents.length, 0, 'TASK_ACKED must not be emitted by direct status mutation');
+
+  // The engine still requires a proper ackTask call to complete the lifecycle.
+  // Restore awaiting_ack so ackTask can proceed, confirming the engine is still authoritative.
+  task.status = 'awaiting_ack';
+  const ackedTask = await engine.ackTask(taskId);
+  assert.equal(ackedTask.status, 'acknowledged', 'Engine must still govern the final acknowledged transition via ackTask');
+
+  const ackedEventsAfter = emittedEvents.filter((e) => e.type === 'TASK_ACKED');
+  assert.equal(ackedEventsAfter.length, 1, 'TASK_ACKED must only be emitted by TaskEngine via ackTask');
+});
