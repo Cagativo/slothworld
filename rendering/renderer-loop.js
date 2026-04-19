@@ -4,6 +4,6 @@ export function initRenderer() {
   // Reserved for future renderer bootstrapping.
 }
 
-export function renderFrame(worldState) {
-  render(worldState);
+export function renderFrame(renderView) {
+  render(renderView);
 }

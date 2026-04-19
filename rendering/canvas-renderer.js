@@ -2,17 +2,6 @@ import { canvas, ctx } from '../core/app-state.js';
 import { loadedAssets } from './assets.js';
 import { spriteConfigs } from '../core/constants.js';
 import { resolveAgentVisual } from '../ui/config/agentVisualConfig.js';
-import {
-  getAllTasks,
-  getAllDesks,
-  getTaskOfficeRoute,
-  getTaskVisualTarget,
-  getTaskTransitionTimestamps,
-  getOfficeLayoutSnapshot
-} from '../ui/selectors/taskSelectors.js';
-import { getAllAgents } from '../ui/selectors/agentSelectors.js';
-import { getTaskCounts } from '../ui/selectors/metricsSelectors.js';
-import { getIncidentClusters } from '../ui/selectors/anomalySelectors.js';
 
 let debugBindingsAttached = false;
 const debugPointer = {
@@ -170,7 +159,7 @@ function getAgentVisualState(agent) {
   return agent.state;
 }
 
-function getAgentPosition(agent, frameNow, desksById, tasksById, transitionByTaskId, deskCount) {
+function getAgentPosition(agent, frameNow, desksById, tasksById, transitionByTaskId, deskCount, taskRouteByTaskId) {
   const visualState = getAgentVisualState(agent);
   const homeDesk = agent && agent.deskId ? desksById.get(agent.deskId) : null;
   const targetDesk = agent && agent.targetDeskId ? desksById.get(agent.targetDeskId) : null;
@@ -182,7 +171,12 @@ function getAgentPosition(agent, frameNow, desksById, tasksById, transitionByTas
   const idleDrift = Math.cos(frameNow * 0.0019 + (idHash % 37)) * 1.4;
 
   const route = task
-    ? getTaskOfficeRoute(task, { deskCount })
+    ? (taskRouteByTaskId && taskRouteByTaskId.get(task.id)) || {
+        intakeDesk: homeDesk || targetDesk,
+        workerDesk: homeDesk || targetDesk,
+        executionZone: homeDesk || targetDesk,
+        deliveryZone: homeDesk || targetDesk
+      }
     : {
       intakeDesk: homeDesk || targetDesk,
       workerDesk: homeDesk || targetDesk,
@@ -434,28 +428,27 @@ function drawDesk(desk) {
   ctx.fillText(`Q:${queueCount}`, desk.x, y + height + 12);
 }
 
-function drawTask(task, position) {
+function drawTask(entity, position) {
   if (!position) {
     return;
   }
 
-  const isActive = task.status === 'claimed' || task.status === 'executing' || task.status === 'awaiting_ack';
   const baseX = position.x;
-  const baseY = isActive ? position.y - 22 : position.y + 22;
+  const baseY = entity.isActive ? position.y - 22 : position.y + 22;
 
-  ctx.fillStyle = statusColor(task.status);
+  ctx.fillStyle = statusColor(entity.visualState);
   ctx.fillRect(baseX - 34, baseY - 8, 68, 16);
 
   ctx.fillStyle = '#0b1120';
   ctx.font = '9px monospace';
   ctx.textAlign = 'center';
-  const shortId = String(task.id || '').slice(-6);
+  const shortId = String(entity.id || '').slice(-6);
   ctx.fillText(shortId || 'task', baseX, baseY + 3);
 }
 
-function drawAgent(agent, desksById, tasksById, frameNow, transitionByTaskId, deskCount) {
+function drawAgent(agent, desksById, tasksById, frameNow, transitionByTaskId, deskCount, taskRouteByTaskId) {
   const visualState = getAgentVisualState(agent);
-  const position = getAgentPosition(agent, frameNow, desksById, tasksById, transitionByTaskId, deskCount);
+  const position = getAgentPosition(agent, frameNow, desksById, tasksById, transitionByTaskId, deskCount, taskRouteByTaskId);
   const x = position.x;
   const y = position.y;
 
@@ -602,24 +595,21 @@ function drawHud(counts, incidents) {
   ctx.fillText(`Alert: ${clusterLabel} (${taskCount} tasks)`, 18, 40);
 }
 
-export function render(indexedWorld) {
-  const safeIndexed = indexedWorld && typeof indexedWorld === 'object'
-    ? indexedWorld
-    : { events: [], eventsByTaskId: new Map(), eventsByWorkerId: new Map() };
-
-  const desks = getAllDesks(safeIndexed);
-  const tasks = getAllTasks(safeIndexed);
-  const agents = getAllAgents(safeIndexed);
-  const counts = getTaskCounts(safeIndexed);
-  const incidents = getIncidentClusters(safeIndexed, {
-    now: Date.now(),
-    includeSystemEvents: false
-  });
-  const officeLayout = getOfficeLayoutSnapshot();
+export function render(renderView) {
+  const safeView = renderView && typeof renderView === 'object' ? renderView : {};
+  const entities = Array.isArray(safeView.entities) ? safeView.entities : [];
+  const desks = Array.isArray(safeView.desks) ? safeView.desks : [];
+  const tasks = Array.isArray(safeView.tasks) ? safeView.tasks : [];
+  const agents = Array.isArray(safeView.agents) ? safeView.agents : [];
+  const counts = safeView.counts && typeof safeView.counts === 'object' ? safeView.counts : {};
+  const incidents = Array.isArray(safeView.incidents) ? safeView.incidents : [];
+  const officeLayout = safeView.officeLayout && typeof safeView.officeLayout === 'object' ? safeView.officeLayout : {};
+  const transitionByTaskId = safeView.transitionByTaskId instanceof Map ? safeView.transitionByTaskId : new Map();
+  const taskRouteByTaskId = safeView.taskRouteByTaskId instanceof Map ? safeView.taskRouteByTaskId : new Map();
+  const taskVisualTargetByTaskId = safeView.taskVisualTargetByTaskId instanceof Map ? safeView.taskVisualTargetByTaskId : new Map();
 
   const desksById = new Map(desks.map((desk) => [desk.id, desk]));
   const tasksById = new Map(tasks.map((task) => [task.id, task]));
-  const transitionByTaskId = new Map(tasks.map((task) => [task.id, getTaskTransitionTimestamps(safeIndexed, task.id)]));
   const frameNow = Date.now();
 
   ensureDebugBindings();
@@ -635,13 +625,13 @@ export function render(indexedWorld) {
 
   drawOfficeFlow(officeLayout);
 
-  for (const task of tasks) {
-    const taskPosition = getTaskVisualTarget(task, { deskCount: desks.length || 1 });
-    drawTask(task, taskPosition);
+  for (const entity of entities) {
+    const taskPosition = taskVisualTargetByTaskId.get(entity.id) || null;
+    drawTask(entity, taskPosition);
   }
 
   for (const agent of agents) {
-    drawAgent(agent, desksById, tasksById, frameNow, transitionByTaskId, desks.length || (officeLayout.workerDesks && officeLayout.workerDesks.length) || 1);
+    drawAgent(agent, desksById, tasksById, frameNow, transitionByTaskId, desks.length || (officeLayout.workerDesks && officeLayout.workerDesks.length) || 1, taskRouteByTaskId);
   }
 
   drawHud(counts, incidents);
