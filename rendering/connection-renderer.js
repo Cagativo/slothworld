@@ -29,11 +29,11 @@
  * @type {Readonly<{ stroke: string, width: number, dashLen: number, gapLen: number, speed: number }>}
  */
 export const FLOW_LINE_STYLE = Object.freeze({
-  stroke:  '#78909c',  // line colour
-  width:   1.5,        // line width in px
-  dashLen: 8,          // dash segment length in px
-  gapLen:  5,          // gap between dashes in px
-  speed:   0.4,        // px of offset advancement per frame
+  stroke:  '#00b8a9',  // line colour
+  width:   2,          // line width in px
+  dashLen: 6,          // dash segment length in px
+  gapLen:  4,          // gap between dashes in px
+  speed:   0.6,        // px of offset advancement per frame
 });
 
 // ---------------------------------------------------------------------------
@@ -58,10 +58,22 @@ export function renderConnection(ctx, fromPos, toPos, frame) {
   const f = typeof frame === 'number' ? frame : 0;
   const dashOffset = -(f * FLOW_LINE_STYLE.speed) % (FLOW_LINE_STYLE.dashLen + FLOW_LINE_STYLE.gapLen);
 
+  const dx  = toPos.x - fromPos.x;
+  const dy  = toPos.y - fromPos.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const bow = Math.min(len * 0.28, 65);
+  const mx  = (fromPos.x + toPos.x) / 2;
+  const my  = (fromPos.y + toPos.y) / 2;
+
+  // Predominantly vertical paths (left-wall flows) bow leftward.
+  // Predominantly horizontal or diagonal paths bow upward.
+  const cx = Math.abs(dy) > Math.abs(dx) ? mx - bow : mx;
+  const cy = Math.abs(dy) > Math.abs(dx) ? my        : my - bow;
+
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(fromPos.x, fromPos.y);
-  ctx.lineTo(toPos.x,   toPos.y);
+  ctx.quadraticCurveTo(cx, cy, toPos.x, toPos.y);
   ctx.setLineDash([FLOW_LINE_STYLE.dashLen, FLOW_LINE_STYLE.gapLen]);
   ctx.lineDashOffset = dashOffset;
   ctx.strokeStyle    = FLOW_LINE_STYLE.stroke;

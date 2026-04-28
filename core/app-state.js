@@ -4,8 +4,8 @@ import { spriteConfigs } from './constants.js';
 // --- Canvas setup (rendering surface only; not a world-state source of truth) ---
 export const canvas = document.getElementById('game');
 export const ctx = canvas.getContext('2d');
-canvas.width = 800;
-canvas.height = 600;
+canvas.width = 1060;
+canvas.height = 520;
 
 // --- Shared mutable collections ---
 export const eventStream = [];

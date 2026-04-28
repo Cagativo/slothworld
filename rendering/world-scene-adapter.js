@@ -49,10 +49,13 @@ function entityToComponent(entity) {
     id:            entity.id,
     x:             entity.position ? entity.position.x : 0,
     y:             entity.position ? entity.position.y : 0,
-    visualState:   entity.visualState ?? 'unknown',
-    zoneId:        entity.zoneId     ?? null,
-    metrics:       entity.metrics    ?? { duration: null, queueTime: null, latency: null },
-    anomaly:       entity.anomaly    ?? null,
+    visualState:   entity.visualState   ?? 'unknown',
+    zoneId:        entity.zoneId        ?? null,
+    deskId:        entity.deskId        ?? null,
+    // Forwarded from agentSelectors output via buildWorldScene — null when agent is idle.
+    currentTaskId: entity.currentTaskId ?? null,
+    metrics:       entity.metrics       ?? { duration: null, queueTime: null, latency: null },
+    anomaly:       entity.anomaly       ?? null,
   };
 }
 

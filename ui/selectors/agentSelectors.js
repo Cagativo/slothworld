@@ -87,9 +87,54 @@ export function getAgentSnapshot(indexedWorld, workerId) {
 
   const tasks = getAgentTasks(indexedWorld, id);
   const state = getAgentState(indexedWorld, id);
-  const currentTaskId = tasks.length ? tasks[tasks.length - 1] : null;
+
+  // Walk the task list newest-first and find the most recent task that is still
+  // active (i.e. TASK_CLAIMED has fired but TASK_ACKED has not yet fired for it).
+  //
+  // Active statuses set by getTaskStatus via TASK_CLAIMED / TASK_EXECUTE_STARTED /
+  // TASK_EXECUTE_FINISHED:   'claimed' | 'executing' | 'awaiting_ack'
+  //
+  // Terminal statuses set by TASK_ACKED:   'completed' | 'failed'
+  //
+  // currentTaskId returns to null as soon as TASK_ACKED is observed by getTaskStatus.
+  // No raw event payload is inspected here — all status logic lives in taskSelectors.
+  let currentTaskId = null;
+  for (let i = tasks.length - 1; i >= 0; i--) {
+    const status = getTaskStatus(indexedWorld, tasks[i]);
+    if (status === 'claimed' || status === 'executing' || status === 'awaiting_ack') {
+      currentTaskId = tasks[i];
+      break;
+    }
+    // Terminal — this task is done; no point searching further back.
+    if (status === 'completed' || status === 'failed') {
+      break;
+    }
+    // 'created', 'queued', 'unknown' — task exists but is not yet assigned to this
+    // agent; keep searching in case an earlier claimed task is still in flight.
+  }
+
   const currentTask = currentTaskId ? getTaskSnapshot(indexedWorld, currentTaskId) : null;
-  const deskId = currentTask && currentTask.deskId ? currentTask.deskId : null;
+  const taskDeskId = currentTask && currentTask.deskId ? currentTask.deskId : null;
+
+  // Fall back to the desk registered at agent spawn (AGENT_ASSIGNED_IDLE) when
+  // the agent has no active task. Mirrors core/world/agentSelectors.js which reads
+  // the same event. Without this, idle agents resolve to deskId=null, causing the
+  // position map to fall through to {x:0, y:0} and draw sprites at the canvas origin.
+  let registeredDeskId = null;
+  if (!taskDeskId) {
+    const workerEvents = (indexedWorld.eventsByWorkerId instanceof Map)
+      ? (indexedWorld.eventsByWorkerId.get(id) || [])
+      : [];
+    for (const evt of workerEvents) {
+      if (evt && evt.type === 'AGENT_ASSIGNED_IDLE' &&
+          evt.payload && evt.payload.deskId != null) {
+        registeredDeskId = String(evt.payload.deskId);
+        break;
+      }
+    }
+  }
+
+  const deskId = taskDeskId || registeredDeskId;
 
   return {
     id,

@@ -31,13 +31,13 @@
  * @type {Readonly<Record<string, Readonly<AgentVisualStyle>>>}
  */
 export const AGENT_VISUAL_STYLES = Object.freeze({
-  idle:        Object.freeze({ fill: '#b0bec5', stroke: '#546e7a', radius: 10, label: 'IDLE'       }),
-  waiting:     Object.freeze({ fill: '#fff176', stroke: '#f9a825', radius: 10, label: 'WAIT'       }),
-  moving:      Object.freeze({ fill: '#80cbc4', stroke: '#00796b', radius: 10, label: 'MOVE'       }),
-  processing:  Object.freeze({ fill: '#90caf9', stroke: '#1565c0', radius: 10, label: 'PROC'       }),
-  completed:   Object.freeze({ fill: '#a5d6a7', stroke: '#2e7d32', radius: 10, label: 'DONE'       }),
-  error:       Object.freeze({ fill: '#ef9a9a', stroke: '#b71c1c', radius: 10, label: 'ERR'        }),
-  unknown:     Object.freeze({ fill: '#e0e0e0', stroke: '#757575', radius: 10, label: '?'          }),
+  idle:        Object.freeze({ fill: '#6b8f5e', stroke: '#3a5c2a', radius: 10, label: 'IDLE' }),
+  waiting:     Object.freeze({ fill: '#d4a017', stroke: '#8b6a00', radius: 10, label: 'WAIT' }),
+  moving:      Object.freeze({ fill: '#00b8a9', stroke: '#006b62', radius: 10, label: 'MOVE' }),
+  processing:  Object.freeze({ fill: '#7ec8c8', stroke: '#007b7b', radius: 10, label: 'PROC' }),
+  completed:   Object.freeze({ fill: '#4caf50', stroke: '#1b5e20', radius: 10, label: 'DONE' }),
+  error:       Object.freeze({ fill: '#e53935', stroke: '#7f0000', radius: 10, label: 'ERR'  }),
+  unknown:     Object.freeze({ fill: '#8d7b68', stroke: '#5c4a36', radius: 10, label: '?'    }),
 });
 
 /** Fallback style used when visualState is not in AGENT_VISUAL_STYLES. */
