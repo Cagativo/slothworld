@@ -39,6 +39,7 @@ import {
   renderEffectLayer,
   renderUIOverlayLayer,
 } from './world-scene-asset-renderer.js';
+import { ASSET_MAPPING, loadedAssets } from './assets.js';
 
 /**
  * Draw the complete WorldScene in the fixed 8-layer order.
@@ -64,29 +65,36 @@ export function renderAllLayers(ctx, components, frame) {
 
 
   // ── Layer 1: background ─────────────────────────────────────────────────
-  renderBackgroundLayer(ctx);
+  renderBackgroundLayer(ctx, frame);
 
   // ── Layer 2: core ───────────────────────────────────────────────────────
-  renderCoreLayer(ctx);
+  renderCoreLayer(ctx, frame);
 
   // ── Layer 3: zone ───────────────────────────────────────────────────────
-  renderAllZones(ctx, components);
+  // Zone geometry (filled rect + id label from renderAllZones) is debug-only.
+  // In normal mode the sprite assets in renderZoneLayer provide full zone coverage.
+  // Enable via window.__SLOTHWORLD_RENDER_DEBUG__ = true  or ?renderDebug in the URL.
+  const isRenderDebug = typeof window !== 'undefined' &&
+    (window.__SLOTHWORLD_RENDER_DEBUG__ === true ||
+     (() => { try { return new URLSearchParams(window.location.search).has('renderDebug'); } catch (_) { return false; } })());
+  if (isRenderDebug) {
+    renderAllZones(ctx, components);
+  }
   renderZoneLayer(ctx, components);
 
   // ── Layer 4: connection ─────────────────────────────────────────────────
   renderAllConnections(ctx, components, entityPositions, frame);
   renderConnectionLayer(ctx, components, entityPositions);
 
-  // ── Layer 5: entity ─────────────────────────────────────────────────────
-  renderAllAgentEntities(ctx, components, entityPositions);
-  renderEntityLayer(ctx, components, entityPositions);
-
-  // ── Layer 6: prop ───────────────────────────────────────────────────────
-  renderPropLayer(ctx, components, entityPositions);
-
-  // ── Layer 7: effect ─────────────────────────────────────────────────────
-  renderEffectLayer(ctx, components, entityPositions);
-
-  // ── Layer 8: UI overlay ─────────────────────────────────────────────────
-  renderUIOverlayLayer(ctx, components, entityPositions);
+  // ── Layers 5–8: agents, props, effects, UI overlay ─────────────────────
+  // Suppressed in image mode — the background image is the sole visual for now.
+  // Agent sprites, props, and UI panels will be re-enabled once placement and
+  // visual integration with the background are confirmed correct.
+  // In procedural mode (no background image) geometry circles remain as fallback.
+  const bgLoaded = !!loadedAssets[ASSET_MAPPING.environment.sceneBackground];
+  if (!bgLoaded) {
+    renderAllAgentEntities(ctx, components, entityPositions);
+  }
+  // renderEntityLayer, renderPropLayer, renderEffectLayer, renderUIOverlayLayer
+  // are all suppressed in image mode. renderEffectLayer is already a hard no-op.
 }

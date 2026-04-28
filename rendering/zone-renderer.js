@@ -27,12 +27,33 @@
  * @type {Readonly<{ fill: string, stroke: string, labelColor: string, lineWidth: number, cornerRadius: number, padding: number }>}
  */
 export const ZONE_STYLE = Object.freeze({
-  fill:        'rgba(224, 235, 245, 0.45)',
-  stroke:      '#90a4ae',
-  labelColor:  '#546e7a',
-  lineWidth:   1.5,
-  cornerRadius: 8,
-  padding:     6,
+  fill:         'rgba(58, 42, 22, 0.55)',
+  stroke:       '#7a5c35',
+  labelColor:   '#b8a88a',
+  lineWidth:    1.5,
+  cornerRadius: 4,
+  padding:      6,
+});
+
+// ---------------------------------------------------------------------------
+// Desk position table
+//
+// Maps deskId → canvas { x, y } for the agent sprite anchor point.
+// Kept in sync with initialEventSeed.js desk positions.
+// When an agent component carries a deskId present in this table,
+// buildEntityPositionMap uses it directly instead of computing a slot index.
+// ---------------------------------------------------------------------------
+
+/**
+ * @type {Readonly<Record<string, Readonly<{ x: number, y: number }>>>}
+ */
+// Positions sit inside the new CLAIMED zone (x:218–376, y:140–360).
+// Centred vertically at y≈250, spread horizontally across the zone's mid-section.
+// Derived from the new reference image: centre-left stream-adjacent floor area.
+export const DESK_POSITIONS = Object.freeze({
+  'desk-0': Object.freeze({ x: 272, y: 250 }),
+  'desk-1': Object.freeze({ x: 304, y: 255 }),
+  'desk-2': Object.freeze({ x: 336, y: 250 }),
 });
 
 // ---------------------------------------------------------------------------
@@ -152,6 +173,13 @@ export function buildEntityPositionMap(components) {
   for (const c of components) {
     if (!c || c.componentType !== 'agent-sprite') continue;
 
+    // Prefer desk-specific position when deskId is known — gives accurate
+    // per-desk placement without any layout computation.
+    if (c.deskId && DESK_POSITIONS[c.deskId]) {
+      positions.set(c.id, { ...DESK_POSITIONS[c.deskId] });
+      continue;
+    }
+
     const zone = c.zoneId ? zoneMap.get(c.zoneId) : null;
 
     if (!zone) {
@@ -160,7 +188,7 @@ export function buildEntityPositionMap(components) {
       continue;
     }
 
-    // Slot index within zone
+    // Slot index within zone — fallback when no desk position is available
     const slotIndex = slotCounters.get(c.zoneId) ?? 0;
     slotCounters.set(c.zoneId, slotIndex + 1);
 

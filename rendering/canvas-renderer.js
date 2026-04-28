@@ -347,7 +347,7 @@ function drawOfficeFlow(layout) {
 
   ctx.save();
   ctx.setLineDash([5, 4]);
-  ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+  ctx.strokeStyle = 'rgba(140, 110, 60, 0.35)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(intake.x + 42, intake.y + 4);
@@ -365,7 +365,7 @@ function drawOfficeFlow(layout) {
   ctx.setLineDash([]);
 
   const drawZone = (label, zone, color) => {
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.5)';
+    ctx.fillStyle = 'rgba(20, 40, 15, 0.55)';
     ctx.fillRect(zone.x - 50, zone.y - 24, 100, 48);
     ctx.strokeStyle = color;
     ctx.strokeRect(zone.x - 50, zone.y - 24, 100, 48);
@@ -375,9 +375,9 @@ function drawOfficeFlow(layout) {
     ctx.fillText(label, zone.x, zone.y - 30);
   };
 
-  drawZone('INTAKE', intake, '#94a3b8');
-  drawZone('EXECUTION', execution, '#38bdf8');
-  drawZone('DELIVERY', delivery, '#22c55e');
+  drawZone('INTAKE', intake, '#8fbc8f');
+  drawZone('EXECUTION', execution, '#00b8a9');
+  drawZone('DELIVERY', delivery, '#4caf50');
   ctx.restore();
 }
 
@@ -385,22 +385,22 @@ function statusColor(status) {
   const key = String(status || '').toLowerCase();
 
   if (key === 'failed' || key === 'error') {
-    return '#ef4444';
+    return '#e53935';
   }
 
   if (key === 'delivering' || key === 'acknowledged' || key === 'completed') {
-    return '#22c55e';
+    return '#4caf50';
   }
 
   if (key === 'awaiting_ack') {
-    return '#f59e0b';
+    return '#ffb300';
   }
 
   if (key === 'working' || key === 'executing' || key === 'claimed' || key === 'moving') {
-    return '#38bdf8';
+    return '#00b8a9';
   }
 
-  return '#94a3b8';
+  return '#8fbc8f';
 }
 
 function resolveSpriteFrame(visual, spriteImage, frameNow, agentId) {
@@ -478,18 +478,18 @@ function drawDesk(desk) {
   const x = desk.x - width / 2;
   const y = desk.y - height / 2;
 
-  ctx.fillStyle = '#1f2937';
+  ctx.fillStyle = '#3d2510';
   ctx.fillRect(x, y, width, height);
-  ctx.strokeStyle = '#334155';
+  ctx.strokeStyle = '#7a5c35';
   ctx.strokeRect(x, y, width, height);
 
-  ctx.fillStyle = '#cbd5e1';
+  ctx.fillStyle = '#d4b896';
   ctx.font = '10px monospace';
   ctx.textAlign = 'center';
   ctx.fillText(`Desk ${desk.id}`, desk.x, y - 6);
 
   const queueCount = Array.isArray(desk.queueTaskIds) ? desk.queueTaskIds.length : 0;
-  ctx.fillStyle = '#94a3b8';
+  ctx.fillStyle = '#b8a88a';
   ctx.fillText(`Q:${queueCount}`, desk.x, y + height + 12);
 }
 
@@ -565,9 +565,9 @@ function drawAgent(agent, desksById, tasksById, frameNow, transitionByTaskId, de
 
     const task = findTask(tasksById, agent.currentTaskId);
     if (task) {
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      ctx.fillStyle = 'rgba(26, 15, 5, 0.90)';
       ctx.fillRect(x - 24, y - 34, 48, 12);
-      ctx.fillStyle = '#e2e8f0';
+      ctx.fillStyle = '#e8d5b0';
       ctx.font = '8px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(String(task.id).slice(-6), x, y - 25);
@@ -621,7 +621,7 @@ function drawAgent(agent, desksById, tasksById, frameNow, transitionByTaskId, de
     ctx.stroke();
   }
 
-  ctx.fillStyle = '#e2e8f0';
+  ctx.fillStyle = '#e8d5b0';
   ctx.font = '8px monospace';
   ctx.textAlign = 'center';
   ctx.fillText(String(agent.id).replace('agent-desk-', 'A').replace('agent-', 'A-'), x, y + 20);
@@ -633,18 +633,19 @@ function drawHud(counts, incidents) {
     ? counts
     : { queued: 0, active: 0, done: 0, failed: 0 };
 
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-  ctx.fillRect(10, 10, 360, 38);
-  ctx.strokeStyle = '#334155';
-  ctx.strokeRect(10, 10, 360, 38);
+  const hudY = canvas.height - 48;
+  ctx.fillStyle = 'rgba(26, 15, 5, 0.92)';
+  ctx.fillRect(10, hudY, 360, 38);
+  ctx.strokeStyle = '#7a5c35';
+  ctx.strokeRect(10, hudY, 360, 38);
 
-  ctx.fillStyle = '#e2e8f0';
+  ctx.fillStyle = '#e8d5b0';
   ctx.font = '11px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText(`Queued: ${safeCounts.queued}`, 18, 25);
-  ctx.fillText(`Active: ${safeCounts.active}`, 105, 25);
-  ctx.fillText(`Done: ${safeCounts.done}`, 188, 25);
-  ctx.fillText(`Failed: ${safeCounts.failed}`, 260, 25);
+  ctx.fillText(`Queued: ${safeCounts.queued}`, 18, hudY + 15);
+  ctx.fillText(`Active: ${safeCounts.active}`, 105, hudY + 15);
+  ctx.fillText(`Done: ${safeCounts.done}`, 188, hudY + 15);
+  ctx.fillText(`Failed: ${safeCounts.failed}`, 260, hudY + 15);
 
   const list = Array.isArray(incidents) ? incidents : [];
 
@@ -657,7 +658,7 @@ function drawHud(counts, incidents) {
   ctx.font = '10px monospace';
   const clusterLabel = latest && typeof latest.type === 'string' ? latest.type : 'unknown';
   const taskCount = latest && Array.isArray(latest.taskIds) ? latest.taskIds.length : 0;
-  ctx.fillText(`Alert: ${clusterLabel} (${taskCount} tasks)`, 18, 40);
+  ctx.fillText(`Alert: ${clusterLabel} (${taskCount} tasks)`, 18, hudY + 30);
 }
 
 export function render(renderView) {
@@ -700,7 +701,7 @@ export function render(renderView) {
   }
 
   const workerCount = workerNodes.length;
-  const workerSpacing = canvas.width / Math.max(workerCount + 1, 2);
+  const workerSpacing = 800 / Math.max(workerCount + 1, 2);
   const syntheticDesksById = new Map();
   workerNodes.forEach((node, i) => {
     if (node.metadata && node.metadata.deskId) {
@@ -738,7 +739,14 @@ export function render(renderView) {
   ctx.imageSmoothingEnabled = false;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#0b1220';
+  const bgGradient = ctx.createRadialGradient(
+    canvas.width / 2, canvas.height / 2, 40,
+    canvas.width / 2, canvas.height / 2, canvas.width * 0.65
+  );
+  bgGradient.addColorStop(0,   '#1e3520');
+  bgGradient.addColorStop(0.5, '#172a14');
+  bgGradient.addColorStop(1,   '#0d1a08');
+  ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   for (const desk of syntheticDesksById.values()) {

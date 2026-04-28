@@ -1,15 +1,15 @@
  :root {
-  --status-idle-neutral: #94a3b8;
-  --status-working-blue: #38bdf8;
-  --status-delivering-green: #22c55e;
-  --status-error-red: #ef4444;
-  --status-awaiting-ack-amber: #f59e0b;
+  --status-idle-neutral:       #8fbc8f;
+  --status-working-blue:       #00b8a9;
+  --status-delivering-green:   #4caf50;
+  --status-error-red:          #e53935;
+  --status-awaiting-ack-amber: #ffb300;
 }
 
 body {
   margin: 0;
-  background: #111;
-  color: #ddd;
+  background: #1c1208;
+  color: #e8d5b0;
   font-family: monospace;
   overflow: hidden;
 }
@@ -20,29 +20,40 @@ body {
   width: 100%;
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   Sidebar shell
+───────────────────────────────────────────────────────────────── */
+
 #left-sidebar {
-  width: 760px;
-  max-width: 56vw;
+  width: 580px;
+  max-width: 44vw;
   box-sizing: border-box;
-  background: rgba(12, 14, 18, 0.96);
-  border-right: 1px solid #2f343d;
+  background: rgba(32, 18, 8, 0.97);
+  border-right: 1px solid #5c3d1e;
+  box-shadow: inset -8px 0 16px rgba(0, 0, 0, 0.40);
   padding: 10px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #5c3d1e #1a0d04;
 }
 
+/* Room label — small, muted, engraved feel */
 #control-panels-header {
-  font-size: 13px;
+  font-size: 9px;
   font-weight: 700;
-  color: #cbd5e1;
-  margin: 2px 0 10px;
-  letter-spacing: 0.02em;
+  color: #b8a88a;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  padding-bottom: 7px;
+  margin: 0 0 12px;
+  border-bottom: 1px solid #4a3520;
 }
 
 #control-panels-stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
-  align-items: start;
+  align-items: stretch;
 }
 
 #main-area {
@@ -50,9 +61,9 @@ body {
   min-width: 0;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   overflow: auto;
-  padding: 12px;
+  padding: 8px;
 }
 
 canvas {
@@ -62,43 +73,60 @@ canvas {
   position: relative;
   z-index: 1;
   pointer-events: auto;
+  width: 100%;
+  height: auto;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Operator Control Panel
+   Surface: warmest/lightest of the three panels — primary ops
+───────────────────────────────────────────────────────────────── */
 
 #operator-control-panel {
   width: 100%;
   box-sizing: border-box;
-  background: rgba(18, 22, 30, 0.72);
-  border: 1px solid #2f343d;
+  background: rgba(44, 26, 10, 0.88);
+  border: 1px solid #5c3d1e;
   border-radius: 4px;
-  padding: 10px;
+  padding: 12px 14px;
 }
 
+/* Level 1 — panel title */
 .ocp-header h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #d4b896;
 }
 
 .ocp-header p {
-  margin: 4px 0 10px;
-  color: #9ca3af;
-  font-size: 11px;
+  margin: 3px 0 10px;
+  color: #b8a88a;
+  font-size: 9px;
 }
 
 .ocp-section {
-  border: 1px solid #313741;
-  padding: 8px;
+  border: 1px solid #4a3520;
+  padding: 10px 12px;
   margin-bottom: 10px;
 }
 
+/* Level 2 — section heading with separator underline */
 .ocp-section h3 {
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c8a87c;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #3a2510;
 }
 
+/* Level 3 — sub-label */
 .ocp-section h4 {
   margin: 0 0 4px;
-  font-size: 11px;
-  color: #9ca3af;
+  font-size: 9px;
+  font-weight: 400;
+  color: #b8a88a;
 }
 
 .ocp-debug-actions {
@@ -109,9 +137,9 @@ canvas {
 }
 
 .ocp-debug-create {
-  background: #2f6b43;
-  color: #ecfdf5;
-  border: 1px solid #3f8256;
+  background: #2a5c38;
+  color: #c8f0d8;
+  border: 1px solid #3a7a4a;
   font: 11px monospace;
   padding: 4px 8px;
   border-radius: 2px;
@@ -119,7 +147,7 @@ canvas {
 }
 
 .ocp-debug-create:hover {
-  background: #3f8256;
+  background: #3a7a4a;
 }
 
 .ocp-debug-create:disabled {
@@ -129,26 +157,26 @@ canvas {
 
 .ocp-debug-indicator {
   min-height: 14px;
-  font-size: 10px;
-  color: #9ca3af;
+  font-size: 9px;
+  color: #b8a88a;
 }
 
 .ocp-debug-indicator.is-visible {
-  color: #86efac;
+  color: #7ac98a;
 }
 
 .ocp-debug-indicator.is-visible.is-success {
-  color: #86efac;
+  color: #7ac98a;
 }
 
 .ocp-debug-indicator.is-visible.is-error {
-  color: #fca5a5;
+  color: #f08080;
 }
 
 .ocp-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 10px;
 }
 
 .ocp-toolbar {
@@ -163,15 +191,15 @@ canvas {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
-  color: #9ca3af;
+  font-size: 9px;
+  color: #b8a88a;
 }
 
 .ocp-control select {
-  background: #1c2129;
-  color: #d1d5db;
-  border: 1px solid #3a424f;
-  font: 10px monospace;
+  background: #2a1808;
+  color: #e8d5b0;
+  border: 1px solid #5c3d1e;
+  font: 9px monospace;
   padding: 2px 4px;
 }
 
@@ -185,28 +213,28 @@ canvas {
 
 .ocp-item {
   width: 100%;
-  background: #1c2129;
-  color: #d1d5db;
-  border: 1px solid #3a424f;
+  background: rgba(50, 28, 10, 0.80);
+  color: #e8d5b0;
+  border: 1px solid #5c3d1e;
   text-align: left;
   padding: 4px;
   margin-bottom: 3px;
-  font: 11px monospace;
+  font: 10px monospace;
   cursor: pointer;
 }
 
 .ocp-item:hover {
-  border-color: #6b7280;
+  border-color: #8b6347;
 }
 
 .ocp-item.is-selected {
-  border-color: #22d3ee;
-  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.45);
+  border-color: #00b8a9;
+  box-shadow: inset 0 0 0 1px rgba(0, 184, 169, 0.45);
 }
 
 .ocp-item.ocp-agent-active {
-  border-color: #86efac;
-  box-shadow: inset 0 0 0 1px rgba(134, 239, 172, 0.35);
+  border-color: #4caf50;
+  box-shadow: inset 0 0 0 1px rgba(76, 175, 80, 0.35);
 }
 
 .ocp-item.ocp-task-queued {
@@ -227,12 +255,12 @@ canvas {
 }
 
 .ocp-item.ocp-task-image-failed {
-  border-color: #ef4444;
-  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.4);
+  border-color: #e53935;
+  box-shadow: inset 0 0 0 1px rgba(229, 57, 53, 0.40);
 }
 
 .ocp-event-row {
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .ocp-agent-working {
@@ -240,32 +268,32 @@ canvas {
 }
 
 .ocp-agent-delivering {
-  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(0, 184, 169, 0.45);
 }
 
 .ocp-agent-error {
   animation: ocpShake 0.4s linear 2;
-  border-color: #ef4444;
+  border-color: #e53935;
 }
 
 @keyframes ocpPulse {
-  0% { box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.25); }
-  50% { box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.65); }
-  100% { box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.25); }
+  0%   { box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.25); }
+  50%  { box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.65); }
+  100% { box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.25); }
 }
 
 @keyframes ocpShake {
-  0% { transform: translateX(0); }
-  25% { transform: translateX(-2px); }
-  50% { transform: translateX(2px); }
-  75% { transform: translateX(-1px); }
-  100% { transform: translateX(0); }
+  0%   { transform: translateX(0);    }
+  25%  { transform: translateX(-2px); }
+  50%  { transform: translateX(2px);  }
+  75%  { transform: translateX(-1px); }
+  100% { transform: translateX(0);    }
 }
 
 .ocp-empty,
 .ocp-event {
-  font-size: 11px;
-  color: #9ca3af;
+  font-size: 9px;
+  color: #b8a88a;
   padding: 2px 0;
 }
 
@@ -279,38 +307,45 @@ canvas {
 
 .ocp-detail {
   margin: 6px 0 0;
-  background: #0f1318;
-  border: 1px solid #2d3340;
+  background: #1a0d04;
+  border: 1px solid #4a3520;
   padding: 6px;
-  font: 11px/1.35 monospace;
-  color: #cbd5e1;
+  font: 10px/1.35 monospace;
+  color: #d4b896;
   white-space: pre-wrap;
   max-height: 200px;
   overflow: auto;
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   Task Creator Panel
+   Surface: slightly darker/cooler — tertiary/input panel
+───────────────────────────────────────────────────────────────── */
+
 #task-creator-panel {
   width: 100%;
   box-sizing: border-box;
-  background: rgba(18, 22, 30, 0.72);
-  border: 1px solid #2f343d;
+  background: rgba(36, 20, 7, 0.80);
+  border: 1px solid #5c3d1e;
   border-radius: 4px;
-  padding: 12px;
+  padding: 12px 14px;
 }
 
 .tcp-container h3 {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   font-size: 13px;
+  font-weight: 700;
+  color: #d4b896;
 }
 
 .tcp-group {
-  margin-bottom: 10px;
+  margin-bottom: 9px;
 }
 
 .tcp-group label {
   display: block;
-  font-size: 11px;
-  color: #9ca3af;
+  font-size: 9px;
+  color: #b8a88a;
   margin-bottom: 3px;
 }
 
@@ -319,11 +354,11 @@ canvas {
 .tcp-group textarea {
   width: 100%;
   box-sizing: border-box;
-  background: #1c2129;
-  color: #d1d5db;
-  border: 1px solid #3a424f;
+  background: #2a1808;
+  color: #e8d5b0;
+  border: 1px solid #5c3d1e;
   padding: 4px;
-  font: 11px monospace;
+  font: 10px monospace;
   font-family: inherit;
 }
 
@@ -331,66 +366,164 @@ canvas {
 .tcp-group select:focus,
 .tcp-group textarea:focus {
   outline: none;
-  border-color: #6b7280;
+  border-color: #8b6347;
 }
 
 .tcp-submit {
   width: 100%;
   padding: 6px;
-  background: #2d5a7b;
-  color: #e0f2fe;
-  border: 1px solid #3d6b8f;
+  background: #1a5c4a;
+  color: #c8f0e8;
+  border: 1px solid #2a7a60;
   font: 11px monospace;
   cursor: pointer;
   border-radius: 2px;
 }
 
 .tcp-submit:hover {
-  background: #3d6b8f;
+  background: #2a7a60;
 }
 
 .tcp-create-product {
   width: 100%;
   margin-top: 8px;
   padding: 6px;
-  background: #2f6b43;
-  color: #ecfdf5;
-  border: 1px solid #3f8256;
+  background: #2a5c38;
+  color: #c8f0d8;
+  border: 1px solid #3a7a4a;
   font: 11px monospace;
   cursor: pointer;
   border-radius: 2px;
 }
 
 .tcp-create-product:hover {
-  background: #3f8256;
+  background: #3a7a4a;
 }
 
 .tcp-status {
   margin-top: 8px;
   padding: 4px;
-  font-size: 10px;
+  font-size: 9px;
   border-radius: 2px;
   min-height: 14px;
 }
 
 .tcp-status.tcp-success {
-  background: rgba(34, 197, 94, 0.2);
-  color: #86efac;
-  border: 1px solid #22c55e;
+  background: rgba(76, 175, 80, 0.20);
+  color: #7ac98a;
+  border: 1px solid #4caf50;
 }
 
 .tcp-status.tcp-error {
-  background: rgba(239, 68, 68, 0.2);
-  color: #fca5a5;
-  border: 1px solid #ef4444;
+  background: rgba(229, 57, 53, 0.20);
+  color: #f08080;
+  border: 1px solid #e53935;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Raccoon Feeder Panel — GLOBAL scope
+   Previously trapped inside @media (max-width: 1200px), which meant
+   these rules never applied at desktop widths. Now global.
+   Surface: coolest/darkest — observability/anomaly stream panel
+───────────────────────────────────────────────────────────────── */
+
+#raccoon-feeder-panel {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(30, 20, 8, 0.82);
+  border: 1px solid #5c3d1e;
+  border-radius: 4px;
+  padding: 12px 14px;
+}
+
+/* Level 1 — panel title (matches .ocp-header h2 scale) */
+.rfp-header h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #d4b896;
+}
+
+.rfp-header p {
+  margin: 3px 0 10px;
+  color: #b8a88a;
+  font-size: 9px;
+}
+
+/* Level 2 — section heading with separator underline (matches .ocp-section h3) */
+.rfp-section {
+  border: 1px solid #4a3520;
+  padding: 10px 12px;
+  min-height: 60px;
+}
+
+.rfp-section h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c8a87c;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #3a2510;
+}
+
+.rfp-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.rfp-item {
+  width: 100%;
+  background: rgba(50, 28, 10, 0.80);
+  color: #e8d5b0;
+  border: 1px solid #5c3d1e;
+  text-align: left;
+  padding: 4px;
+  margin-bottom: 3px;
+  font: 10px monospace;
+  cursor: pointer;
+}
+
+.rfp-item:hover {
+  border-color: #8b6347;
+}
+
+.rfp-item.is-selected {
+  border-color: #ffb300;
+  box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.45);
+}
+
+.rfp-empty {
+  font-size: 9px;
+  color: #b8a88a;
+  padding: 2px 0;
+}
+
+.rfp-detail {
+  margin: 6px 0 0;
+  background: #1a0d04;
+  border: 1px solid #4a3520;
+  padding: 6px;
+  font: 10px/1.35 monospace;
+  color: #d4b896;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow: auto;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Responsive overrides — narrow viewport only
+   Layout changes only; all color/type rules live in global scope above
+───────────────────────────────────────────────────────────────── */
 
 @media (max-width: 1200px) {
   #left-sidebar {
     width: 100%;
     max-width: none;
     border-right: none;
-    border-bottom: 1px solid #2f343d;
+    border-bottom: 1px solid #5c3d1e;
   }
 
   #app-layout {
@@ -402,83 +535,6 @@ canvas {
   }
 
   body {
-    overflow: auto;
-  }
-
-  #raccoon-feeder-panel {
-    width: 100%;
-    box-sizing: border-box;
-    background: rgba(18, 22, 30, 0.72);
-    border: 1px solid #2f343d;
-    border-radius: 4px;
-    padding: 10px;
-  }
-
-  .rfp-header h2 {
-    margin: 0;
-    font-size: 14px;
-  }
-
-  .rfp-header p {
-    margin: 4px 0 10px;
-    color: #9ca3af;
-    font-size: 11px;
-  }
-
-  .rfp-section {
-    border: 1px solid #313741;
-    padding: 8px;
-  }
-
-  .rfp-section h3 {
-    margin: 0 0 8px;
-    font-size: 12px;
-  }
-
-  .rfp-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    max-height: 150px;
-    overflow-y: auto;
-  }
-
-  .rfp-item {
-    width: 100%;
-    background: #1c2129;
-    color: #d1d5db;
-    border: 1px solid #3a424f;
-    text-align: left;
-    padding: 4px;
-    margin-bottom: 3px;
-    font: 11px monospace;
-    cursor: pointer;
-  }
-
-  .rfp-item:hover {
-    border-color: #6b7280;
-  }
-
-  .rfp-item.is-selected {
-    border-color: #f59e0b;
-    box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.45);
-  }
-
-  .rfp-empty {
-    font-size: 11px;
-    color: #9ca3af;
-    padding: 2px 0;
-  }
-
-  .rfp-detail {
-    margin: 6px 0 0;
-    background: #0f1318;
-    border: 1px solid #2d3340;
-    padding: 6px;
-    font: 11px/1.35 monospace;
-    color: #cbd5e1;
-    white-space: pre-wrap;
-    max-height: 200px;
     overflow: auto;
   }
 }

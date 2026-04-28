@@ -15,7 +15,6 @@ export function createInitialEventSeed() {
     { id: 'agent-julia-0', name: 'Julia', role: 'operator', deskId: 'desk-0' },
     { id: 'agent-julia-1', name: 'Julia', role: 'operator', deskId: 'desk-1' },
     { id: 'agent-julia-2', name: 'Julia', role: 'operator', deskId: 'desk-2' },
-    { id: 'agent-julia-3', name: 'Julia', role: 'operator', deskId: 'desk-0' }
   ];
 
   const events = [];

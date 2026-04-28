@@ -10,6 +10,7 @@ import { createInitialEventSeed } from './core/world/initialEventSeed.js';
 import { initUI } from './ui/ui-bootstrap.js';
 import { exposeWindowAPI } from './ui/window-api.js';
 import { buildVisualWorldGraph } from './core/world/buildVisualWorldGraph.js';
+import { getAllAgents }          from './ui/selectors/agentSelectors.js';
 
 function start() {
   // DEV_MODE flag — set before runtime modules use window.DEV_MODE.
@@ -26,7 +27,8 @@ function start() {
 
   function loop() {
     const worldState = deriveWorldState(getRawEvents());
-    const graph = buildVisualWorldGraph(worldState, { now: Date.now() });
+    const agents     = getAllAgents(worldState);
+    const graph      = buildVisualWorldGraph({ ...worldState, agents }, { now: Date.now() });
     if (window.controlAPI && typeof window.controlAPI.setGraph === 'function') {
       window.controlAPI.setGraph(graph);
     }
