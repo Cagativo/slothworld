@@ -95,6 +95,7 @@ export function renderAllLayers(ctx, components, frame) {
   if (!bgLoaded) {
     renderAllAgentEntities(ctx, components, entityPositions);
   }
-  // renderEntityLayer, renderPropLayer, renderEffectLayer, renderUIOverlayLayer
-  // are all suppressed in image mode. renderEffectLayer is already a hard no-op.
+  renderEntityLayer(ctx, components, entityPositions);
+  // renderPropLayer, renderEffectLayer, renderUIOverlayLayer
+  // are still suppressed in image mode. renderEffectLayer is already a hard no-op.
 }

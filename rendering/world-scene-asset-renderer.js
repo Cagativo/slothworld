@@ -663,40 +663,57 @@ export function renderConnectionLayer(ctx, components, entityPositions) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Fixed desk positions calibrated to scene_background_01.jpg (canvas: 1060 × 520).
+ *
+ * One slot per confirmed, browser-verified sprite filename.
+ * Agents are assigned by index — first agent → slot 0, etc.
+ * Fewer agents than slots: only the filled slots are drawn.
+ * More agents than slots: remainder are silently skipped.
+ *
+ * sprite — explicit filename; looked up directly in loadedAssets, no inference.
+ * Adjust x/y here to re-align with the background image without touching any other code.
+ */
+const SLOTH_SLOTS = Object.freeze([
+  Object.freeze({ x: 350, y: 260, sprite: 'sloth_worker_desk_facing_right_front_01.png' }),
+  Object.freeze({ x: 700, y: 255, sprite: 'sloth_worker_desk_facing_left_front_01.png'  }),
+  Object.freeze({ x: 790, y: 310, sprite: 'sloth_worker_desk_facing_right_back_01.png'  }),
+  Object.freeze({ x: 570, y: 400, sprite: 'sloth_worker_desk_facing_left_back_01.png'   }),
+]);
+
+/**
  * Draw the sloth-at-desk sprite for each agent-sprite component.
  *
- * Uses ASSET_MAPPING.agents.base: sloth_worker_desk_facing_right_back_01.png (AGENT_W × AGENT_H).
- * The sprite is drawn centred on the resolved canvas position.
+ * Agents are assigned to SLOTH_SLOTS by index (first agent → slot 0).
+ * Position and sprite come entirely from the slot — entityPositions is not
+ * consulted here. No filename inference: slot.sprite is the literal key into
+ * loadedAssets.
+ *
  * Geometry circles from agent-entity-renderer (Layer 5 geometry pass) are
- * suppressed when the sprite is confirmed loaded — the circle acts as fallback
- * while assets are still loading.
+ * covered by the 62×54 sprite and act as a fallback while assets load.
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {Array<object>} components
- * @param {Map<string, {x:number, y:number}>} entityPositions
+ * @param {Map<string, {x:number, y:number}>} entityPositions  (unused — slots provide positions)
  */
 export function renderEntityLayer(ctx, components, entityPositions) {
-  const file = ASSET_MAPPING.agents.base;
-  let debugLogged = false;
+  void entityPositions; // Positions come from SLOTH_SLOTS; entity position map is not used here.
+  let agentIndex = 0;
+
   for (const c of components) {
     if (c.componentType !== 'agent-sprite') continue;
-    const { x, y } = posOf(c, entityPositions);
 
-    if (window.DEV_MODE && !debugLogged) {
-      console.log('[Layer 5] file:', file, '| loaded:', !!loadedAssets[file], '| pos:', x, y);
-      debugLogged = true;
-    }
+    // More agents than slots — silently skip the remainder.
+    if (agentIndex >= SLOTH_SLOTS.length) break;
 
-    // Desk underlay removed — desk furniture is baked into the scene background image.
-    // Drawing a per-agent desk sprite on top produced a floating rectangle beneath
-    // each sloth. Agents now sit directly on the background desks.
+    const slot = SLOTH_SLOTS[agentIndex++];
 
-    if (loadedAssets[file]) {
-      // Draw sprite directly — no clearRect. The geometry circle (radius 10) is fully
-      // covered by the 62×54 sprite and does not need to be erased first. clearRect was
-      // punching transparent holes through the composite background layers, which showed
-      // the body background colour as a grey strip at the agent cluster position.
-      ctx.drawImage(loadedAssets[file], x - AGENT_W / 2, y - AGENT_H / 2, AGENT_W, AGENT_H);
+    if (loadedAssets[slot.sprite]) {
+      ctx.drawImage(
+        loadedAssets[slot.sprite],
+        slot.x - AGENT_W / 2,
+        slot.y - AGENT_H / 2,
+        AGENT_W, AGENT_H,
+      );
     }
     // Sprite not yet loaded — geometry circle from agent-entity-renderer is the fallback.
   }
@@ -818,4 +835,3 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
     ctx.restore();
   }
 }
-
