@@ -18,6 +18,96 @@ import { workflows, emitEvent } from './app-state.js';
 // Circular with task-handling — safe: these are only called at runtime, never at module init.
 import { addTaskToDesk, sendTaskAck, executeDiscordTask } from './task-handling.js';
 
+/**
+ * @typedef {Object} WorkflowStep
+ * @description A single step definition within a workflow pipeline.
+ * @property {string} [tool] - Dot-separated tool name (e.g. `'research.query'`).
+ * @property {string} [action] - Action identifier for task routing.
+ * @property {string} [contextKey] - Key under which step output is stored in the workflow context.
+ * @property {string} [title] - Human-readable step title.
+ * @property {string} [description] - Longer description of what the step does.
+ * @property {string} [complexity='med'] - Complexity hint: `'low'`, `'med'`, or `'high'`.
+ * @property {string} [rolePreference='any'] - Preferred agent role: `'researcher'`, `'executor'`, or `'any'`.
+ * @property {string} [type] - Task type constant (TASK_TYPE_*).
+ * @property {Object} [payload={}] - Static payload merged into the task payload at enqueue time.
+ * @property {number} [priority=1] - Task priority: 0 (low), 1 (normal), or 2 (high).
+ * @property {number} [required] - Required work ticks; defaults to a random range when omitted.
+ * @property {number} [maxRetries] - Maximum retry attempts before the step is marked failed.
+ */
+
+/**
+ * @typedef {Object} WorkflowPlanStep
+ * @description A compiled, read-only plan step produced by {@link buildWorkflowPlan}.
+ * @property {string} id - Step identifier in the format `step-{index}`.
+ * @property {number} index - Zero-based position in the plan.
+ * @property {string|null} tool - Resolved tool name, or null if not specified.
+ * @property {string|null} action - Resolved action identifier, or null if not specified.
+ * @property {string} type - Task type constant.
+ * @property {string} title - Human-readable step title.
+ * @property {string} description - Step description.
+ * @property {string} complexity - Complexity hint.
+ * @property {string} rolePreference - Preferred agent role.
+ * @property {Object} payload - Static payload for the step.
+ */
+
+/**
+ * @typedef {Object} WorkflowInput
+ * @description Input object passed to {@link createWorkflow}.
+ * @property {string} [id] - Optional workflow ID; auto-generated if omitted.
+ * @property {Object} context - Initial workflow context key/value store.
+ * @property {WorkflowStep[]} steps - Ordered list of pipeline steps.
+ * @property {boolean} [shouldPlan=true] - When true, a plan is built and the workflow starts in `pending_approval` status.
+ */
+
+/**
+ * @typedef {Object} Workflow
+ * @description Internal workflow state object stored in the workflows map.
+ * @property {string} id - Unique workflow identifier.
+ * @property {Object} context - Mutable key/value store accumulating step outputs.
+ * @property {WorkflowStep[]} steps - Original ordered step definitions.
+ * @property {string[]} stepStatuses - Per-step status string (TASK_STATUS_* or WORKFLOW_STATUS_*).
+ * @property {number[]} stepAttempts - Per-step attempt counter.
+ * @property {number[]} stepMaxRetries - Per-step maximum retry limits.
+ * @property {number} currentStepIndex - Zero-based index of the currently active step.
+ * @property {string} status - Overall workflow status (WORKFLOW_STATUS_* or TASK_STATUS_*).
+ * @property {WorkflowPlanStep[]|null} plan - Compiled plan, or null when `shouldPlan` is false.
+ * @property {number} createdAt - Unix timestamp (ms) of workflow creation.
+ * @property {number|null} approvedAt - Unix timestamp (ms) of approval, or null.
+ * @property {number|null} completedAt - Unix timestamp (ms) of completion, or null.
+ * @property {number|null} failedAt - Unix timestamp (ms) of failure, or null.
+ */
+
+/**
+ * @typedef {Object} WorkflowContextEntry
+ * @description Record written into the workflow context when a step finishes.
+ * @property {string} taskId - ID of the task that executed this step.
+ * @property {string} status - Final step status (TASK_STATUS_DONE or TASK_STATUS_FAILED).
+ * @property {Object|null} input - Snapshot of context passed into the step.
+ * @property {Object|null} output - Execution result returned by the tool.
+ * @property {number} attempts - Number of attempts made (including the current one).
+ * @property {number} maxRetries - Maximum retries allowed for this step.
+ * @property {number} completedAt - Unix timestamp (ms) of step completion.
+ */
+
+/**
+ * @typedef {Object} WorkflowSnapshot
+ * @description Read-only public representation of a workflow returned by {@link buildWorkflowSnapshot}.
+ * @property {string} id - Workflow identifier.
+ * @property {string} status - Current overall workflow status.
+ * @property {{ index: number, name: string, status: string }} currentStep - Summary of the active step.
+ * @property {Array<{ index: number, name: string, status: string }>} completedSteps - All completed steps.
+ * @property {Object} contextSnapshot - Immutable clone of the workflow context.
+ * @property {number} createdAt - Unix timestamp (ms) of workflow creation.
+ * @property {number|null} completedAt - Unix timestamp (ms) of completion, or null.
+ * @property {number|null} failedAt - Unix timestamp (ms) of failure, or null.
+ * @property {number} totalSteps - Total number of steps in the workflow.
+ */
+
+/**
+ * @description Validates and sanitizes a raw workflow context entry, returning null if the result is not a plain object.
+ * @param {*} entry - The raw entry to sanitize and validate.
+ * @returns {Object|null} A sanitized plain object, or null if the entry is not valid.
+ */
 export function validateWorkflowContextEntry(entry) {
   const sanitizedEntry = sanitizeJsonValue(entry);
   if (!isPlainObject(sanitizedEntry)) {
@@ -27,6 +117,11 @@ export function validateWorkflowContextEntry(entry) {
   return sanitizedEntry;
 }
 
+/**
+ * @description Infers a default numeric priority from a task's title and type.
+ * @param {{ title?: string, type?: string }} task - The task to evaluate.
+ * @returns {number} Priority level: 0 (low), 1 (normal), or 2 (high).
+ */
 export function inferDefaultPriority(task) {
   const title = (task.title || '').toLowerCase();
 
@@ -45,6 +140,12 @@ export function inferDefaultPriority(task) {
   return 1;
 }
 
+/**
+ * @description Compiles an ordered array of {@link WorkflowPlanStep} objects from raw step definitions.
+ * @param {WorkflowStep[]} steps - Raw step definitions from the workflow input.
+ * @param {string} [keyword] - Optional keyword associated with the workflow (currently unused in plan output).
+ * @returns {WorkflowPlanStep[]} Compiled plan with normalised defaults applied to every step.
+ */
 export function buildWorkflowPlan(steps, keyword) {
   return steps.map((step, index) => ({
     id: `step-${index}`,
@@ -60,6 +161,11 @@ export function buildWorkflowPlan(steps, keyword) {
   }));
 }
 
+/**
+ * @description Creates and registers a new workflow, optionally building a plan and emitting a WORKFLOW_PLANNED event.
+ * @param {WorkflowInput} workflowInput - The workflow definition including steps and context.
+ * @returns {Workflow} The newly created and registered internal workflow object.
+ */
 export function createWorkflow(workflowInput) {
   const shouldPlan = workflowInput.shouldPlan !== false;
   const plan = shouldPlan ? buildWorkflowPlan(workflowInput.steps || [], workflowInput.context && workflowInput.context.keyword) : null;
@@ -103,6 +209,12 @@ export function createWorkflow(workflowInput) {
   return workflow;
 }
 
+/**
+ * @description Returns a human-readable name for the step at the given index.
+ * @param {Workflow} workflow - The workflow whose step should be named.
+ * @param {number} stepIndex - Zero-based step index.
+ * @returns {string} The step action, title, or a fallback string of the form `step_{index}`.
+ */
 export function getWorkflowStepName(workflow, stepIndex) {
   if (!workflow || !Array.isArray(workflow.steps) || stepIndex < 0 || stepIndex >= workflow.steps.length) {
     return `step_${stepIndex}`;
@@ -112,6 +224,13 @@ export function getWorkflowStepName(workflow, stepIndex) {
   return step.action || step.title || `step_${stepIndex}`;
 }
 
+/**
+ * @description Logs a step status transition and emits a WORKFLOW_STEP_CHANGED event.
+ * @param {Workflow} workflow - The workflow containing the transitioning step.
+ * @param {number} stepIndex - Zero-based index of the step being transitioned.
+ * @param {string} toStatus - The new status being applied to the step.
+ * @returns {void}
+ */
 export function logWorkflowStepTransition(workflow, stepIndex, toStatus) {
   const stepName = getWorkflowStepName(workflow, stepIndex);
   console.log(`[WORKFLOW][${workflow.id}][STEP] ${stepName} → ${toStatus}`);
@@ -123,6 +242,13 @@ export function logWorkflowStepTransition(workflow, stepIndex, toStatus) {
   });
 }
 
+/**
+ * @description Sends a Discord failure notification for a workflow step, using channel information from the workflow context or task payload.
+ * @param {Workflow} workflow - The workflow that encountered the failure.
+ * @param {import('./task-handling.js').Task} task - The task whose step failed.
+ * @param {import('./task-handling.js').ExecutionResult} executionResult - The execution result describing the failure.
+ * @returns {Promise<void>}
+ */
 export async function sendWorkflowFailureDiscordMessage(workflow, task, executionResult) {
   const channelId =
     (workflow && workflow.context && workflow.context.sourceChannelId) ||
@@ -160,6 +286,11 @@ export async function sendWorkflowFailureDiscordMessage(workflow, task, executio
   });
 }
 
+/**
+ * @description Builds a read-only snapshot of internal workflow state suitable for API responses and UI consumption.
+ * @param {Workflow|null|undefined} workflow - The internal workflow object to snapshot.
+ * @returns {WorkflowSnapshot|null} A snapshot object, or null if workflow is falsy.
+ */
 export function buildWorkflowSnapshot(workflow) {
   if (!workflow) {
     return null;
@@ -192,6 +323,11 @@ export function buildWorkflowSnapshot(workflow) {
   };
 }
 
+/**
+ * @description Returns a public snapshot of the workflow with the given ID.
+ * @param {string} id - The workflow ID to look up.
+ * @returns {WorkflowSnapshot|null} The workflow snapshot, or null if no workflow with that ID exists.
+ */
 export function getWorkflow(id) {
   if (!id) {
     return null;
@@ -200,10 +336,19 @@ export function getWorkflow(id) {
   return buildWorkflowSnapshot(workflows.get(id));
 }
 
+/**
+ * @description Returns public snapshots for all registered workflows.
+ * @returns {WorkflowSnapshot[]} Array of workflow snapshots, one per registered workflow.
+ */
 export function listWorkflows() {
   return Array.from(workflows.values()).map((workflow) => buildWorkflowSnapshot(workflow));
 }
 
+/**
+ * @description Transitions a pending-approval workflow to running status and enqueues its first step.
+ * @param {string} workflowId - The ID of the workflow to approve and start.
+ * @returns {boolean} True if enqueuing succeeded; false if the workflow was not found or has no steps.
+ */
 export function enqueueAllWorkflowSteps(workflowId) {
   const workflow = workflows.get(workflowId);
   if (!workflow || !workflow.steps || workflow.steps.length === 0) {
@@ -216,6 +361,12 @@ export function enqueueAllWorkflowSteps(workflowId) {
   return true;
 }
 
+/**
+ * @description Creates a task for the specified workflow step and places it on the best available desk.
+ * @param {string} workflowId - The ID of the workflow containing the step to enqueue.
+ * @param {number} stepIndex - Zero-based index of the step to enqueue.
+ * @returns {import('./task-handling.js').Task|null} The enqueued task, or null if preconditions were not met.
+ */
 export function enqueueWorkflowStep(workflowId, stepIndex) {
   const workflow = workflows.get(workflowId);
   if (!workflow || workflow.status !== WORKFLOW_STATUS_RUNNING || stepIndex < 0 || stepIndex >= workflow.steps.length) {
@@ -252,6 +403,12 @@ export function enqueueWorkflowStep(workflowId, stepIndex) {
   return task;
 }
 
+/**
+ * @description Processes the result of a completed workflow step task, advancing, retrying, or failing the workflow as appropriate.
+ * @param {import('./task-handling.js').Task} task - The task that just finished executing.
+ * @param {import('./task-handling.js').ExecutionResult} executionResult - The execution result from the task.
+ * @returns {void}
+ */
 export function applyWorkflowTaskCompletion(task, executionResult) {
   if (!task || !task.workflowId) {
     return;
@@ -324,6 +481,11 @@ export function applyWorkflowTaskCompletion(task, executionResult) {
   enqueueWorkflowStep(workflow.id, nextStepIndex);
 }
 
+/**
+ * @description Creates a five-step product workflow (research → design prompt → image render → listing → Discord reply) from a `start_product_workflow` command task.
+ * @param {import('./task-handling.js').Task} task - The command task that triggered the product workflow.
+ * @returns {Workflow} The newly created and registered product workflow object.
+ */
 export function createProductWorkflowFromTask(task) {
   const args = Array.isArray(task.payload && task.payload.args) ? task.payload.args : [];
   const keyword = (args[0] || 'unknown-product').trim();
@@ -421,6 +583,11 @@ export function createProductWorkflowFromTask(task) {
   return workflow;
 }
 
+/**
+ * @description Approves a pending-approval workflow, starting execution of its first step.
+ * @param {string} workflowId - The ID of the workflow to approve.
+ * @returns {{ success: boolean, error?: string, data?: WorkflowSnapshot }} Result object indicating success or failure.
+ */
 export function approveWorkflow(workflowId) {
   const workflow = workflows.get(workflowId);
   if (!workflow) {
@@ -444,6 +611,12 @@ export function approveWorkflow(workflowId) {
   return { success: true, data: getWorkflow(workflowId) };
 }
 
+/**
+ * @description Rejects a pending-approval workflow, marking it as rejected and emitting a WORKFLOW_REJECTED event.
+ * @param {string} workflowId - The ID of the workflow to reject.
+ * @param {string} [reason='user_rejection'] - Human-readable rejection reason attached to the event payload.
+ * @returns {{ success: boolean, error?: string, data?: WorkflowSnapshot }} Result object indicating success or failure.
+ */
 export function rejectWorkflow(workflowId, reason) {
   const workflow = workflows.get(workflowId);
   if (!workflow) {
@@ -465,6 +638,13 @@ export function rejectWorkflow(workflowId, reason) {
   return { success: true, data: getWorkflow(workflowId) };
 }
 
+/**
+ * @description Patches a step definition in a pending-approval workflow before execution begins.
+ * @param {string} workflowId - The ID of the workflow containing the step.
+ * @param {string} stepId - Step ID in the format `step-{index}`.
+ * @param {Partial<WorkflowStep>} patch - Partial step properties to merge into the existing step.
+ * @returns {{ success: boolean, error?: string, data?: { stepIndex: number, step: WorkflowStep } }} Result object.
+ */
 export function editWorkflowStep(workflowId, stepId, patch) {
   const workflow = workflows.get(workflowId);
   if (!workflow) {
@@ -492,6 +672,10 @@ export function editWorkflowStep(workflowId, stepId, patch) {
   return { success: true, data: { stepIndex, step } };
 }
 
+/**
+ * @description Returns public snapshots of all workflows; alias for {@link listWorkflows} used by the control panel.
+ * @returns {WorkflowSnapshot[]} Array of workflow snapshots.
+ */
 export function getWorkflowsControl() {
   return listWorkflows();
 }
