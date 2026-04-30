@@ -34,6 +34,11 @@ const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
 const STORE_PATH = path.join(ROOT_DIR, 'bridge-store.json');
 
+// Fixed Discord snowflake values used as test fixtures.
+// These are valid 18-digit Discord snowflakes accepted by the bridge's validation rules.
+const TEST_CHANNEL_ID = '1491500223288184964';
+const TEST_MESSAGE_ID = '1491500223288184964';
+
 let serverProcess = null;
 let baseUrl = null;
 let storeBackup = null;
@@ -116,8 +121,8 @@ async function createDiscordTask(overrides = {}) {
     title: 'Test task',
     action: 'reply_to_message',
     payload: {
-      channelId: '1491500223288184964',
-      messageId: '1491500223288184964',
+      channelId: TEST_CHANNEL_ID,
+      messageId: TEST_MESSAGE_ID,
       content: 'test'
     },
     ...overrides
@@ -262,8 +267,8 @@ test('POST /task — happy paths', async (t) => {
       title: 'Happy path discord',
       action: 'reply_to_message',
       payload: {
-        channelId: '1491500223288184964',
-        messageId: '1491500223288184964',
+        channelId: TEST_CHANNEL_ID,
+        messageId: TEST_MESSAGE_ID,
         content: 'hello'
       }
     });
@@ -294,7 +299,7 @@ test('POST /task — happy paths', async (t) => {
       type: 'discord',
       title: 'Auto-id task',
       action: 'send_channel_message',
-      payload: { channelId: '1491500223288184964', content: 'hi' }
+      payload: { channelId: TEST_CHANNEL_ID, content: 'hi' }
     });
     assert.equal(response.status, 201);
     const { task } = await response.json();
@@ -309,8 +314,8 @@ test('POST /task — happy paths', async (t) => {
       title: 'Dedup test',
       action: 'reply_to_message',
       payload: {
-        channelId: '1491500223288184964',
-        messageId: '1491500223288184964',
+        channelId: TEST_CHANNEL_ID,
+        messageId: TEST_MESSAGE_ID,
         content: 'dedup'
       }
     };
@@ -329,8 +334,8 @@ test('POST /task — happy paths', async (t) => {
       title: 'Lifecycle strip test',
       action: 'reply_to_message',
       payload: {
-        channelId: '1491500223288184964',
-        messageId: '1491500223288184964',
+        channelId: TEST_CHANNEL_ID,
+        messageId: TEST_MESSAGE_ID,
         content: 'test'
       },
       startedAt: 9999999999999,
@@ -376,7 +381,7 @@ test('POST /task — error paths', async (t) => {
       type: 'discord',
       title: 'Internal task',
       internal: true,
-      payload: { channelId: '1491500223288184964', content: 'blocked' }
+      payload: { channelId: TEST_CHANNEL_ID, content: 'blocked' }
     });
     assert.equal(response.status, 400);
     const json = await response.json();
@@ -388,7 +393,7 @@ test('POST /task — error paths', async (t) => {
       type: 'discord',
       title: 'System domain task',
       domain: 'system',
-      payload: { channelId: '1491500223288184964', content: 'blocked' }
+      payload: { channelId: TEST_CHANNEL_ID, content: 'blocked' }
     });
     assert.equal(response.status, 400);
     const json = await response.json();
@@ -400,7 +405,7 @@ test('POST /task — error paths', async (t) => {
       type: 'discord',
       title: 'Too deep',
       depth: 99,
-      payload: { channelId: '1491500223288184964', content: 'deep' }
+      payload: { channelId: TEST_CHANNEL_ID, content: 'deep' }
     });
     assert.equal(response.status, 400);
     const json = await response.json();
@@ -412,7 +417,7 @@ test('POST /task — error paths', async (t) => {
       type: 'discord',
       title: 'Bad priority',
       priority: 99,
-      payload: { channelId: '1491500223288184964', content: 'test' }
+      payload: { channelId: TEST_CHANNEL_ID, content: 'test' }
     });
     assert.equal(response.status, 400);
     const json = await response.json();
