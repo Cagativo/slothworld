@@ -40,9 +40,13 @@ import { AGENT_VISUAL_STYLES } from '../rendering/agent-entity-renderer.js';
 // ---------------------------------------------------------------------------
 
 /**
+ * djb2-style hash (multiplier 31) — the specific algorithm is part of the
+ * contract.  Any change to the multiplier will shift all golden-path values
+ * and must be reflected in the GOLDEN table below.
+ *
  * @param {string} str
  * @param {number} len
- * @returns {number}  value in [0, len)
+ * @returns {number}  value in [0, len), derived from abs(hash) % len
  */
 function deterministicIndex(str, len) {
   let hash = 0;
@@ -166,13 +170,16 @@ test('sprite variant selection: deterministicIndex is deterministic — same inp
   }
 });
 
-test('sprite variant selection: deterministicIndex distributes across multiple ids (not all colliding)', () => {
+test('sprite variant selection: deterministicIndex distributes across all 4 variant slots for the sample id set', () => {
   const len     = VARIANTS.length;
   const indices = new Set(SAMPLE_IDS.map((id) => deterministicIndex(id, len)));
-  // 5 IDs with 4 slots — at least 2 distinct values are expected.
-  assert.ok(
-    indices.size >= 2,
-    `deterministicIndex must not map all sample ids to the same slot — got ${indices.size} distinct value(s)`,
+  // SAMPLE_IDS was chosen to produce one id per slot (verified by golden-path comments).
+  // All 4 variant slots must be reachable — this confirms the sample set has full coverage
+  // and that the algorithm is not degenerate.
+  assert.equal(
+    indices.size, len,
+    `deterministicIndex must map the sample ids across all ${len} variant slots — ` +
+    `got ${indices.size} distinct value(s): [${[...indices].sort().join(', ')}]`,
   );
 });
 
