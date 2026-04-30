@@ -541,6 +541,13 @@ function startIdleRoam(agent) {
   agent.targetX = roamTarget.x;
   agent.targetY = roamTarget.y;
   agent.state = AGENT_STATE_MOVING;
+  agent.stateTimer = 0;
+  agent.animationTimer = 0;
+
+  return true;
+}
+
+export function hasAnyDeskTasks() {
   return desks.some((desk) => desk.currentTask || desk.queue.length > 0);
 }
 

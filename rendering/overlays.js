@@ -242,6 +242,7 @@ export function drawDeskTaskOverlay(ctx, desk) {
     ? activeNode.metadata.taskType
     : '';
   if (taskType === TASK_TYPE_SHOPIFY) {
+    barGradient.addColorStop(0, '#2f8e68');
     barGradient.addColorStop(0.5, '#50d890');
     barGradient.addColorStop(1, '#95ffe8');
   } else {

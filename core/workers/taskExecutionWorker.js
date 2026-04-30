@@ -8,6 +8,8 @@ import { normalizeDesignIntent, buildProviderPrompt } from '../../integrations/r
 import { runImageRenderWorker } from './imageRenderWorker.js';
 
 import { assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
+
+function ok(result) {
   return {
     success: true,
     result
