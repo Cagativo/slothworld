@@ -585,6 +585,9 @@ export function scheduleTargetRetry(agent) {
   agent.animationFrame = 0;
   agent.animationTimer = 0;
   agent.state = AGENT_STATE_IDLE;
+}
+
+export function setRandomWanderTarget(agent) {
   agent.targetDesk = null;
   agent.targetSlot = null;
   agent.targetX = Math.random() * (canvas.width - 48) + 24;

@@ -227,6 +227,7 @@ function findTask(tasksById, taskId) {
 function getAgentVisualState(agent) {
   if (!agent || typeof agent !== 'object' || typeof agent.state !== 'string') {
     return AGENT_STATE_IDLE;
+  }
 
   return agent.state;
 }
@@ -292,6 +293,7 @@ function getAgentPosition(agent, frameNow, desksById, tasksById, transitionByTas
   }
 
   if (visualState === AGENT_STATE_WORKING) {
+    const workPulse = easeOutCubic((Math.sin(frameNow * 0.0028 + (idHash % 17)) + 1) / 2);
     const path = arcLerp(worker, execution, deskToExec, 10);
     return {
       x: path.x,
