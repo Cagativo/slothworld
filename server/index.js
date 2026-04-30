@@ -1337,7 +1337,7 @@ const server = http.createServer(async (req, res) => {
 
   if (await intakeRoutes.handle(req, res)) return;
   if (eventsRoutes.handle(req, res)) return;
-  if (simulationRoutes.handle(req, res)) return;
+  if (await simulationRoutes.handle(req, res)) return;
   if (metricsRoutes.handle(req, res)) return;
 
   serveStatic(req, res);
