@@ -1,5 +1,19 @@
 import { generateId, randomInRange, cloneContext, isPlainObject, sanitizeJsonValue } from './utils.js';
-import { DEFAULT_WORKFLOW_STEP_MAX_RETRIES } from './constants.js';
+import {
+  DEFAULT_WORKFLOW_STEP_MAX_RETRIES,
+  TASK_TYPE_DISCORD,
+  TASK_TYPE_SHOPIFY,
+  TASK_TYPE_IMAGE_RENDER,
+  ACTION_REPLY_TO_MESSAGE,
+  ACTION_RENDER_PRODUCT_IMAGE,
+  TASK_STATUS_PENDING,
+  TASK_STATUS_DONE,
+  TASK_STATUS_FAILED,
+  WORKFLOW_STATUS_PENDING_APPROVAL,
+  WORKFLOW_STATUS_RUNNING,
+  TASK_REQUIRED_DISCORD_MIN,
+  TASK_REQUIRED_DISCORD_MAX
+} from './constants.js';
 import { workflows, emitEvent } from './app-state.js';
 // Circular with task-handling — safe: these are only called at runtime, never at module init.
 import { addTaskToDesk, sendTaskAck, executeDiscordTask } from './task-handling.js';
@@ -20,11 +34,11 @@ export function inferDefaultPriority(task) {
     return 0;
   }
 
-  if (task.type === 'discord' && (title.includes('mention') || title.includes('command'))) {
+  if (task.type === TASK_TYPE_DISCORD && (title.includes('mention') || title.includes('command'))) {
     return 2;
   }
 
-  if (task.type === 'shopify' && title.includes('order')) {
+  if (task.type === TASK_TYPE_SHOPIFY && title.includes('order')) {
     return 2;
   }
 
@@ -37,7 +51,7 @@ export function buildWorkflowPlan(steps, keyword) {
     index,
     tool: step.tool || null,
     action: step.action || null,
-    type: step.type || 'discord',
+    type: step.type || TASK_TYPE_DISCORD,
     title: step.title || `Step ${index + 1}`,
     description: step.description || step.title || `Unnamed step`,
     complexity: step.complexity || 'med',
@@ -54,7 +68,7 @@ export function createWorkflow(workflowInput) {
     id: workflowInput.id || `workflow-${generateId()}`,
     context: cloneContext(workflowInput.context),
     steps: Array.isArray(workflowInput.steps) ? workflowInput.steps.slice() : [],
-    stepStatuses: Array.isArray(workflowInput.steps) ? workflowInput.steps.map(() => 'pending') : [],
+    stepStatuses: Array.isArray(workflowInput.steps) ? workflowInput.steps.map(() => TASK_STATUS_PENDING) : [],
     stepAttempts: Array.isArray(workflowInput.steps) ? workflowInput.steps.map(() => 0) : [],
     stepMaxRetries: Array.isArray(workflowInput.steps)
       ? workflowInput.steps.map((step) => {
@@ -66,7 +80,7 @@ export function createWorkflow(workflowInput) {
       })
       : [],
     currentStepIndex: 0,
-    status: shouldPlan ? 'pending_approval' : 'running',
+    status: shouldPlan ? WORKFLOW_STATUS_PENDING_APPROVAL : WORKFLOW_STATUS_RUNNING,
     plan: plan,
     createdAt: Date.now(),
     approvedAt: null,
@@ -130,12 +144,12 @@ export async function sendWorkflowFailureDiscordMessage(workflow, task, executio
 
   await executeDiscordTask({
     id: `${workflow.id}-failure-notice-${Date.now()}`,
-    type: 'discord',
+    type: TASK_TYPE_DISCORD,
     internal: true,
     domain: 'system',
     correlationId: workflow.id,
     depth: 1,
-    action: 'reply_to_message',
+    action: ACTION_REPLY_TO_MESSAGE,
     payload: {
       correlationId: workflow.id,
       depth: 1,
@@ -152,14 +166,14 @@ export function buildWorkflowSnapshot(workflow) {
   }
 
   const currentStepName = getWorkflowStepName(workflow, workflow.currentStepIndex);
-  const currentStepStatus = workflow.stepStatuses[workflow.currentStepIndex] || 'pending';
+  const currentStepStatus = workflow.stepStatuses[workflow.currentStepIndex] || TASK_STATUS_PENDING;
   const completedSteps = workflow.steps
     .map((step, index) => ({
       index,
       name: step.action || step.title || `step_${index}`,
-      status: workflow.stepStatuses[index] || 'pending'
+      status: workflow.stepStatuses[index] || TASK_STATUS_PENDING
     }))
-    .filter((step) => step.status === 'done');
+    .filter((step) => step.status === TASK_STATUS_DONE);
 
   return {
     id: workflow.id,
@@ -196,7 +210,7 @@ export function enqueueAllWorkflowSteps(workflowId) {
     return false;
   }
 
-  workflow.status = 'running';
+  workflow.status = WORKFLOW_STATUS_RUNNING;
   workflow.approvedAt = Date.now();
   enqueueWorkflowStep(workflow.id, 0);
   return true;
@@ -204,19 +218,19 @@ export function enqueueAllWorkflowSteps(workflowId) {
 
 export function enqueueWorkflowStep(workflowId, stepIndex) {
   const workflow = workflows.get(workflowId);
-  if (!workflow || workflow.status !== 'running' || stepIndex < 0 || stepIndex >= workflow.steps.length) {
+  if (!workflow || workflow.status !== WORKFLOW_STATUS_RUNNING || stepIndex < 0 || stepIndex >= workflow.steps.length) {
     return null;
   }
 
   const step = workflow.steps[stepIndex];
   const task = {
     id: `${workflow.id}-step-${stepIndex}`,
-    type: step.type || 'discord',
+    type: step.type || TASK_TYPE_DISCORD,
     tool: step.tool || null,
-    action: step.action || step.tool || 'reply_to_message',
+    action: step.action || step.tool || ACTION_REPLY_TO_MESSAGE,
     title: step.title || `${workflow.id}:${step.tool || step.action || `step_${stepIndex}`}`,
     priority: step.priority ?? 1,
-    required: step.required ?? randomInRange(80, 200),
+    required: step.required ?? randomInRange(TASK_REQUIRED_DISCORD_MIN, TASK_REQUIRED_DISCORD_MAX),
     payload: {
       ...(step.payload || {}),
       context: cloneContext(workflow.context)
@@ -224,7 +238,7 @@ export function enqueueWorkflowStep(workflowId, stepIndex) {
     workflowId,
     workflowStepIndex: stepIndex,
     workflowContextInput: cloneContext(workflow.context),
-    status: 'pending'
+    status: TASK_STATUS_PENDING
   };
 
   const desk = addTaskToDesk(task);
@@ -233,8 +247,8 @@ export function enqueueWorkflowStep(workflowId, stepIndex) {
   }
 
   workflow.currentStepIndex = stepIndex;
-  workflow.stepStatuses[stepIndex] = 'running';
-  logWorkflowStepTransition(workflow, stepIndex, 'running');
+  workflow.stepStatuses[stepIndex] = WORKFLOW_STATUS_RUNNING;
+  logWorkflowStepTransition(workflow, stepIndex, WORKFLOW_STATUS_RUNNING);
   return task;
 }
 
@@ -244,7 +258,7 @@ export function applyWorkflowTaskCompletion(task, executionResult) {
   }
 
   const workflow = workflows.get(task.workflowId);
-  if (!workflow || workflow.status !== 'running') {
+  if (!workflow || workflow.status !== WORKFLOW_STATUS_RUNNING) {
     return;
   }
 
@@ -258,7 +272,7 @@ export function applyWorkflowTaskCompletion(task, executionResult) {
   const isFailedStep = executionResult && executionResult.success === false;
   const currentAttempt = (workflow.stepAttempts[stepIndex] || 0) + 1;
   const maxRetries = workflow.stepMaxRetries[stepIndex] ?? DEFAULT_WORKFLOW_STEP_MAX_RETRIES;
-  const stepStatus = isFailedStep ? 'failed' : 'done';
+  const stepStatus = isFailedStep ? TASK_STATUS_FAILED : TASK_STATUS_DONE;
   const contextEntry = validateWorkflowContextEntry({
     taskId: task.id,
     status: stepStatus,
@@ -272,10 +286,10 @@ export function applyWorkflowTaskCompletion(task, executionResult) {
   workflow.stepAttempts[stepIndex] = currentAttempt;
 
   if (!contextEntry) {
-    workflow.stepStatuses[stepIndex] = 'failed';
-    workflow.status = 'failed';
+    workflow.stepStatuses[stepIndex] = TASK_STATUS_FAILED;
+    workflow.status = TASK_STATUS_FAILED;
     workflow.failedAt = Date.now();
-    logWorkflowStepTransition(workflow, stepIndex, 'failed');
+    logWorkflowStepTransition(workflow, stepIndex, TASK_STATUS_FAILED);
     sendWorkflowFailureDiscordMessage(workflow, task, { success: false, error: 'invalid_workflow_context_entry' });
     return;
   }
@@ -294,7 +308,7 @@ export function applyWorkflowTaskCompletion(task, executionResult) {
       }
     }
 
-    workflow.status = 'failed';
+    workflow.status = TASK_STATUS_FAILED;
     workflow.failedAt = Date.now();
     sendWorkflowFailureDiscordMessage(workflow, task, executionResult);
     return;
@@ -302,7 +316,7 @@ export function applyWorkflowTaskCompletion(task, executionResult) {
 
   const nextStepIndex = stepIndex + 1;
   if (nextStepIndex >= workflow.steps.length) {
-    workflow.status = 'done';
+    workflow.status = TASK_STATUS_DONE;
     workflow.completedAt = Date.now();
     return;
   }
@@ -332,7 +346,7 @@ export function createProductWorkflowFromTask(task) {
         description: `Search for market trends and data on "${keyword}"`,
         complexity: 'low',
         rolePreference: 'researcher',
-        type: 'shopify'
+        type: TASK_TYPE_SHOPIFY
       },
       {
         tool: 'shopify.generate_design_prompt',
@@ -341,16 +355,16 @@ export function createProductWorkflowFromTask(task) {
         description: `Create a design brief based on research findings`,
         complexity: 'med',
         rolePreference: 'executor',
-        type: 'shopify'
+        type: TASK_TYPE_SHOPIFY
       },
       {
-        action: 'render_product_image',
+        action: ACTION_RENDER_PRODUCT_IMAGE,
         contextKey: 'render_product_image',
         title: `Render product image: ${keyword}`,
         description: `Render a product visual through the provider-agnostic image pipeline`,
         complexity: 'high',
         rolePreference: 'executor',
-        type: 'image_render',
+        type: TASK_TYPE_IMAGE_RENDER,
         payload: {
           productId: `product-${keyword.replace(/\s+/g, '-').toLowerCase()}`,
           provider: 'openai',
@@ -372,7 +386,7 @@ export function createProductWorkflowFromTask(task) {
         description: `Create Shopify product listing with all details`,
         complexity: 'med',
         rolePreference: 'executor',
-        type: 'shopify'
+        type: TASK_TYPE_SHOPIFY
       },
       {
         tool: 'discord.reply',
@@ -381,7 +395,7 @@ export function createProductWorkflowFromTask(task) {
         description: `Send completion notice to Discord channel`,
         complexity: 'low',
         rolePreference: 'any',
-        type: 'discord',
+        type: TASK_TYPE_DISCORD,
         payload: {
           channelId,
           messageId,
@@ -394,7 +408,7 @@ export function createProductWorkflowFromTask(task) {
 
   // Mark the command trigger task as resolved so polling does not re-deliver it.
   sendTaskAck(task, {
-    status: 'done',
+    status: TASK_STATUS_DONE,
     retries: task.retries || 0,
     executionResult: {
       success: true,
@@ -413,7 +427,7 @@ export function approveWorkflow(workflowId) {
     return { success: false, error: 'workflow_not_found' };
   }
 
-  if (workflow.status !== 'pending_approval') {
+  if (workflow.status !== WORKFLOW_STATUS_PENDING_APPROVAL) {
     return { success: false, error: 'workflow_not_pending_approval' };
   }
 
@@ -436,7 +450,7 @@ export function rejectWorkflow(workflowId, reason) {
     return { success: false, error: 'workflow_not_found' };
   }
 
-  if (workflow.status !== 'pending_approval') {
+  if (workflow.status !== WORKFLOW_STATUS_PENDING_APPROVAL) {
     return { success: false, error: 'workflow_not_pending_approval' };
   }
 
@@ -457,7 +471,7 @@ export function editWorkflowStep(workflowId, stepId, patch) {
     return { success: false, error: 'workflow_not_found' };
   }
 
-  if (workflow.status !== 'pending_approval') {
+  if (workflow.status !== WORKFLOW_STATUS_PENDING_APPROVAL) {
     return { success: false, error: 'workflow_not_pending_approval' };
   }
 

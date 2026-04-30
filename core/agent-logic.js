@@ -1,4 +1,23 @@
-import { TARGET_RETRY_DELAY, IDLE_WANDER_REASSIGN_DELAY, WANDER_TARGET_INTERVAL } from './constants.js';
+import {
+  TARGET_RETRY_DELAY,
+  IDLE_WANDER_REASSIGN_DELAY,
+  WANDER_TARGET_INTERVAL,
+  TASK_TYPE_DISCORD,
+  TASK_TYPE_SHOPIFY,
+  TASK_TYPE_IMAGE_RENDER,
+  TASK_STATUS_PENDING,
+  TASK_STATUS_DONE,
+  TASK_STATUS_FAILED,
+  TASK_STATUS_AWAITING_ACK,
+  TASK_STATUS_PROCESSING,
+  EVENT_TASK_COMPLETED,
+  AGENT_STATE_IDLE,
+  AGENT_STATE_MOVING,
+  AGENT_STATE_SITTING,
+  AGENT_STATE_WORKING,
+  TASK_PROGRESS_ACK_THRESHOLD,
+  AGENT_SPEECH_DURATION_MS
+} from './constants.js';
 import { canvas, agents, desks, agentStateTracker, emitEvent, eventStream, isDeskAvailableForAgent, getDeskSlotPosition } from './app-state.js';
 import { syncTaskStart, handleTaskExecutionResult } from './task-handling.js';
 
@@ -95,8 +114,8 @@ function ensureIdleStateFields(agent) {
     }
   }
 
-  if (agent.visualState !== 'idle' && agent.visualState !== 'working' && agent.visualState !== 'waiting' && agent.visualState !== 'complete_react') {
-    agent.visualState = 'idle';
+  if (agent.visualState !== AGENT_STATE_IDLE && agent.visualState !== AGENT_STATE_WORKING && agent.visualState !== 'waiting' && agent.visualState !== 'complete_react') {
+    agent.visualState = AGENT_STATE_IDLE;
   }
 
   if (typeof agent.completeReactTimer !== 'number') {
@@ -157,7 +176,7 @@ function ensureIdleStateFields(agent) {
   }
 }
 
-function setAgentSpeech(agent, text, duration = 7000, { force = false } = {}) {
+function setAgentSpeech(agent, text, duration = AGENT_SPEECH_DURATION_MS, { force = false } = {}) {
   if (!agent) {
     return;
   }
@@ -181,7 +200,7 @@ function canSpeak(agent, now = Date.now()) {
     return false;
   }
 
-  return (now - (agent.lastSpeechTime || 0)) > 7000;
+  return (now - (agent.lastSpeechTime || 0)) > AGENT_SPEECH_DURATION_MS;
 }
 
 function pickSpeechLine(lines, fallback) {
@@ -212,15 +231,15 @@ function getWorkingSpeechText(task) {
     return 'Finishing...';
   }
 
-  if (task.type === 'image_render') {
+  if (task.type === TASK_TYPE_IMAGE_RENDER) {
     return 'Generating image...';
   }
 
-  if (task.type === 'discord') {
+  if (task.type === TASK_TYPE_DISCORD) {
     return 'Replying...';
   }
 
-  if (task.type === 'shopify') {
+  if (task.type === TASK_TYPE_SHOPIFY) {
     return 'Processing order...';
   }
 
@@ -235,7 +254,7 @@ function beginCompletionReaction(agent, text = 'Done!') {
   agent.stateTimer = 0;
   agent.animationFrame = 0;
   agent.animationTimer = 0;
-  setAgentSpeech(agent, text, 7000, { force: true });
+  setAgentSpeech(agent, text, AGENT_SPEECH_DURATION_MS, { force: true });
 }
 
 function syncCompletionStatuses() {
@@ -243,11 +262,11 @@ function syncCompletionStatuses() {
     const event = eventStream[completionEventCursor];
     completionEventCursor += 1;
 
-    if (!event || event.type !== 'TASK_COMPLETED' || !event.payload || !event.payload.taskId) {
+    if (!event || event.type !== EVENT_TASK_COMPLETED || !event.payload || !event.payload.taskId) {
       continue;
     }
 
-    completionStatusByTaskId.set(String(event.payload.taskId), event.payload.success === false ? 'failed' : 'done');
+    completionStatusByTaskId.set(String(event.payload.taskId), event.payload.success === false ? TASK_STATUS_FAILED : TASK_STATUS_DONE);
   }
 }
 
@@ -267,7 +286,7 @@ function shouldLogAgentStatus(agent, now) {
     return false;
   }
 
-  const isActive = !!agent.currentTask || agent.visualState !== 'idle';
+  const isActive = !!agent.currentTask || agent.visualState !== AGENT_STATE_IDLE;
   if (!isActive) {
     return false;
   }
@@ -326,12 +345,12 @@ function deriveTaskProgressRatio(task) {
     ? clamp(task.progress / task.required, 0, 1)
     : 0;
 
-  if (status === 'done' || status === 'failed') {
+  if (status === TASK_STATUS_DONE || status === TASK_STATUS_FAILED) {
     return 1;
   }
 
-  if (status === 'awaiting_ack') {
-    return 0.95;
+  if (status === TASK_STATUS_AWAITING_ACK) {
+    return TASK_PROGRESS_ACK_THRESHOLD;
   }
 
   return Math.min(0.9, rawRatio);
@@ -367,11 +386,11 @@ function syncAgentTaskSpeech(agent, task) {
     agent.lastTaskStatus = status;
   }
 
-  if (status === 'done' || status === 'failed') {
+  if (status === TASK_STATUS_DONE || status === TASK_STATUS_FAILED) {
     return;
   }
 
-  if (status === 'awaiting_ack') {
+  if (status === TASK_STATUS_AWAITING_ACK) {
     agent.lastProgressPhase = 'finishing';
     return;
   }
@@ -380,7 +399,7 @@ function syncAgentTaskSpeech(agent, task) {
   const phase = ratio < 0.3 ? 'starting' : 'working';
   if (phase !== agent.lastProgressPhase) {
     agent.lastProgressPhase = phase;
-    setAgentSpeech(agent, getPhaseSpeech(phase), 7000);
+    setAgentSpeech(agent, getPhaseSpeech(phase), AGENT_SPEECH_DURATION_MS);
   }
 }
 
@@ -521,14 +540,7 @@ function startIdleRoam(agent) {
   agent.targetSlot = null;
   agent.targetX = roamTarget.x;
   agent.targetY = roamTarget.y;
-  agent.state = 'moving';
-  agent.stateTimer = 0;
-  agent.animationTimer = 0;
-
-  return true;
-}
-
-export function hasAnyDeskTasks() {
+  agent.state = AGENT_STATE_MOVING;
   return desks.some((desk) => desk.currentTask || desk.queue.length > 0);
 }
 
@@ -565,10 +577,7 @@ export function scheduleTargetRetry(agent) {
   agent.stateTimer = 0;
   agent.animationFrame = 0;
   agent.animationTimer = 0;
-  agent.state = 'idle';
-}
-
-export function setRandomWanderTarget(agent) {
+  agent.state = AGENT_STATE_IDLE;
   agent.targetDesk = null;
   agent.targetSlot = null;
   agent.targetX = Math.random() * (canvas.width - 48) + 24;
@@ -586,7 +595,7 @@ export function claimNextTask(desk) {
   }
 
   const nextTask = desk.queue.shift();
-  nextTask.runtimeStatus = 'processing';
+  nextTask.runtimeStatus = TASK_STATUS_PROCESSING;
   syncTaskStart(nextTask);
   desk.currentTask = nextTask;
   if (desk.occupant) {
@@ -595,7 +604,7 @@ export function claimNextTask(desk) {
     desk.occupant.awaitingTaskCompletion = false;
     desk.occupant.lastProgressPhase = null;
     desk.occupant.lastTaskStatus = getTaskStatus(nextTask);
-    desk.occupant.visualState = 'working';
+    desk.occupant.visualState = AGENT_STATE_WORKING;
     syncAgentTaskSpeech(desk.occupant, nextTask);
   }
   console.log('[TASK][CURRENT]', nextTask.id, {
@@ -670,7 +679,7 @@ export function trySit(agent) {
 
   agent.x = seatPosition.x;
   agent.y = seatPosition.y;
-  agent.state = 'sitting';
+  agent.state = AGENT_STATE_SITTING;
   agent.stateTimer = 0;
   agent.animationFrame = 0;
   agent.animationTimer = 0;
@@ -688,7 +697,7 @@ export function assignAgentTarget(agent) {
     const seatPosition = getDeskSlotPosition(desk, 'seat');
     agent.targetX = seatPosition.x;
     agent.targetY = seatPosition.y;
-    agent.state = 'moving';
+    agent.state = AGENT_STATE_MOVING;
     agent.stateTimer = 0;
     agent.wanderTimer = 0;
     agent.targetRetryTimer = 0;
@@ -698,7 +707,7 @@ export function assignAgentTarget(agent) {
   const anyTasks = hasAnyDeskTasks();
   if (anyTasks) {
     agent.targetRetryTimer = TARGET_RETRY_DELAY;
-    agent.state = 'idle';
+    agent.state = AGENT_STATE_IDLE;
     return false;
   }
 
@@ -720,8 +729,8 @@ export function update() {
       console.log('[Agent Status]', agent.id, task ? task.id : null, task ? getTaskStatus(task) : null);
     }
     const taskStatus = getTaskStatus(task);
-    if (task && (taskStatus === 'done' || taskStatus === 'failed') && agent.state !== 'complete_react') {
-      beginCompletionReaction(agent, taskStatus === 'done' ? 'Done!' : 'Finished.');
+    if (task && (taskStatus === TASK_STATUS_DONE || taskStatus === TASK_STATUS_FAILED) && agent.state !== 'complete_react') {
+      beginCompletionReaction(agent, taskStatus === TASK_STATUS_DONE ? 'Done!' : 'Finished.');
       continue;
     }
 
@@ -740,8 +749,8 @@ export function update() {
       if (agent.completeReactTimer <= 0) {
         agent.currentTask = null;
         agent.currentTaskId = null;
-        agent.state = 'idle';
-        agent.visualState = 'idle';
+        agent.state = AGENT_STATE_IDLE;
+        agent.visualState = AGENT_STATE_IDLE;
         agent.stateTimer = 0;
         agent.awaitingTaskCompletion = false;
         agent.lastProgressPhase = null;
@@ -763,41 +772,41 @@ export function update() {
 
       const trackedStatus = getTaskStatus(trackedTask);
 
-      if (trackedStatus === 'done' || trackedStatus === 'failed') {
-        beginCompletionReaction(agent, trackedStatus === 'done' ? 'Done!' : 'Finished.');
+      if (trackedStatus === TASK_STATUS_DONE || trackedStatus === TASK_STATUS_FAILED) {
+        beginCompletionReaction(agent, trackedStatus === TASK_STATUS_DONE ? 'Done!' : 'Finished.');
         continue;
       }
 
-      if (trackedStatus !== 'awaiting_ack') {
-        trackedTask.runtimeStatus = 'awaiting_ack';
+      if (trackedStatus !== TASK_STATUS_AWAITING_ACK) {
+        trackedTask.runtimeStatus = TASK_STATUS_AWAITING_ACK;
       }
 
       if (typeof trackedTask.required === 'number' && trackedTask.required > 0) {
-        trackedTask.progress = Math.max(trackedTask.progress || 0, trackedTask.required * 0.95);
+        trackedTask.progress = Math.max(trackedTask.progress || 0, trackedTask.required * TASK_PROGRESS_ACK_THRESHOLD);
       }
 
-      if (getTaskStatus(trackedTask) === 'awaiting_ack' && canSpeak(agent)) {
+      if (getTaskStatus(trackedTask) === TASK_STATUS_AWAITING_ACK && canSpeak(agent)) {
         setAgentSpeech(agent, pickSpeechLine([
           'Sending it off...',
           'Almost done...',
           'Waiting for confirmation...'
-        ], 'Waiting for confirmation...'), 7000);
+        ], 'Waiting for confirmation...'), AGENT_SPEECH_DURATION_MS);
       }
 
       syncAgentTaskSpeech(agent, trackedTask);
       continue;
     }
 
-    if (agent.state === 'sitting') {
+    if (agent.state === AGENT_STATE_SITTING) {
       resetIdleBehavior(agent);
-      agent.visualState = 'working';
+      agent.visualState = AGENT_STATE_WORKING;
       const desk = agent.targetDesk;
       if (desk && desk.occupant === agent && !desk.currentTask) {
         claimNextTask(desk);
       }
 
       if (desk && desk.currentTask) {
-        agent.state = 'working';
+        agent.state = AGENT_STATE_WORKING;
         agent.stateTimer = 0;
       }
 
@@ -806,9 +815,9 @@ export function update() {
       continue;
     }
 
-    if (agent.state === 'working') {
+    if (agent.state === AGENT_STATE_WORKING) {
       resetIdleBehavior(agent);
-      agent.visualState = 'working';
+      agent.visualState = AGENT_STATE_WORKING;
       const desk = agent.targetDesk;
       if (!desk || desk.occupant !== agent) {
         scheduleTargetRetry(agent);
@@ -833,24 +842,24 @@ export function update() {
       const skill = agent.skills[activeTask.type] || 1;
       activeTask.progress += agent.productivity * skill;
       if (activeTask.progress >= activeTask.required) {
-        activeTask.runtimeStatus = 'awaiting_ack';
-        activeTask.progress = activeTask.required * 0.95;
+        activeTask.runtimeStatus = TASK_STATUS_AWAITING_ACK;
+        activeTask.progress = activeTask.required * TASK_PROGRESS_ACK_THRESHOLD;
         agent.awaitingTaskCompletion = true;
         handleTaskExecutionResult(desk, activeTask);
 
         const postExecutionStatus = getTaskStatus(activeTask);
 
-        if (postExecutionStatus === 'pending') {
+        if (postExecutionStatus === TASK_STATUS_PENDING) {
           agent.awaitingTaskCompletion = false;
           agent.currentTask = null;
           agent.currentTaskId = null;
           agent.lastProgressPhase = null;
           agent.lastTaskStatus = null;
-          agent.state = 'working';
+          agent.state = AGENT_STATE_WORKING;
           continue;
         }
 
-        if (postExecutionStatus === 'failed') {
+        if (postExecutionStatus === TASK_STATUS_FAILED) {
           beginCompletionReaction(agent, 'Finished.');
           continue;
         }
@@ -870,15 +879,15 @@ export function update() {
       continue;
     }
 
-    if (agent.state === 'idle') {
-      agent.visualState = 'idle';
+    if (agent.state === AGENT_STATE_IDLE) {
+      agent.visualState = AGENT_STATE_IDLE;
 
       if (!agent.currentTask && canSpeak(agent)) {
         setAgentSpeech(agent, pickSpeechLine([
           'Waiting for work...',
           'Nothing to do right now.',
           'Just relaxing.'
-        ], 'Waiting for work...'), 7000);
+        ], 'Waiting for work...'), AGENT_SPEECH_DURATION_MS);
       }
 
       updateCoffeeAnimation(agent);
@@ -925,7 +934,7 @@ export function update() {
       continue;
     }
 
-    if (agent.state === 'moving' && !agent.idleCycle.walking && (!agent.targetDesk || agent.targetDesk.occupant !== agent)) {
+    if (agent.state === AGENT_STATE_MOVING && !agent.idleCycle.walking && (!agent.targetDesk || agent.targetDesk.occupant !== agent)) {
       scheduleTargetRetry(agent);
       continue;
     }
@@ -944,14 +953,14 @@ export function update() {
       agent.x = agent.targetX;
       agent.y = agent.targetY;
 
-      if (agent.state === 'moving') {
+      if (agent.state === AGENT_STATE_MOVING) {
         if (agent.idleCycle.walking) {
           agent.idleCycle.walking = false;
           agent.idleCycle.returning = false;
           agent.idleCycle.walkTarget = null;
           agent.roamTarget = null;
           agent.idleCycle.pauseTimer = randomRoamPauseFrames();
-          agent.state = 'idle';
+          agent.state = AGENT_STATE_IDLE;
           agent.targetX = null;
           agent.targetY = null;
           agent.animationFrame = 0;

@@ -1,8 +1,13 @@
+import {
+  ACTION_SEND_CHANNEL_MESSAGE,
+  ACTION_REPLY_TO_MESSAGE,
+  TASK_TYPE_IMAGE_RENDER,
+  ACTION_RENDER_PRODUCT_IMAGE
+} from '../constants.js';
 import { normalizeDesignIntent, buildProviderPrompt } from '../../integrations/rendering/prompt-builder.js';
 import { runImageRenderWorker } from './imageRenderWorker.js';
-import { assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
 
-function ok(result) {
+import { assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
   return {
     success: true,
     result
@@ -60,7 +65,7 @@ async function executeDiscordTask(task, { getDiscordClient, taskTriggeredMessage
 
     const channel = await discordClient.channels.fetch(channelId);
 
-    if (task.action === 'send_channel_message') {
+    if (task.action === ACTION_SEND_CHANNEL_MESSAGE) {
       const sentMessage = await channel.send(String(content || ''));
       if (sentMessage && sentMessage.id && taskTriggeredMessageIds) {
         taskTriggeredMessageIds.add(sentMessage.id);
@@ -154,7 +159,7 @@ async function executeImageRenderTask(task) {
       ...taskContext,
       taskId: task.id,
       workflowId: payload.renderId || task.id,
-      source: task.type === 'discord' ? 'discord' : 'api',
+      source: task.type === TASK_TYPE_DISCORD ? 'discord' : 'api',
       retryCount: typeof task.retries === 'number' ? task.retries : 0,
       metadata: {
         ...(taskContext && typeof taskContext.metadata === 'object' ? taskContext.metadata : {}),
@@ -210,11 +215,11 @@ export function createTaskExecutionWorker({ getDiscordClient, taskTriggeredMessa
         const action = String(task.action || '').toLowerCase();
 
         if (
-          action === 'send_channel_message'
+          action === ACTION_SEND_CHANNEL_MESSAGE
           || action === 'discord.send_channel_message'
           || action === 'discord_message'
           || action === 'discord.message'
-          || action === 'reply_to_message'
+          || action === ACTION_REPLY_TO_MESSAGE
           || action === 'discord_reply'
           || action === 'discord.reply'
           || action === 'summarize_message'
@@ -225,7 +230,7 @@ export function createTaskExecutionWorker({ getDiscordClient, taskTriggeredMessa
           return executeDiscordTask(task, { getDiscordClient, taskTriggeredMessageIds });
         }
 
-        if (task.type === 'image_render' || action === 'render_product_image' || action === 'render.route') {
+        if (task.type === TASK_TYPE_IMAGE_RENDER || action === ACTION_RENDER_PRODUCT_IMAGE || action === 'render.route') {
           return executeImageRenderTask(task);
         }
 
@@ -233,11 +238,11 @@ export function createTaskExecutionWorker({ getDiscordClient, taskTriggeredMessa
           return executeResearchTask(task);
         }
 
-        if (task.type === 'shopify') {
+        if (task.type === TASK_TYPE_SHOPIFY) {
           return executeShopifyTask(task);
         }
 
-        if (task.type === 'discord') {
+        if (task.type === TASK_TYPE_DISCORD) {
           return executeDiscordTask(task, { getDiscordClient, taskTriggeredMessageIds });
         }
 

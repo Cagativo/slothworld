@@ -1,5 +1,25 @@
 import { generateId, randomInRange, cloneContext } from './utils.js';
-import { ACTION_TOOL_MAP, TASK_EXECUTION_FAILURE_CHANCE, BRIDGE_POLL_INTERVAL_MS } from './constants.js';
+import {
+  ACTION_TOOL_MAP,
+  TASK_EXECUTION_FAILURE_CHANCE,
+  BRIDGE_POLL_INTERVAL_MS,
+  TASK_TYPE_DISCORD,
+  TASK_TYPE_SHOPIFY,
+  TASK_TYPE_IMAGE_RENDER,
+  ACTION_REPLY_TO_MESSAGE,
+  ACTION_PROCESS_ORDER,
+  ACTION_START_PRODUCT_WORKFLOW,
+  TASK_STATUS_PENDING,
+  TASK_STATUS_DONE,
+  TASK_STATUS_FAILED,
+  TASK_STATUS_AWAITING_ACK,
+  EVENT_TASK_COMPLETED,
+  TASK_PROGRESS_ACK_THRESHOLD,
+  TASK_REQUIRED_DISCORD_MIN,
+  TASK_REQUIRED_DISCORD_MAX,
+  TASK_REQUIRED_SHOPIFY_MIN,
+  TASK_REQUIRED_SHOPIFY_MAX
+} from './constants.js';
 import { desks, emitEvent } from './app-state.js';
 import { appendRawEvents } from './world/eventStore.js';
 import { getCanonicalPipelineLabel, warnLegacyExecutionPath } from './execution-pipeline.js';
@@ -55,13 +75,13 @@ export function createDiscordTask(event) {
 
   const createdTask = {
     id: generateId(),
-    type: 'discord',
+    type: TASK_TYPE_DISCORD,
     title: event.title || 'Discord Event',
     priority: inferPriorityFromDiscord(event),
     progress: 0,
-    required: randomInRange(80, 200),
-    status: 'pending',
-    action: 'reply_to_message',
+    required: randomInRange(TASK_REQUIRED_DISCORD_MIN, TASK_REQUIRED_DISCORD_MAX),
+    status: TASK_STATUS_PENDING,
+    action: ACTION_REPLY_TO_MESSAGE,
     payload: {
       channelId,
       messageId,
@@ -77,13 +97,13 @@ export function createDiscordTask(event) {
 export function createShopifyTask(event) {
   return {
     id: generateId(),
-    type: 'shopify',
+    type: TASK_TYPE_SHOPIFY,
     title: event.title || 'Shopify Event',
     priority: inferPriorityFromShopify(event),
     progress: 0,
-    required: randomInRange(120, 260),
-    status: 'pending',
-    action: 'process_order',
+    required: randomInRange(TASK_REQUIRED_SHOPIFY_MIN, TASK_REQUIRED_SHOPIFY_MAX),
+    status: TASK_STATUS_PENDING,
+    action: ACTION_PROCESS_ORDER,
     payload: {
       orderId: event.orderId || `order-${generateId()}`
     },
@@ -102,9 +122,9 @@ async function registerTaskInBridge(task) {
   const normalizedPayload = task && task.payload && typeof task.payload === 'object' ? task.payload : {};
   const bridgeTask = {
     id: task.id,
-    type: task.type || 'discord',
+    type: task.type || TASK_TYPE_DISCORD,
     title: task.title || 'Injected task',
-    status: 'pending',
+    status: TASK_STATUS_PENDING,
     correlationId: typeof task.correlationId === 'string' ? task.correlationId : undefined,
     depth: typeof task.depth === 'number' ? task.depth : undefined,
     internal: task.internal === true,
@@ -200,8 +220,8 @@ export const tools = {
 
       const task = {
         id: (payload && payload.taskId) || generateId(),
-        type: 'discord',
-        action: 'reply_to_message',
+        type: TASK_TYPE_DISCORD,
+        action: ACTION_REPLY_TO_MESSAGE,
         payload: {
           channelId: payload && payload.channelId ? payload.channelId : null,
           messageId: payload && payload.messageId ? payload.messageId : null,
@@ -258,7 +278,7 @@ export const tools = {
       const task = {
         id: payload && payload.taskId ? payload.taskId : generateId(),
         renderId: payload && payload.renderId ? payload.renderId : null,
-        type: 'image_render',
+        type: TASK_TYPE_IMAGE_RENDER,
         productId: payload && payload.productId ? payload.productId : (context && context.keyword ? `product-${context.keyword}` : null),
         designIntent: payload && payload.designIntent ? payload.designIntent : {},
         provider: payload && payload.provider ? payload.provider : 'openai',
@@ -267,7 +287,7 @@ export const tools = {
           renderId: payload && payload.renderId ? payload.renderId : undefined,
           context
         },
-        status: 'pending',
+        status: TASK_STATUS_PENDING,
         priority: typeof payload.priority === 'number' ? payload.priority : 1
       };
 
@@ -354,15 +374,15 @@ export function inferToolNameForTask(task) {
     return ACTION_TOOL_MAP[task.action];
   }
 
-  if (task && task.type === 'discord') {
+  if (task && task.type === TASK_TYPE_DISCORD) {
     return 'discord.reply';
   }
 
-  if (task && task.type === 'shopify') {
+  if (task && task.type === TASK_TYPE_SHOPIFY) {
     return 'shopify.process_order';
   }
 
-  if (task && task.type === 'image_render') {
+  if (task && task.type === TASK_TYPE_IMAGE_RENDER) {
     return 'render.route';
   }
 
@@ -466,13 +486,13 @@ export function normalizeTask(task) {
 
   const normalizedTask = {
     id: task.id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    type: task.type ?? 'discord',
+    type: task.type ?? TASK_TYPE_DISCORD,
     tool: task.tool ?? null,
     title: task.title ?? 'Untitled task',
     progress: task.progress ?? 0,
     required: task.required ?? 100,
     priority: normalizePriority(task.priority, task),
-    status: task.status ?? 'pending',
+    status: task.status ?? TASK_STATUS_PENDING,
     action: task.action ?? null,
     payload,
     retries: task.retries ?? 0,
@@ -482,7 +502,7 @@ export function normalizeTask(task) {
     workflowContextInput: task.workflowContextInput ? cloneContext(task.workflowContextInput) : null
   };
 
-  if (normalizedTask.type === 'discord') {
+  if (normalizedTask.type === TASK_TYPE_DISCORD) {
     normalizedTask.payload = {
       channelId: normalizedTask.payload && normalizedTask.payload.channelId ? normalizedTask.payload.channelId : null,
       content: normalizedTask.payload && typeof normalizedTask.payload.content === 'string' ? normalizedTask.payload.content : '',
@@ -498,7 +518,7 @@ export function normalizeTask(task) {
     }
   }
 
-  if (normalizedTask.type === 'image_render') {
+  if (normalizedTask.type === TASK_TYPE_IMAGE_RENDER) {
     normalizedTask.renderId = task.renderId ?? payload.renderId ?? normalizedTask.id;
     normalizedTask.productId = task.productId ?? payload.productId ?? normalizedTask.id;
     normalizedTask.provider = task.provider ?? payload.provider ?? 'openai';
@@ -562,7 +582,7 @@ export async function sendTaskAck(taskOrId, statusOrAck, retries, executionResul
     };
   }
 
-  if (!taskId || !ack || (ack.status !== 'done' && ack.status !== 'failed')) {
+  if (!taskId || !ack || (ack.status !== TASK_STATUS_DONE && ack.status !== TASK_STATUS_FAILED)) {
     return;
   }
 
@@ -672,7 +692,7 @@ export function syncTaskStart(task, attempt = 0) {
 
   (async () => {
     try {
-      if (task.type === 'image_render' || (typeof task.id === 'string' && task.id.startsWith('manual-'))) {
+      if (task.type === TASK_TYPE_IMAGE_RENDER || (typeof task.id === 'string' && task.id.startsWith('manual-'))) {
         await registerTaskInBridge(task);
       }
 
@@ -751,7 +771,7 @@ export function handleTaskExecutionResult(desk, task) {
         success: !(executionResult && executionResult.success === false)
       });
 
-      emitEvent('TASK_COMPLETED', {
+      emitEvent(EVENT_TASK_COMPLETED, {
         taskId: task.id,
         taskType: task.type,
         deskIndex: desks.indexOf(desk),
@@ -761,12 +781,12 @@ export function handleTaskExecutionResult(desk, task) {
         content: task.payload && typeof task.payload.content === 'string' ? task.payload.content : null
       });
       applyWorkflowTaskCompletion(task, executionResult);
-      const ackStatus = executionResult && executionResult.success === false ? 'failed' : 'done';
+      const ackStatus = executionResult && executionResult.success === false ? TASK_STATUS_FAILED : TASK_STATUS_DONE;
       task.localLifecycleStatus = ackStatus;
       await completeTaskThroughAck(task, ackStatus, executionResult || { success: false, error: 'Missing execution result' });
       desk.completedTasks += 1;
     } catch (error) {
-      emitEvent('TASK_COMPLETED', {
+      emitEvent(EVENT_TASK_COMPLETED, {
         taskId: task.id,
         taskType: task.type,
         deskIndex: desks.indexOf(desk),
@@ -778,7 +798,7 @@ export function handleTaskExecutionResult(desk, task) {
 
       // If execution never completed, ACK is blocked by guard and we keep lifecycle non-authoritative in UI.
       if (task && task._executionComplete !== true) {
-        task.localLifecycleStatus = 'awaiting_ack';
+        task.localLifecycleStatus = TASK_STATUS_AWAITING_ACK;
         console.error('[TASK]', 'execution_incomplete_ack_blocked', {
           taskId: task.id,
           error: error && error.message ? error.message : 'Execution failed'
@@ -788,8 +808,8 @@ export function handleTaskExecutionResult(desk, task) {
 
       const failureResult = { success: false, error: error && error.message ? error.message : 'Execution failed' };
       applyWorkflowTaskCompletion(task, failureResult);
-      task.localLifecycleStatus = 'failed';
-      await completeTaskThroughAck(task, 'failed', failureResult);
+      task.localLifecycleStatus = TASK_STATUS_FAILED;
+      await completeTaskThroughAck(task, TASK_STATUS_FAILED, failureResult);
       desk.completedTasks += 1;
     } finally {
       task._executionInFlight = false;
@@ -801,7 +821,7 @@ export function handleTaskExecutionResult(desk, task) {
 
 export function addTaskToDesk(task) {
   const normalizedTask = normalizeTask(task);
-  if (normalizedTask.type === 'image_render' && !normalizedTask.content) {
+  if (normalizedTask.type === TASK_TYPE_IMAGE_RENDER && !normalizedTask.content) {
     throw new Error('missing_prompt');
   }
 
@@ -816,7 +836,7 @@ export function addTaskToDesk(task) {
 
   const queuedTask = {
     ...normalizedTask,
-    status: 'pending',
+    status: TASK_STATUS_PENDING,
     payload: normalizedTask && typeof normalizedTask.payload === 'object' && normalizedTask.payload !== null
       ? { ...normalizedTask.payload }
       : {}
@@ -842,7 +862,7 @@ export function addTaskToDesk(task) {
     priority: queuedTask.priority,
     workflowId: queuedTask.workflowId || null
   });
-  if (queuedTask.type === 'image_render') {
+  if (queuedTask.type === TASK_TYPE_IMAGE_RENDER) {
     emitEvent('RENDER_TASK_CREATED', {
       taskId: queuedTask.id,
       productId: queuedTask.productId || (queuedTask.payload && queuedTask.payload.productId) || queuedTask.id,
@@ -859,7 +879,7 @@ export function ingestTask(task) {
     return;
   }
 
-  if (task.type === 'discord' && task.action === 'start_product_workflow') {
+  if (task.type === TASK_TYPE_DISCORD && task.action === ACTION_START_PRODUCT_WORKFLOW) {
     createProductWorkflowFromTask(task);
     return;
   }
