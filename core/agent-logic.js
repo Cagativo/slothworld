@@ -21,6 +21,63 @@ import {
 import { canvas, agents, desks, agentStateTracker, emitEvent, eventStream, isDeskAvailableForAgent, getDeskSlotPosition } from './app-state.js';
 import { syncTaskStart, handleTaskExecutionResult } from './task-handling.js';
 
+/**
+ * @typedef {Object} IdleCycle
+ * @description Idle behaviour control block initialised and maintained by `ensureIdleStateFields`.
+ * @property {number} timer - Countdown frames remaining before the next idle action triggers.
+ * @property {boolean} walking - True while the agent is on a roam walk.
+ * @property {{x: number, y: number}|null} walkTarget - Destination of the current roam walk, or null.
+ * @property {boolean} returning - True while the agent is walking back toward the idle anchor.
+ * @property {number} pauseTimer - Pause frames remaining before starting the next idle action.
+ */
+
+/**
+ * @typedef {Object} CoffeeAnim
+ * @description Coffee-sipping animation state block.
+ * @property {number} frame - Current animation frame index (0–2).
+ * @property {number} timer - Simulation tick counter controlling frame advancement.
+ * @property {number} speed - Seconds per animation frame step.
+ * @property {'idle'|'sipping'|'returning'} phase - Current animation phase.
+ */
+
+/**
+ * @typedef {Object} Agent
+ * @description Runtime agent object; the central entity driven by the simulation {@link update} loop.
+ * @property {number} id - Unique agent index assigned at initialisation.
+ * @property {number} x - Current canvas X position (centre of sprite).
+ * @property {number} y - Current canvas Y position (centre of sprite).
+ * @property {number|null} targetX - Destination X, or null when stationary.
+ * @property {number|null} targetY - Destination Y, or null when stationary.
+ * @property {import('./task-handling.js').Desk|null} targetDesk - Desk the agent is assigned to, or null.
+ * @property {Object|null} targetSlot - Desk slot object the agent is moving toward, or null.
+ * @property {string} role - Agent role: `'researcher'`, `'executor'`, or `'other'`.
+ * @property {'up'|'down'|'left'|'right'} direction - Facing direction used for sprite selection.
+ * @property {number} animationFrame - Current sprite animation frame index.
+ * @property {number} animationTimer - Tick counter controlling animation frame advancement.
+ * @property {number} stateTimer - Ticks spent in the current state.
+ * @property {number} wanderTimer - Countdown before picking a new wander target.
+ * @property {number} targetRetryTimer - Countdown before retrying desk assignment.
+ * @property {number} productivity - Work increment added per tick (range 0.6–1.3).
+ * @property {{ discord: number, shopify: number }} skills - Per-task-type productivity multipliers.
+ * @property {string} state - Simulation state-machine state (AGENT_STATE_* or `'waiting'` / `'complete_react'`).
+ * @property {string} visualState - Rendering state (may differ from `state` during transitions).
+ * @property {number} speed - Movement pixels per simulation tick.
+ * @property {number} idleTime - Ticks accumulated in the idle state.
+ * @property {{x: number, y: number}|null} idleAnchor - Return anchor for roam walks, or null.
+ * @property {{x: number, y: number}|null} roamTarget - Current roam destination, or null.
+ * @property {IdleCycle} idleCycle - Idle behaviour control block.
+ * @property {{ text: string, duration: number, timer: number }|null} speech - Active speech bubble, or null.
+ * @property {string|null} lastSpeechText - Text of the most recent speech bubble, or null.
+ * @property {string|null} lastProgressPhase - Last emitted progress phase (`'starting'`, `'working'`, or `'finishing'`), or null.
+ * @property {string|null} lastTaskStatus - Last observed task status string, or null.
+ * @property {number} lastSpeechTime - Unix timestamp (ms) of the last speech emission.
+ * @property {CoffeeAnim} coffeeAnim - Coffee-sipping animation state.
+ * @property {number} completeReactTimer - Remaining milliseconds for the task-completion reaction animation.
+ * @property {boolean} awaitingTaskCompletion - True while the agent is waiting for an ACK after execution.
+ * @property {import('./task-handling.js').Task|null} currentTask - Task currently being worked on, or null.
+ * @property {string|null} currentTaskId - ID of the current task, or null.
+ */
+
 const FRAME_RATE = 60;
 const FRAME_TIME_MS = 1000 / FRAME_RATE;
 const COMPLETE_REACT_DURATION_MS = 1200;
@@ -547,10 +604,20 @@ function startIdleRoam(agent) {
   return true;
 }
 
+/**
+ * @description Returns true if any desk currently has a queued or active task.
+ * @returns {boolean} True when at least one desk has work available; false when all desks are idle.
+ */
 export function hasAnyDeskTasks() {
   return desks.some((desk) => desk.currentTask || desk.queue.length > 0);
 }
 
+/**
+ * @description Releases a desk's occupancy if the given agent is the current occupant.
+ * @param {import('./task-handling.js').Desk} desk - The desk to release.
+ * @param {Agent} agent - The agent relinquishing the desk.
+ * @returns {void}
+ */
 export function releaseDesk(desk, agent) {
   if (desk.occupant === agent) {
     desk.occupied = false;
@@ -558,6 +625,12 @@ export function releaseDesk(desk, agent) {
   }
 }
 
+/**
+ * @description Clears an agent's movement target and optionally releases desk occupancy, updating the idle anchor to the desk's seat position.
+ * @param {Agent} agent - The agent whose target should be cleared.
+ * @param {{ releaseDesk?: boolean }} [options={}] - Options object; set `releaseDesk: false` to keep desk occupancy.
+ * @returns {void}
+ */
 export function clearAgentTarget(agent, { releaseDesk: shouldReleaseDesk = true } = {}) {
   if (agent.targetDesk) {
     const seatPosition = getDeskSlotPosition(agent.targetDesk, 'seat');
@@ -577,6 +650,11 @@ export function clearAgentTarget(agent, { releaseDesk: shouldReleaseDesk = true 
   agent.targetY = null;
 }
 
+/**
+ * @description Clears an agent's target, resets movement timers, and schedules a retry after TARGET_RETRY_DELAY frames.
+ * @param {Agent} agent - The agent for which a target retry should be scheduled.
+ * @returns {void}
+ */
 export function scheduleTargetRetry(agent) {
   clearAgentTarget(agent);
   agent.targetRetryTimer = TARGET_RETRY_DELAY;
@@ -587,6 +665,11 @@ export function scheduleTargetRetry(agent) {
   agent.state = AGENT_STATE_IDLE;
 }
 
+/**
+ * @description Assigns a random canvas position as the agent's wander target, clearing any desk assignment.
+ * @param {Agent} agent - The agent to assign a wander target to.
+ * @returns {void}
+ */
 export function setRandomWanderTarget(agent) {
   agent.targetDesk = null;
   agent.targetSlot = null;
@@ -595,6 +678,12 @@ export function setRandomWanderTarget(agent) {
   agent.wanderTimer = WANDER_TARGET_INTERVAL;
 }
 
+/**
+ * @description Pops the highest-priority task from a desk's queue, sets it as the current task, and emits TASK_STARTED.
+ * Does nothing if the desk is paused, already has a current task, or has an empty queue.
+ * @param {import('./task-handling.js').Desk} desk - The desk from which to claim the next task.
+ * @returns {import('./task-handling.js').Task|null} The newly claimed task, or the existing current task (or null if the queue is empty).
+ */
 export function claimNextTask(desk) {
   if (desk.paused) {
     return desk.currentTask;
@@ -633,6 +722,10 @@ export function claimNextTask(desk) {
   return nextTask;
 }
 
+/**
+ * @description Iterates all agents and emits AGENT_STATE_CHANGED for any agent whose state has changed since the last tick.
+ * @returns {void}
+ */
 export function observeAgentStateChanges() {
   for (const agent of agents) {
     const previousState = agentStateTracker.get(agent.id);
@@ -647,6 +740,12 @@ export function observeAgentStateChanges() {
   }
 }
 
+/**
+ * @description Finds the nearest desk that is available for the given agent, optionally filtering to desks that have tasks.
+ * @param {Agent} agent - The agent looking for a desk.
+ * @param {{ requireTasks?: boolean }} [options={}] - Options; set `requireTasks: true` to skip desks with no queued work.
+ * @returns {import('./task-handling.js').Desk|null} The closest available desk, or null if none is found.
+ */
 export function findNearestAvailableDesk(agent, { requireTasks = false } = {}) {
   let nearest = null;
   let bestDistance = Number.POSITIVE_INFINITY;
@@ -674,6 +773,11 @@ export function findNearestAvailableDesk(agent, { requireTasks = false } = {}) {
   return nearest;
 }
 
+/**
+ * @description Attempts to snap an agent into the seated position at their target desk, transitioning state to SITTING on success.
+ * @param {Agent} agent - The agent attempting to sit down.
+ * @returns {boolean} True if the agent successfully sat down; false if they are not close enough or the desk is not theirs.
+ */
 export function trySit(agent) {
   const desk = agent.targetDesk;
   if (!desk || desk.occupant !== agent) {
@@ -696,6 +800,12 @@ export function trySit(agent) {
   return true;
 }
 
+/**
+ * @description Assigns the nearest available desk with tasks to an agent, starting the MOVING state toward the desk's seat.
+ * Falls back to scheduling a retry if no suitable desk is found.
+ * @param {Agent} agent - The agent to assign a desk target to.
+ * @returns {boolean} True if a desk was successfully assigned; false if the agent must wait and retry.
+ */
 export function assignAgentTarget(agent) {
   const desk = findNearestAvailableDesk(agent, { requireTasks: true });
   if (desk) {
@@ -726,6 +836,11 @@ export function assignAgentTarget(agent) {
 }
 
 // --- Simulation update tick ---
+/**
+ * @description Advances all agents by one simulation tick, processing state transitions, movement, task claiming, and speech.
+ * This is the main per-frame update loop called by the rendering engine.
+ * @returns {void}
+ */
 export function update() {
   syncCompletionStatuses();
 
