@@ -24,6 +24,25 @@ import { createTaskExecutionWorker } from './core/workers/taskExecutionWorker.js
 import { createDiscordNotificationWorker } from './core/workers/discordNotificationWorker.js';
 import { createTaskEngine } from './core/engine/taskEngine.js';
 import { getCanonicalPipelineLabel, warnLegacyExecutionPath } from './core/execution-pipeline.js';
+import {
+  TASK_TYPE_DISCORD,
+  TASK_TYPE_SHOPIFY,
+  TASK_TYPE_IMAGE_RENDER,
+  ACTION_REPLY_TO_MESSAGE,
+  ACTION_PROCESS_ORDER,
+  ACTION_START_PRODUCT_WORKFLOW,
+  ACTION_SEND_CHANNEL_MESSAGE,
+  ACTION_RENDER_PRODUCT_IMAGE,
+  TASK_STATUS_PENDING,
+  TASK_STATUS_DONE,
+  TASK_STATUS_FAILED,
+  TASK_STATUS_AWAITING_ACK,
+  TASK_STATUS_PROCESSING,
+  TASK_REQUIRED_DISCORD_MIN,
+  TASK_REQUIRED_DISCORD_MAX,
+  TASK_REQUIRED_SHOPIFY_MIN,
+  TASK_REQUIRED_SHOPIFY_MAX
+} from './core/constants.js';
 
 dotenv.config();
 
@@ -216,11 +235,11 @@ function inferPriority(task) {
     return 0;
   }
 
-  if (task.type === 'discord' && (title.includes('mention') || title.includes('command'))) {
+  if (task.type === TASK_TYPE_DISCORD && (title.includes('mention') || title.includes('command'))) {
     return 2;
   }
 
-  if (task.type === 'shopify' && title.includes('order')) {
+  if (task.type === TASK_TYPE_SHOPIFY && title.includes('order')) {
     return 2;
   }
 
@@ -328,22 +347,22 @@ function mapTaskResultToExecution(taskResult) {
 
 function mapEngineStatusToPublic(engineStatus) {
   if (engineStatus === 'acknowledged') {
-    return 'done';
+    return TASK_STATUS_DONE;
   }
 
   if (engineStatus === 'failed') {
-    return 'failed';
+    return TASK_STATUS_FAILED;
   }
 
   if (engineStatus === 'executing' || engineStatus === 'claimed') {
-    return 'processing';
+    return TASK_STATUS_PROCESSING;
   }
 
-  if (engineStatus === 'awaiting_ack') {
-    return 'processing';
+  if (engineStatus === TASK_STATUS_AWAITING_ACK) {
+    return TASK_STATUS_PROCESSING;
   }
 
-  return 'pending';
+  return TASK_STATUS_PENDING;
 }
 
 function projectTaskForRead(task) {
@@ -363,11 +382,11 @@ function projectTaskForRead(task) {
 
 function mapCommandToAction(command) {
   if (command === 'reply') {
-    return 'reply_to_message';
+    return ACTION_REPLY_TO_MESSAGE;
   }
 
   if (command === 'product') {
-    return 'start_product_workflow';
+    return ACTION_START_PRODUCT_WORKFLOW;
   }
 
   if (command === 'order') {
@@ -378,7 +397,7 @@ function mapCommandToAction(command) {
     return 'refund_order';
   }
 
-  return 'reply_to_message';
+  return ACTION_REPLY_TO_MESSAGE;
 }
 
 function isDiscordSnowflake(value) {
@@ -455,7 +474,7 @@ const INTENT_REGISTRY = Object.freeze({
   discord_message: Object.freeze({
     mode: 'soft',
     requiredFields: Object.freeze(['payload.channelId']),
-    mapAction: () => 'send_channel_message',
+    mapAction: () => ACTION_SEND_CHANNEL_MESSAGE,
     validate: ({ payload }) => {
       if (!isDiscordSnowflake(payload.channelId)) {
         return 'payload.channelId must be a Discord snowflake';
@@ -478,7 +497,7 @@ const INTENT_REGISTRY = Object.freeze({
   discord_reply: Object.freeze({
     mode: 'strict',
     requiredFields: Object.freeze(['payload.channelId', 'payload.messageId']),
-    mapAction: () => 'reply_to_message',
+    mapAction: () => ACTION_REPLY_TO_MESSAGE,
     validate: ({ payload }) => {
       if (!isDiscordSnowflake(payload.channelId)) {
         return 'payload.channelId must be a Discord snowflake';
@@ -495,14 +514,14 @@ const INTENT_REGISTRY = Object.freeze({
   shopify_process_order: Object.freeze({
     mode: 'soft',
     requiredFields: Object.freeze([]),
-    mapAction: () => 'process_order',
+    mapAction: () => ACTION_PROCESS_ORDER,
     validate: () => null,
     fallback: null
   }),
   render_product_image: Object.freeze({
     mode: 'experimental',
     requiredFields: Object.freeze(['payload.prompt|designIntent.prompt']),
-    mapAction: () => 'render_product_image',
+    mapAction: () => ACTION_RENDER_PRODUCT_IMAGE,
     validate: ({ input, payload }) => {
       const bodyDesignIntent = input.designIntent && typeof input.designIntent === 'object' ? input.designIntent : {};
       const payloadDesignIntent = payload.designIntent && typeof payload.designIntent === 'object' ? payload.designIntent : {};
@@ -626,20 +645,20 @@ function evaluateIntentContractAtIngestion(intentContract, input, payload) {
 }
 
 function defaultActionForType(type, payload) {
-  if (type === 'discord') {
+  if (type === TASK_TYPE_DISCORD) {
     if (typeof payload.messageId === 'string' && payload.messageId.trim()) {
-      return 'reply_to_message';
+      return ACTION_REPLY_TO_MESSAGE;
     }
 
-    return 'send_channel_message';
+    return ACTION_SEND_CHANNEL_MESSAGE;
   }
 
-  if (type === 'shopify') {
-    return 'process_order';
+  if (type === TASK_TYPE_SHOPIFY) {
+    return ACTION_PROCESS_ORDER;
   }
 
-  if (type === 'image_render') {
-    return 'render_product_image';
+  if (type === TASK_TYPE_IMAGE_RENDER) {
+    return ACTION_RENDER_PRODUCT_IMAGE;
   }
 
   return null;
@@ -699,7 +718,9 @@ function resolveImageRenderFields(input, payload) {
  */
 function normalizeTask(input) {
   const now = Date.now();
-  const requiredRange = input.type === 'shopify' ? [120, 260] : [80, 200];
+  const requiredRange = input.type === TASK_TYPE_SHOPIFY
+    ? [TASK_REQUIRED_SHOPIFY_MIN, TASK_REQUIRED_SHOPIFY_MAX]
+    : [TASK_REQUIRED_DISCORD_MIN, TASK_REQUIRED_DISCORD_MAX];
   const payload = typeof input.payload === 'object' && input.payload !== null ? input.payload : {};
   const correlationId = typeof input.correlationId === 'string' && input.correlationId.trim()
     ? input.correlationId.trim()
@@ -710,14 +731,14 @@ function normalizeTask(input) {
   const intentContract = getIntentContract(input.intent);
   const resolvedAction = resolveActionFromInput(input, payload, intentContract);
   const payloadWithIntentFallback = applyIntentFallback(intentContract, input, payload);
-  const imageRenderFields = input.type === 'image_render'
+  const imageRenderFields = input.type === TASK_TYPE_IMAGE_RENDER
     ? resolveImageRenderFields(input, payloadWithIntentFallback)
     : null;
   const normalizedPayload = {
     ...payloadWithIntentFallback
   };
 
-  if (input.type === 'discord' && (resolvedAction === 'send_channel_message' || resolvedAction === 'reply_to_message')) {
+  if (input.type === TASK_TYPE_DISCORD && (resolvedAction === ACTION_SEND_CHANNEL_MESSAGE || resolvedAction === ACTION_REPLY_TO_MESSAGE)) {
     if (typeof normalizedPayload.content !== 'string' || !normalizedPayload.content.trim()) {
       normalizedPayload.content = input.title || 'Untitled task';
     }
@@ -769,11 +790,11 @@ function createDiscordTaskFromMessage(message) {
 
   return {
     id: `discord-message-${message.id}`,
-    type: 'discord',
+    type: TASK_TYPE_DISCORD,
     title: isCommand ? `Discord Command: ${content.slice(0, 40)}` : `Discord Mention: ${content.slice(0, 40)}`,
     priority: 2,
     progress: 0,
-    required: randomInRange(80, 200),
+    required: randomInRange(TASK_REQUIRED_DISCORD_MIN, TASK_REQUIRED_DISCORD_MAX),
     action,
     payload: {
       channelId: message.channelId,
@@ -796,7 +817,7 @@ function validateTaskInput(body) {
     return 'Body must be a JSON object';
   }
 
-  if (body.type !== 'discord' && body.type !== 'shopify' && body.type !== 'image_render') {
+  if (body.type !== TASK_TYPE_DISCORD && body.type !== TASK_TYPE_SHOPIFY && body.type !== TASK_TYPE_IMAGE_RENDER) {
     return "type must be 'discord', 'shopify', or 'image_render'";
   }
 
@@ -848,7 +869,7 @@ function validateTaskInput(body) {
 
   const resolvedAction = resolveActionFromInput(body, intentEvaluation.payload, intentContract);
   const messageId = payload && typeof payload.messageId === 'string' ? payload.messageId : null;
-  if (!intentContract && resolvedAction === 'reply_to_message' && !(typeof messageId === 'string' && /^\d{17,20}$/.test(messageId))) {
+  if (!intentContract && resolvedAction === ACTION_REPLY_TO_MESSAGE && !(typeof messageId === 'string' && /^\d{17,20}$/.test(messageId))) {
     return 'reply_to_message requires payload.messageId as a Discord snowflake';
   }
 
@@ -1133,7 +1154,7 @@ async function autoExecuteAndAck(taskId) {
     saveStore();
 
     const engineTaskBeforeAck = taskEngine.getTask(taskId);
-    if (engineTaskBeforeAck && engineTaskBeforeAck.status === 'awaiting_ack' && engineTaskBeforeAck.executionRecord) {
+    if (engineTaskBeforeAck && engineTaskBeforeAck.status === TASK_STATUS_AWAITING_ACK && engineTaskBeforeAck.executionRecord) {
       console.log('[AUTO_EXECUTE_ACK_BEFORE_ACK]', {
         taskId,
         type: existing.type,
@@ -1149,9 +1170,9 @@ async function autoExecuteAndAck(taskId) {
         ? mapTaskResultToExecution(engineTask.executionRecord.result)
         : execution;
       const now = Date.now();
-      const completedAt = resolvedStatus === 'done' ? now : existing.completedAt;
-      const failedAt = resolvedStatus === 'failed' ? now : existing.failedAt;
-      const finishedAt = resolvedStatus === 'done' ? completedAt : failedAt;
+      const completedAt = resolvedStatus === TASK_STATUS_DONE ? now : existing.completedAt;
+      const failedAt = resolvedStatus === TASK_STATUS_FAILED ? now : existing.failedAt;
+      const finishedAt = resolvedStatus === TASK_STATUS_DONE ? completedAt : failedAt;
       existing.executionResult = engineExecutionResult;
       existing.startedAt = existing.startedAt || now;
       existing.completedAt = completedAt;
@@ -1452,7 +1473,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      if (engineTask.status === 'executing' || engineTask.status === 'acknowledged' || engineTask.status === 'failed') {
+      if (engineTask.status === 'executing' || engineTask.status === 'acknowledged' || engineTask.status === TASK_STATUS_FAILED) {
         writeJson(res, 200, { ok: true, ignored: true, task: projectTaskForRead(existing) });
         return;
       }
@@ -1460,7 +1481,7 @@ const server = http.createServer(async (req, res) => {
       existing.startedAt = existing.startedAt || Date.now();
 
       saveStore();
-      logTaskStatus(taskId, 'processing');
+      logTaskStatus(taskId, TASK_STATUS_PROCESSING);
       writeJson(res, 200, { ok: true, task: projectTaskForRead(existing) });
     } catch (error) {
       writeJson(res, 400, { error: error.message || 'Request failed' });
@@ -1494,7 +1515,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const engineTaskBeforeAck = taskEngine.getTask(taskId);
-      if (!engineTaskBeforeAck || engineTaskBeforeAck.status !== 'awaiting_ack' || !engineTaskBeforeAck.executionRecord) {
+      if (!engineTaskBeforeAck || engineTaskBeforeAck.status !== TASK_STATUS_AWAITING_ACK || !engineTaskBeforeAck.executionRecord) {
         console.error('[ACK_WITHOUT_EXECUTION]', {
           taskId,
           phase: 'pre_ack_validation',
@@ -1512,7 +1533,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const engineTask = taskEngine.getTask(taskId);
-      if (!engineTask || !engineTask.executionRecord || (engineTask.status !== 'acknowledged' && engineTask.status !== 'failed')) {
+      if (!engineTask || !engineTask.executionRecord || (engineTask.status !== 'acknowledged' && engineTask.status !== TASK_STATUS_FAILED)) {
         console.error('[ACK_WITHOUT_EXECUTION]', {
           taskId,
           phase: 'post_ack_validation',
@@ -1527,9 +1548,9 @@ const server = http.createServer(async (req, res) => {
       const engineExecutionResult = mapTaskResultToExecution(engineTask.executionRecord.result);
 
       const now = Date.now();
-      const completedAt = resolvedStatus === 'done' ? now : existing.completedAt;
-      const failedAt = resolvedStatus === 'failed' ? now : existing.failedAt;
-      const finishedAt = resolvedStatus === 'done' ? completedAt : failedAt;
+      const completedAt = resolvedStatus === TASK_STATUS_DONE ? now : existing.completedAt;
+      const failedAt = resolvedStatus === TASK_STATUS_FAILED ? now : existing.failedAt;
+      const finishedAt = resolvedStatus === TASK_STATUS_DONE ? completedAt : failedAt;
       const durationMs = existing.startedAt && finishedAt ? Math.max(0, finishedAt - existing.startedAt) : existing.durationMs;
       const task = existing;
       task.executionResult = engineExecutionResult;

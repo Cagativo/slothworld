@@ -7,6 +7,50 @@ export const TASK_EXECUTION_FAILURE_CHANCE = 0.05;
 export const BRIDGE_POLL_INTERVAL_MS = 1500;
 export const DEFAULT_WORKFLOW_STEP_MAX_RETRIES = 2;
 
+// Task types
+export const TASK_TYPE_DISCORD = 'discord';
+export const TASK_TYPE_SHOPIFY = 'shopify';
+export const TASK_TYPE_IMAGE_RENDER = 'image_render';
+
+// Task actions
+export const ACTION_REPLY_TO_MESSAGE = 'reply_to_message';
+export const ACTION_PROCESS_ORDER = 'process_order';
+export const ACTION_START_PRODUCT_WORKFLOW = 'start_product_workflow';
+export const ACTION_SEND_CHANNEL_MESSAGE = 'send_channel_message';
+export const ACTION_RENDER_PRODUCT_IMAGE = 'render_product_image';
+
+// Task statuses
+export const TASK_STATUS_PENDING = 'pending';
+export const TASK_STATUS_DONE = 'done';
+export const TASK_STATUS_FAILED = 'failed';
+export const TASK_STATUS_AWAITING_ACK = 'awaiting_ack';
+export const TASK_STATUS_PROCESSING = 'processing';
+
+// Workflow statuses
+export const WORKFLOW_STATUS_PENDING_APPROVAL = 'pending_approval';
+export const WORKFLOW_STATUS_RUNNING = 'running';
+
+// Event types
+export const EVENT_TASK_COMPLETED = 'TASK_COMPLETED';
+
+// Agent visual states
+export const AGENT_STATE_IDLE = 'idle';
+export const AGENT_STATE_MOVING = 'moving';
+export const AGENT_STATE_SITTING = 'sitting';
+export const AGENT_STATE_WORKING = 'working';
+
+// Progress thresholds
+export const TASK_PROGRESS_ACK_THRESHOLD = 0.95;
+
+// Task required-work ranges (ticks)
+export const TASK_REQUIRED_DISCORD_MIN = 80;
+export const TASK_REQUIRED_DISCORD_MAX = 200;
+export const TASK_REQUIRED_SHOPIFY_MIN = 120;
+export const TASK_REQUIRED_SHOPIFY_MAX = 260;
+
+// Agent speech duration (ms)
+export const AGENT_SPEECH_DURATION_MS = 7000;
+
 export const ACTION_TOOL_MAP = {
   reply_to_message: 'discord.reply',
   fetch_order: 'shopify.process_order',

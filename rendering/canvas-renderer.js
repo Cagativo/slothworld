@@ -1,6 +1,14 @@
 import { canvas, ctx } from '../core/app-state.js';
 import { loadedAssets } from './assets.js';
-import { spriteConfigs } from '../core/constants.js';
+import {
+  spriteConfigs,
+  TASK_STATUS_FAILED,
+  TASK_STATUS_AWAITING_ACK,
+  TASK_STATUS_PROCESSING,
+  AGENT_STATE_IDLE,
+  AGENT_STATE_MOVING,
+  AGENT_STATE_WORKING
+} from '../core/constants.js';
 import { resolveAgentVisual } from '../ui/config/agentVisualConfig.js';
 
 let debugBindingsAttached = false;
@@ -218,7 +226,7 @@ function findTask(tasksById, taskId) {
 
 function getAgentVisualState(agent) {
   if (!agent || typeof agent !== 'object' || typeof agent.state !== 'string') {
-    return 'idle';
+    return AGENT_STATE_IDLE;
   }
 
   return agent.state;
@@ -275,7 +283,7 @@ function getAgentPosition(agent, frameNow, desksById, tasksById, transitionByTas
     speedFactor
   ));
 
-  if (visualState === 'moving') {
+  if (visualState === AGENT_STATE_MOVING) {
     const p = easeOutCubic(queueToDesk);
     const path = arcLerp(intake, worker, p, 20);
     return {
@@ -284,7 +292,7 @@ function getAgentPosition(agent, frameNow, desksById, tasksById, transitionByTas
     };
   }
 
-  if (visualState === 'working') {
+  if (visualState === AGENT_STATE_WORKING) {
     const workPulse = easeOutCubic((Math.sin(frameNow * 0.0028 + (idHash % 17)) + 1) / 2);
     const path = arcLerp(worker, execution, deskToExec, 10);
     return {
@@ -310,7 +318,7 @@ function getAgentPosition(agent, frameNow, desksById, tasksById, transitionByTas
     };
   }
 
-  if (visualState === 'awaiting_ack') {
+  if (visualState === TASK_STATUS_AWAITING_ACK) {
     const ackPulse = Math.sin(frameNow * 0.004 + (idHash % 31));
     const ackX = lerp(execution.x, delivery.x, execToDelivery);
     const ackY = lerp(execution.y, delivery.y, execToDelivery);
@@ -384,7 +392,7 @@ function drawOfficeFlow(layout) {
 function statusColor(status) {
   const key = String(status || '').toLowerCase();
 
-  if (key === 'failed' || key === 'error') {
+  if (key === TASK_STATUS_FAILED || key === 'error') {
     return '#e53935';
   }
 
@@ -392,11 +400,11 @@ function statusColor(status) {
     return '#4caf50';
   }
 
-  if (key === 'awaiting_ack') {
+  if (key === TASK_STATUS_AWAITING_ACK) {
     return '#ffb300';
   }
 
-  if (key === 'working' || key === 'executing' || key === 'claimed' || key === 'moving') {
+  if (key === AGENT_STATE_WORKING || key === 'executing' || key === 'claimed' || key === AGENT_STATE_MOVING) {
     return '#00b8a9';
   }
 
@@ -557,7 +565,7 @@ function drawAgent(agent, desksById, tasksById, frameNow, transitionByTaskId, de
     ctx.fill();
   }
 
-  if (visualState === 'working') {
+  if (visualState === AGENT_STATE_WORKING) {
     ctx.fillStyle = 'rgba(56, 189, 248, 0.22)';
     ctx.beginPath();
     ctx.arc(x, y + 2, 16, 0, Math.PI * 2);
@@ -574,7 +582,7 @@ function drawAgent(agent, desksById, tasksById, frameNow, transitionByTaskId, de
     }
   }
 
-  if (visualState === 'awaiting_ack') {
+  if (visualState === TASK_STATUS_AWAITING_ACK) {
     const ackPulse = 0.5 + 0.5 * Math.sin(frameNow * 0.008 + (hashString(agent.id) % 41));
     ctx.strokeStyle = `rgba(245, 158, 11, ${0.2 + ackPulse * 0.65})`;
     ctx.lineWidth = 1.5;
@@ -612,7 +620,7 @@ function drawAgent(agent, desksById, tasksById, frameNow, transitionByTaskId, de
     ctx.stroke();
   }
 
-  if (visualState === 'idle') {
+  if (visualState === AGENT_STATE_IDLE) {
     const idlePulse = 0.5 + 0.5 * Math.sin(frameNow * 0.003 + (hashString(agent.id) % 31));
     ctx.strokeStyle = `rgba(148, 163, 184, ${0.12 + idlePulse * 0.12})`;
     ctx.lineWidth = 1;
@@ -677,7 +685,7 @@ export function render(renderView) {
     const s = String(node.status || '').toLowerCase();
     if (s === 'queued' || s === 'created' || s === 'enqueued') {
       counts.queued += 1;
-    } else if (s === 'failed' || s === 'error') {
+    } else if (s === TASK_STATUS_FAILED || s === 'error') {
       counts.failed += 1;
     } else if (s === 'completed' || s === 'acknowledged') {
       counts.done += 1;
