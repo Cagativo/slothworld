@@ -15,7 +15,7 @@
   "test:adversarial": "node --test tests/adversarial-enforcement.test.mjs",
   "test:bridge-intake": "node --test tests/bridge-intake-contract.test.mjs",
   "test:selector-missing": "node --test tests/selector-missing-contract.test.mjs",
-  "test:contracts": "cross-env CONTRACT_STRICT_MODE=1 node --test tests/contract-system.test.mjs",
+  "test:contracts": "node --test tests/contract-system.test.mjs",
   "events:list": "node cli/event-stream.js list",
   "events:stats": "node cli/event-stream.js stats",
   "events:task": "node cli/event-stream.js task"

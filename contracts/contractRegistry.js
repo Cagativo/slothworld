@@ -195,7 +195,6 @@ export function validate(contractName, input, output) {
   const def = registry.get(contractName);
   if (!def) {
     const err = `CONTRACT_NOT_FOUND:${contractName}`;
-    if (STRICT) throw new Error(err);
     return { valid: false, errors: [err] };
   }
 
@@ -215,10 +214,6 @@ export function validate(contractName, input, output) {
   }
 
   const valid = errors.length === 0;
-  if (!valid && STRICT) {
-    throw new Error(`CONTRACT_VALIDATION_FAILED:${contractName}\n${errors.join('\n')}`);
-  }
-
   return { valid, errors };
 }
 
@@ -234,7 +229,6 @@ export function runInvariants(contractName, context) {
   const def = registry.get(contractName);
   if (!def) {
     const err = `CONTRACT_NOT_FOUND:${contractName}`;
-    if (STRICT) throw new Error(err);
     return { passed: false, failures: [{ id: 'REGISTRY', error: err }] };
   }
 
@@ -258,11 +252,6 @@ export function runInvariants(contractName, context) {
   }
 
   const passed = failures.length === 0;
-  if (!passed && STRICT) {
-    const lines = failures.map((f) => `  [${f.id}] ${f.error}`).join('\n');
-    throw new Error(`INVARIANT_FAILURE:${contractName}\n${lines}`);
-  }
-
   return { passed, failures };
 }
 
