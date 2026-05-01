@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { startBridgePolling } from './core/task-handling.js';
-import { initRenderer, renderFrame } from './rendering/renderer-loop.js';
+import { initRenderer, renderFrame, renderErrorState } from './rendering/renderer-loop.js';
 import { deriveWorldState } from './core/world/deriveWorldState.js';
 import { appendRawEvents, getRawEvents } from './core/world/eventStore.js';
 import { createInitialEventSeed } from './core/world/initialEventSeed.js';
@@ -26,19 +26,24 @@ function start() {
   initUI();
 
   function loop() {
-    const worldState = deriveWorldState(getRawEvents());
-    const agents     = getAllAgents(worldState);
-    const graph      = buildVisualWorldGraph({ ...worldState, agents }, { now: Date.now() });
-    if (window.controlAPI && typeof window.controlAPI.setGraph === 'function') {
-      window.controlAPI.setGraph(graph);
+    try {
+      const worldState = deriveWorldState(getRawEvents());
+      const agents     = getAllAgents(worldState);
+      const graph      = buildVisualWorldGraph({ ...worldState, agents }, { now: Date.now() });
+      if (window.controlAPI && typeof window.controlAPI.setGraph === 'function') {
+        window.controlAPI.setGraph(graph);
+      }
+      const renderView = {
+        nodes:    graph.nodes,
+        edges:    graph.edges,
+        metadata: { ...graph.metadata, observability: graph.observability },
+      };
+      renderFrame(renderView);
+      window.dispatchEvent(new CustomEvent('slothworld:graph'));
+    } catch (err) {
+      console.error('[loop] Render error:', err);
+      renderErrorState();
     }
-    const renderView = {
-      nodes:    graph.nodes,
-      edges:    graph.edges,
-      metadata: { ...graph.metadata, observability: graph.observability },
-    };
-    renderFrame(renderView);
-    window.dispatchEvent(new CustomEvent('slothworld:graph'));
     requestAnimationFrame(loop);
   }
 

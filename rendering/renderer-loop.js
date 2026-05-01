@@ -9,6 +9,13 @@ export function initRenderer() {
   // Reserved for future renderer bootstrapping.
 }
 
+export function renderErrorState() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'red';
+  ctx.font = 'bold 16px monospace';
+  ctx.fillText('Render error \u2014 check console', 20, canvas.height / 2);
+}
+
 export function renderFrame(renderView) {
   const scene      = buildWorldScene(renderView);
   const components = toRenderableComponents(scene);
