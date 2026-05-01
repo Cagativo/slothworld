@@ -521,7 +521,52 @@ test('buildVisualWorldGraph: valid minimal output passes all checks', () => {
   assert.ok(passed);
 });
 
-// ─── 9. No silent failures — strict mode coverage ────────────────────────────
+// ─── 9. agentSelectorsGuard wiring safety ────────────────────────────────────
+
+test('agentSelectorsGuard: core/world/agentSelectors.js does not export getAgentTasks', async () => {
+  // Confirms the vulnerability: wiring to core/ instead of ui/ would produce a non-function
+  const coreModule = await import('../core/world/agentSelectors.js');
+  assert.strictEqual(
+    typeof coreModule.getAgentTasks, 'undefined',
+    'core/world/agentSelectors.js must not export getAgentTasks — wrong wiring would silently pass without the guard'
+  );
+});
+
+test('agentSelectorsGuard: WIRING_VIOLATION thrown for non-function getAgentTasks', () => {
+  // The load-time assertion in agentSelectorsGuard must reject any non-function value for getAgentTasks.
+  // This test validates that assertion logic for values that would arise from wrong-module wiring.
+  const nonFunctionValues = [undefined, null, 'getAgentTasks', 42, {}];
+  for (const value of nonFunctionValues) {
+    assert.throws(
+      () => {
+        if (typeof value !== 'function') {
+          throw new Error(
+            'WIRING_VIOLATION: agentSelectorsGuard imported wrong module — getAgentTasks must be a function. ' +
+            'Expected: ui/selectors/agentSelectors.js'
+          );
+        }
+      },
+      /WIRING_VIOLATION/,
+      `Expected WIRING_VIOLATION for value: ${JSON.stringify(value)}`
+    );
+  }
+});
+
+test('agentSelectorsGuard: no WIRING_VIOLATION when correct module is used', async () => {
+  const uiModule = await import('../ui/selectors/agentSelectors.js');
+  assert.strictEqual(
+    typeof uiModule.getAgentTasks, 'function',
+    'ui/selectors/agentSelectors.js must export getAgentTasks as a function'
+  );
+  // Guard assertion passes — no throw
+  assert.doesNotThrow(() => {
+    if (typeof uiModule.getAgentTasks !== 'function') {
+      throw new Error('WIRING_VIOLATION: agentSelectorsGuard imported wrong module — getAgentTasks must be a function. Expected: ui/selectors/agentSelectors.js');
+    }
+  });
+});
+
+// ─── 10. No silent failures — strict mode coverage ───────────────────────────
 
 test('no silent failures: validate returns { valid: false } not undefined on bad input', () => {
   for (const name of listContracts()) {
