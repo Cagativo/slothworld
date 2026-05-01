@@ -1,6 +1,82 @@
-import { TARGET_RETRY_DELAY, IDLE_WANDER_REASSIGN_DELAY, WANDER_TARGET_INTERVAL } from './constants.js';
+import {
+  TARGET_RETRY_DELAY,
+  IDLE_WANDER_REASSIGN_DELAY,
+  WANDER_TARGET_INTERVAL,
+  TASK_TYPE_DISCORD,
+  TASK_TYPE_SHOPIFY,
+  TASK_TYPE_IMAGE_RENDER,
+  TASK_STATUS_PENDING,
+  TASK_STATUS_DONE,
+  TASK_STATUS_FAILED,
+  TASK_STATUS_AWAITING_ACK,
+  TASK_STATUS_PROCESSING,
+  EVENT_TASK_COMPLETED,
+  AGENT_STATE_IDLE,
+  AGENT_STATE_MOVING,
+  AGENT_STATE_SITTING,
+  AGENT_STATE_WORKING,
+  TASK_PROGRESS_ACK_THRESHOLD,
+  AGENT_SPEECH_DURATION_MS
+} from './constants.js';
 import { canvas, agents, desks, agentStateTracker, emitEvent, eventStream, isDeskAvailableForAgent, getDeskSlotPosition } from './app-state.js';
 import { syncTaskStart, handleTaskExecutionResult } from './task-handling.js';
+
+/**
+ * @typedef {Object} IdleCycle
+ * @description Idle behaviour control block initialised and maintained by `ensureIdleStateFields`.
+ * @property {number} timer - Countdown frames remaining before the next idle action triggers.
+ * @property {boolean} walking - True while the agent is on a roam walk.
+ * @property {{x: number, y: number}|null} walkTarget - Destination of the current roam walk, or null.
+ * @property {boolean} returning - True while the agent is walking back toward the idle anchor.
+ * @property {number} pauseTimer - Pause frames remaining before starting the next idle action.
+ */
+
+/**
+ * @typedef {Object} CoffeeAnim
+ * @description Coffee-sipping animation state block.
+ * @property {number} frame - Current animation frame index (0–2).
+ * @property {number} timer - Simulation tick counter controlling frame advancement.
+ * @property {number} speed - Seconds per animation frame step.
+ * @property {'idle'|'sipping'|'returning'} phase - Current animation phase.
+ */
+
+/**
+ * @typedef {Object} Agent
+ * @description Runtime agent object; the central entity driven by the simulation {@link update} loop.
+ * @property {number} id - Unique agent index assigned at initialisation.
+ * @property {number} x - Current canvas X position (centre of sprite).
+ * @property {number} y - Current canvas Y position (centre of sprite).
+ * @property {number|null} targetX - Destination X, or null when stationary.
+ * @property {number|null} targetY - Destination Y, or null when stationary.
+ * @property {import('./task-handling.js').Desk|null} targetDesk - Desk the agent is assigned to, or null.
+ * @property {Object|null} targetSlot - Desk slot object the agent is moving toward, or null.
+ * @property {string} role - Agent role: `'researcher'`, `'executor'`, or `'other'`.
+ * @property {'up'|'down'|'left'|'right'} direction - Facing direction used for sprite selection.
+ * @property {number} animationFrame - Current sprite animation frame index.
+ * @property {number} animationTimer - Tick counter controlling animation frame advancement.
+ * @property {number} stateTimer - Ticks spent in the current state.
+ * @property {number} wanderTimer - Countdown before picking a new wander target.
+ * @property {number} targetRetryTimer - Countdown before retrying desk assignment.
+ * @property {number} productivity - Work increment added per tick (range 0.6–1.3).
+ * @property {{ discord: number, shopify: number }} skills - Per-task-type productivity multipliers.
+ * @property {string} state - Simulation state-machine state (AGENT_STATE_* or `'waiting'` / `'complete_react'`).
+ * @property {string} visualState - Rendering state (may differ from `state` during transitions).
+ * @property {number} speed - Movement pixels per simulation tick.
+ * @property {number} idleTime - Ticks accumulated in the idle state.
+ * @property {{x: number, y: number}|null} idleAnchor - Return anchor for roam walks, or null.
+ * @property {{x: number, y: number}|null} roamTarget - Current roam destination, or null.
+ * @property {IdleCycle} idleCycle - Idle behaviour control block.
+ * @property {{ text: string, duration: number, timer: number }|null} speech - Active speech bubble, or null.
+ * @property {string|null} lastSpeechText - Text of the most recent speech bubble, or null.
+ * @property {string|null} lastProgressPhase - Last emitted progress phase (`'starting'`, `'working'`, or `'finishing'`), or null.
+ * @property {string|null} lastTaskStatus - Last observed task status string, or null.
+ * @property {number} lastSpeechTime - Unix timestamp (ms) of the last speech emission.
+ * @property {CoffeeAnim} coffeeAnim - Coffee-sipping animation state.
+ * @property {number} completeReactTimer - Remaining milliseconds for the task-completion reaction animation.
+ * @property {boolean} awaitingTaskCompletion - True while the agent is waiting for an ACK after execution.
+ * @property {import('./task-handling.js').Task|null} currentTask - Task currently being worked on, or null.
+ * @property {string|null} currentTaskId - ID of the current task, or null.
+ */
 
 const FRAME_RATE = 60;
 const FRAME_TIME_MS = 1000 / FRAME_RATE;
@@ -95,8 +171,8 @@ function ensureIdleStateFields(agent) {
     }
   }
 
-  if (agent.visualState !== 'idle' && agent.visualState !== 'working' && agent.visualState !== 'waiting' && agent.visualState !== 'complete_react') {
-    agent.visualState = 'idle';
+  if (agent.visualState !== AGENT_STATE_IDLE && agent.visualState !== AGENT_STATE_WORKING && agent.visualState !== 'waiting' && agent.visualState !== 'complete_react') {
+    agent.visualState = AGENT_STATE_IDLE;
   }
 
   if (typeof agent.completeReactTimer !== 'number') {
@@ -157,7 +233,7 @@ function ensureIdleStateFields(agent) {
   }
 }
 
-function setAgentSpeech(agent, text, duration = 7000, { force = false } = {}) {
+function setAgentSpeech(agent, text, duration = AGENT_SPEECH_DURATION_MS, { force = false } = {}) {
   if (!agent) {
     return;
   }
@@ -181,7 +257,7 @@ function canSpeak(agent, now = Date.now()) {
     return false;
   }
 
-  return (now - (agent.lastSpeechTime || 0)) > 7000;
+  return (now - (agent.lastSpeechTime || 0)) > AGENT_SPEECH_DURATION_MS;
 }
 
 function pickSpeechLine(lines, fallback) {
@@ -212,15 +288,15 @@ function getWorkingSpeechText(task) {
     return 'Finishing...';
   }
 
-  if (task.type === 'image_render') {
+  if (task.type === TASK_TYPE_IMAGE_RENDER) {
     return 'Generating image...';
   }
 
-  if (task.type === 'discord') {
+  if (task.type === TASK_TYPE_DISCORD) {
     return 'Replying...';
   }
 
-  if (task.type === 'shopify') {
+  if (task.type === TASK_TYPE_SHOPIFY) {
     return 'Processing order...';
   }
 
@@ -235,7 +311,7 @@ function beginCompletionReaction(agent, text = 'Done!') {
   agent.stateTimer = 0;
   agent.animationFrame = 0;
   agent.animationTimer = 0;
-  setAgentSpeech(agent, text, 7000, { force: true });
+  setAgentSpeech(agent, text, AGENT_SPEECH_DURATION_MS, { force: true });
 }
 
 function syncCompletionStatuses() {
@@ -243,11 +319,11 @@ function syncCompletionStatuses() {
     const event = eventStream[completionEventCursor];
     completionEventCursor += 1;
 
-    if (!event || event.type !== 'TASK_COMPLETED' || !event.payload || !event.payload.taskId) {
+    if (!event || event.type !== EVENT_TASK_COMPLETED || !event.payload || !event.payload.taskId) {
       continue;
     }
 
-    completionStatusByTaskId.set(String(event.payload.taskId), event.payload.success === false ? 'failed' : 'done');
+    completionStatusByTaskId.set(String(event.payload.taskId), event.payload.success === false ? TASK_STATUS_FAILED : TASK_STATUS_DONE);
   }
 }
 
@@ -267,7 +343,7 @@ function shouldLogAgentStatus(agent, now) {
     return false;
   }
 
-  const isActive = !!agent.currentTask || agent.visualState !== 'idle';
+  const isActive = !!agent.currentTask || agent.visualState !== AGENT_STATE_IDLE;
   if (!isActive) {
     return false;
   }
@@ -326,12 +402,12 @@ function deriveTaskProgressRatio(task) {
     ? clamp(task.progress / task.required, 0, 1)
     : 0;
 
-  if (status === 'done' || status === 'failed') {
+  if (status === TASK_STATUS_DONE || status === TASK_STATUS_FAILED) {
     return 1;
   }
 
-  if (status === 'awaiting_ack') {
-    return 0.95;
+  if (status === TASK_STATUS_AWAITING_ACK) {
+    return TASK_PROGRESS_ACK_THRESHOLD;
   }
 
   return Math.min(0.9, rawRatio);
@@ -367,11 +443,11 @@ function syncAgentTaskSpeech(agent, task) {
     agent.lastTaskStatus = status;
   }
 
-  if (status === 'done' || status === 'failed') {
+  if (status === TASK_STATUS_DONE || status === TASK_STATUS_FAILED) {
     return;
   }
 
-  if (status === 'awaiting_ack') {
+  if (status === TASK_STATUS_AWAITING_ACK) {
     agent.lastProgressPhase = 'finishing';
     return;
   }
@@ -380,7 +456,7 @@ function syncAgentTaskSpeech(agent, task) {
   const phase = ratio < 0.3 ? 'starting' : 'working';
   if (phase !== agent.lastProgressPhase) {
     agent.lastProgressPhase = phase;
-    setAgentSpeech(agent, getPhaseSpeech(phase), 7000);
+    setAgentSpeech(agent, getPhaseSpeech(phase), AGENT_SPEECH_DURATION_MS);
   }
 }
 
@@ -521,17 +597,27 @@ function startIdleRoam(agent) {
   agent.targetSlot = null;
   agent.targetX = roamTarget.x;
   agent.targetY = roamTarget.y;
-  agent.state = 'moving';
+  agent.state = AGENT_STATE_MOVING;
   agent.stateTimer = 0;
   agent.animationTimer = 0;
 
   return true;
 }
 
+/**
+ * @description Returns true if any desk currently has a queued or active task.
+ * @returns {boolean} True when at least one desk has work available; false when all desks are idle.
+ */
 export function hasAnyDeskTasks() {
   return desks.some((desk) => desk.currentTask || desk.queue.length > 0);
 }
 
+/**
+ * @description Releases a desk's occupancy if the given agent is the current occupant.
+ * @param {import('./task-handling.js').Desk} desk - The desk to release.
+ * @param {Agent} agent - The agent relinquishing the desk.
+ * @returns {void}
+ */
 export function releaseDesk(desk, agent) {
   if (desk.occupant === agent) {
     desk.occupied = false;
@@ -539,6 +625,12 @@ export function releaseDesk(desk, agent) {
   }
 }
 
+/**
+ * @description Clears an agent's movement target and optionally releases desk occupancy, updating the idle anchor to the desk's seat position.
+ * @param {Agent} agent - The agent whose target should be cleared.
+ * @param {{ releaseDesk?: boolean }} [options={}] - Options object; set `releaseDesk: false` to keep desk occupancy.
+ * @returns {void}
+ */
 export function clearAgentTarget(agent, { releaseDesk: shouldReleaseDesk = true } = {}) {
   if (agent.targetDesk) {
     const seatPosition = getDeskSlotPosition(agent.targetDesk, 'seat');
@@ -558,6 +650,11 @@ export function clearAgentTarget(agent, { releaseDesk: shouldReleaseDesk = true 
   agent.targetY = null;
 }
 
+/**
+ * @description Clears an agent's target, resets movement timers, and schedules a retry after TARGET_RETRY_DELAY frames.
+ * @param {Agent} agent - The agent for which a target retry should be scheduled.
+ * @returns {void}
+ */
 export function scheduleTargetRetry(agent) {
   clearAgentTarget(agent);
   agent.targetRetryTimer = TARGET_RETRY_DELAY;
@@ -565,9 +662,14 @@ export function scheduleTargetRetry(agent) {
   agent.stateTimer = 0;
   agent.animationFrame = 0;
   agent.animationTimer = 0;
-  agent.state = 'idle';
+  agent.state = AGENT_STATE_IDLE;
 }
 
+/**
+ * @description Assigns a random canvas position as the agent's wander target, clearing any desk assignment.
+ * @param {Agent} agent - The agent to assign a wander target to.
+ * @returns {void}
+ */
 export function setRandomWanderTarget(agent) {
   agent.targetDesk = null;
   agent.targetSlot = null;
@@ -576,6 +678,12 @@ export function setRandomWanderTarget(agent) {
   agent.wanderTimer = WANDER_TARGET_INTERVAL;
 }
 
+/**
+ * @description Pops the highest-priority task from a desk's queue, sets it as the current task, and emits TASK_STARTED.
+ * Does nothing if the desk is paused, already has a current task, or has an empty queue.
+ * @param {import('./task-handling.js').Desk} desk - The desk from which to claim the next task.
+ * @returns {import('./task-handling.js').Task|null} The newly claimed task, or the existing current task (or null if the queue is empty).
+ */
 export function claimNextTask(desk) {
   if (desk.paused) {
     return desk.currentTask;
@@ -586,7 +694,7 @@ export function claimNextTask(desk) {
   }
 
   const nextTask = desk.queue.shift();
-  nextTask.runtimeStatus = 'processing';
+  nextTask.runtimeStatus = TASK_STATUS_PROCESSING;
   syncTaskStart(nextTask);
   desk.currentTask = nextTask;
   if (desk.occupant) {
@@ -595,7 +703,7 @@ export function claimNextTask(desk) {
     desk.occupant.awaitingTaskCompletion = false;
     desk.occupant.lastProgressPhase = null;
     desk.occupant.lastTaskStatus = getTaskStatus(nextTask);
-    desk.occupant.visualState = 'working';
+    desk.occupant.visualState = AGENT_STATE_WORKING;
     syncAgentTaskSpeech(desk.occupant, nextTask);
   }
   console.log('[TASK][CURRENT]', nextTask.id, {
@@ -614,6 +722,10 @@ export function claimNextTask(desk) {
   return nextTask;
 }
 
+/**
+ * @description Iterates all agents and emits AGENT_STATE_CHANGED for any agent whose state has changed since the last tick.
+ * @returns {void}
+ */
 export function observeAgentStateChanges() {
   for (const agent of agents) {
     const previousState = agentStateTracker.get(agent.id);
@@ -628,6 +740,12 @@ export function observeAgentStateChanges() {
   }
 }
 
+/**
+ * @description Finds the nearest desk that is available for the given agent, optionally filtering to desks that have tasks.
+ * @param {Agent} agent - The agent looking for a desk.
+ * @param {{ requireTasks?: boolean }} [options={}] - Options; set `requireTasks: true` to skip desks with no queued work.
+ * @returns {import('./task-handling.js').Desk|null} The closest available desk, or null if none is found.
+ */
 export function findNearestAvailableDesk(agent, { requireTasks = false } = {}) {
   let nearest = null;
   let bestDistance = Number.POSITIVE_INFINITY;
@@ -655,6 +773,11 @@ export function findNearestAvailableDesk(agent, { requireTasks = false } = {}) {
   return nearest;
 }
 
+/**
+ * @description Attempts to snap an agent into the seated position at their target desk, transitioning state to SITTING on success.
+ * @param {Agent} agent - The agent attempting to sit down.
+ * @returns {boolean} True if the agent successfully sat down; false if they are not close enough or the desk is not theirs.
+ */
 export function trySit(agent) {
   const desk = agent.targetDesk;
   if (!desk || desk.occupant !== agent) {
@@ -670,13 +793,19 @@ export function trySit(agent) {
 
   agent.x = seatPosition.x;
   agent.y = seatPosition.y;
-  agent.state = 'sitting';
+  agent.state = AGENT_STATE_SITTING;
   agent.stateTimer = 0;
   agent.animationFrame = 0;
   agent.animationTimer = 0;
   return true;
 }
 
+/**
+ * @description Assigns the nearest available desk with tasks to an agent, starting the MOVING state toward the desk's seat.
+ * Falls back to scheduling a retry if no suitable desk is found.
+ * @param {Agent} agent - The agent to assign a desk target to.
+ * @returns {boolean} True if a desk was successfully assigned; false if the agent must wait and retry.
+ */
 export function assignAgentTarget(agent) {
   const desk = findNearestAvailableDesk(agent, { requireTasks: true });
   if (desk) {
@@ -688,7 +817,7 @@ export function assignAgentTarget(agent) {
     const seatPosition = getDeskSlotPosition(desk, 'seat');
     agent.targetX = seatPosition.x;
     agent.targetY = seatPosition.y;
-    agent.state = 'moving';
+    agent.state = AGENT_STATE_MOVING;
     agent.stateTimer = 0;
     agent.wanderTimer = 0;
     agent.targetRetryTimer = 0;
@@ -698,7 +827,7 @@ export function assignAgentTarget(agent) {
   const anyTasks = hasAnyDeskTasks();
   if (anyTasks) {
     agent.targetRetryTimer = TARGET_RETRY_DELAY;
-    agent.state = 'idle';
+    agent.state = AGENT_STATE_IDLE;
     return false;
   }
 
@@ -707,6 +836,11 @@ export function assignAgentTarget(agent) {
 }
 
 // --- Simulation update tick ---
+/**
+ * @description Advances all agents by one simulation tick, processing state transitions, movement, task claiming, and speech.
+ * This is the main per-frame update loop called by the rendering engine.
+ * @returns {void}
+ */
 export function update() {
   syncCompletionStatuses();
 
@@ -720,8 +854,8 @@ export function update() {
       console.log('[Agent Status]', agent.id, task ? task.id : null, task ? getTaskStatus(task) : null);
     }
     const taskStatus = getTaskStatus(task);
-    if (task && (taskStatus === 'done' || taskStatus === 'failed') && agent.state !== 'complete_react') {
-      beginCompletionReaction(agent, taskStatus === 'done' ? 'Done!' : 'Finished.');
+    if (task && (taskStatus === TASK_STATUS_DONE || taskStatus === TASK_STATUS_FAILED) && agent.state !== 'complete_react') {
+      beginCompletionReaction(agent, taskStatus === TASK_STATUS_DONE ? 'Done!' : 'Finished.');
       continue;
     }
 
@@ -740,8 +874,8 @@ export function update() {
       if (agent.completeReactTimer <= 0) {
         agent.currentTask = null;
         agent.currentTaskId = null;
-        agent.state = 'idle';
-        agent.visualState = 'idle';
+        agent.state = AGENT_STATE_IDLE;
+        agent.visualState = AGENT_STATE_IDLE;
         agent.stateTimer = 0;
         agent.awaitingTaskCompletion = false;
         agent.lastProgressPhase = null;
@@ -763,41 +897,41 @@ export function update() {
 
       const trackedStatus = getTaskStatus(trackedTask);
 
-      if (trackedStatus === 'done' || trackedStatus === 'failed') {
-        beginCompletionReaction(agent, trackedStatus === 'done' ? 'Done!' : 'Finished.');
+      if (trackedStatus === TASK_STATUS_DONE || trackedStatus === TASK_STATUS_FAILED) {
+        beginCompletionReaction(agent, trackedStatus === TASK_STATUS_DONE ? 'Done!' : 'Finished.');
         continue;
       }
 
-      if (trackedStatus !== 'awaiting_ack') {
-        trackedTask.runtimeStatus = 'awaiting_ack';
+      if (trackedStatus !== TASK_STATUS_AWAITING_ACK) {
+        trackedTask.runtimeStatus = TASK_STATUS_AWAITING_ACK;
       }
 
       if (typeof trackedTask.required === 'number' && trackedTask.required > 0) {
-        trackedTask.progress = Math.max(trackedTask.progress || 0, trackedTask.required * 0.95);
+        trackedTask.progress = Math.max(trackedTask.progress || 0, trackedTask.required * TASK_PROGRESS_ACK_THRESHOLD);
       }
 
-      if (getTaskStatus(trackedTask) === 'awaiting_ack' && canSpeak(agent)) {
+      if (getTaskStatus(trackedTask) === TASK_STATUS_AWAITING_ACK && canSpeak(agent)) {
         setAgentSpeech(agent, pickSpeechLine([
           'Sending it off...',
           'Almost done...',
           'Waiting for confirmation...'
-        ], 'Waiting for confirmation...'), 7000);
+        ], 'Waiting for confirmation...'), AGENT_SPEECH_DURATION_MS);
       }
 
       syncAgentTaskSpeech(agent, trackedTask);
       continue;
     }
 
-    if (agent.state === 'sitting') {
+    if (agent.state === AGENT_STATE_SITTING) {
       resetIdleBehavior(agent);
-      agent.visualState = 'working';
+      agent.visualState = AGENT_STATE_WORKING;
       const desk = agent.targetDesk;
       if (desk && desk.occupant === agent && !desk.currentTask) {
         claimNextTask(desk);
       }
 
       if (desk && desk.currentTask) {
-        agent.state = 'working';
+        agent.state = AGENT_STATE_WORKING;
         agent.stateTimer = 0;
       }
 
@@ -806,9 +940,9 @@ export function update() {
       continue;
     }
 
-    if (agent.state === 'working') {
+    if (agent.state === AGENT_STATE_WORKING) {
       resetIdleBehavior(agent);
-      agent.visualState = 'working';
+      agent.visualState = AGENT_STATE_WORKING;
       const desk = agent.targetDesk;
       if (!desk || desk.occupant !== agent) {
         scheduleTargetRetry(agent);
@@ -833,24 +967,24 @@ export function update() {
       const skill = agent.skills[activeTask.type] || 1;
       activeTask.progress += agent.productivity * skill;
       if (activeTask.progress >= activeTask.required) {
-        activeTask.runtimeStatus = 'awaiting_ack';
-        activeTask.progress = activeTask.required * 0.95;
+        activeTask.runtimeStatus = TASK_STATUS_AWAITING_ACK;
+        activeTask.progress = activeTask.required * TASK_PROGRESS_ACK_THRESHOLD;
         agent.awaitingTaskCompletion = true;
         handleTaskExecutionResult(desk, activeTask);
 
         const postExecutionStatus = getTaskStatus(activeTask);
 
-        if (postExecutionStatus === 'pending') {
+        if (postExecutionStatus === TASK_STATUS_PENDING) {
           agent.awaitingTaskCompletion = false;
           agent.currentTask = null;
           agent.currentTaskId = null;
           agent.lastProgressPhase = null;
           agent.lastTaskStatus = null;
-          agent.state = 'working';
+          agent.state = AGENT_STATE_WORKING;
           continue;
         }
 
-        if (postExecutionStatus === 'failed') {
+        if (postExecutionStatus === TASK_STATUS_FAILED) {
           beginCompletionReaction(agent, 'Finished.');
           continue;
         }
@@ -870,15 +1004,15 @@ export function update() {
       continue;
     }
 
-    if (agent.state === 'idle') {
-      agent.visualState = 'idle';
+    if (agent.state === AGENT_STATE_IDLE) {
+      agent.visualState = AGENT_STATE_IDLE;
 
       if (!agent.currentTask && canSpeak(agent)) {
         setAgentSpeech(agent, pickSpeechLine([
           'Waiting for work...',
           'Nothing to do right now.',
           'Just relaxing.'
-        ], 'Waiting for work...'), 7000);
+        ], 'Waiting for work...'), AGENT_SPEECH_DURATION_MS);
       }
 
       updateCoffeeAnimation(agent);
@@ -925,7 +1059,7 @@ export function update() {
       continue;
     }
 
-    if (agent.state === 'moving' && !agent.idleCycle.walking && (!agent.targetDesk || agent.targetDesk.occupant !== agent)) {
+    if (agent.state === AGENT_STATE_MOVING && !agent.idleCycle.walking && (!agent.targetDesk || agent.targetDesk.occupant !== agent)) {
       scheduleTargetRetry(agent);
       continue;
     }
@@ -944,14 +1078,14 @@ export function update() {
       agent.x = agent.targetX;
       agent.y = agent.targetY;
 
-      if (agent.state === 'moving') {
+      if (agent.state === AGENT_STATE_MOVING) {
         if (agent.idleCycle.walking) {
           agent.idleCycle.walking = false;
           agent.idleCycle.returning = false;
           agent.idleCycle.walkTarget = null;
           agent.roamTarget = null;
           agent.idleCycle.pauseTimer = randomRoamPauseFrames();
-          agent.state = 'idle';
+          agent.state = AGENT_STATE_IDLE;
           agent.targetX = null;
           agent.targetY = null;
           agent.animationFrame = 0;

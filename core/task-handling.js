@@ -1,12 +1,123 @@
 import { generateId, randomInRange, cloneContext } from './utils.js';
-import { ACTION_TOOL_MAP, TASK_EXECUTION_FAILURE_CHANCE, BRIDGE_POLL_INTERVAL_MS } from './constants.js';
+import {
+  ACTION_TOOL_MAP,
+  TASK_EXECUTION_FAILURE_CHANCE,
+  BRIDGE_POLL_INTERVAL_MS,
+  TASK_TYPE_DISCORD,
+  TASK_TYPE_SHOPIFY,
+  TASK_TYPE_IMAGE_RENDER,
+  ACTION_REPLY_TO_MESSAGE,
+  ACTION_PROCESS_ORDER,
+  ACTION_START_PRODUCT_WORKFLOW,
+  TASK_STATUS_PENDING,
+  TASK_STATUS_DONE,
+  TASK_STATUS_FAILED,
+  TASK_STATUS_AWAITING_ACK,
+  EVENT_TASK_COMPLETED,
+  TASK_PROGRESS_ACK_THRESHOLD,
+  TASK_REQUIRED_DISCORD_MIN,
+  TASK_REQUIRED_DISCORD_MAX,
+  TASK_REQUIRED_SHOPIFY_MIN,
+  TASK_REQUIRED_SHOPIFY_MAX
+} from './constants.js';
 import { desks, emitEvent } from './app-state.js';
 import { appendRawEvents } from './world/eventStore.js';
 import { getCanonicalPipelineLabel, warnLegacyExecutionPath } from './execution-pipeline.js';
 // Circular with workflow — safe: only called at runtime, never at module init.
 import { applyWorkflowTaskCompletion, createProductWorkflowFromTask, inferDefaultPriority } from './workflow.js';
 
+/**
+ * @typedef {Object} Task
+ * @description A normalized task object managed by the simulation engine.
+ * @property {string} id - Unique task identifier.
+ * @property {string} type - Task type constant (TASK_TYPE_*).
+ * @property {string} title - Human-readable task title.
+ * @property {number} priority - Priority level: 0 (low), 1 (normal), 2 (high).
+ * @property {number} progress - Accumulated work ticks completed so far.
+ * @property {number} required - Total work ticks required to finish the task.
+ * @property {string} status - Lifecycle status constant (TASK_STATUS_*).
+ * @property {string|null} action - Action identifier for tool routing.
+ * @property {string|null} tool - Dot-separated tool name override (e.g. `'discord.reply'`).
+ * @property {Object} payload - Task-type-specific payload data.
+ * @property {number} retries - Number of execution retries performed so far.
+ * @property {number} maxRetries - Maximum number of retries allowed.
+ * @property {string|null} workflowId - Parent workflow ID, or null for standalone tasks.
+ * @property {number|null} workflowStepIndex - Zero-based step index within the parent workflow, or null.
+ * @property {Object|null} workflowContextInput - Workflow context snapshot passed in at enqueue time.
+ * @property {Object} [meta] - Raw source event object attached at creation time.
+ * @property {string} [renderId] - Render job identifier (image_render tasks only).
+ * @property {string} [productId] - Product identifier (image_render tasks only).
+ * @property {string} [provider] - Image provider name (image_render tasks only).
+ * @property {Object} [designIntent] - Design parameters object (image_render tasks only).
+ * @property {string} [runtimeStatus] - Transient status set by the simulation tick loop.
+ * @property {string} [localLifecycleStatus] - Lifecycle status synced from the event stream.
+ * @property {boolean} [_executionInFlight] - True while executeTask is awaiting a response.
+ * @property {boolean} [_executionComplete] - True after executeTask resolves.
+ * @property {boolean} [_startedSynced] - True after the /start sync request succeeds.
+ * @property {boolean} [_startSyncInFlight] - True while the /start sync request is in progress.
+ * @property {boolean} [_startSyncDisabled] - True when /start sync has been permanently disabled after retries.
+ */
+
+/**
+ * @typedef {Object} ExecutionResult
+ * @description Return value from task and tool execution functions.
+ * @property {boolean} success - Whether the execution succeeded.
+ * @property {string} [error] - Error message when `success` is false.
+ * @property {Object} [result] - Structured result payload when `success` is true.
+ * @property {boolean} [skipped] - True when execution was intentionally skipped (e.g. no Discord target).
+ * @property {string} [note] - Human-readable note explaining a skip or partial result.
+ */
+
+/**
+ * @typedef {Object} ToolResult
+ * @description Normalized result produced by {@link normalizeToolResult}.
+ * @property {boolean} success - Whether the tool call succeeded.
+ * @property {*} [data] - Result data when `success` is true.
+ * @property {string} [error] - Error description when `success` is false.
+ */
+
+/**
+ * @typedef {Object} Desk
+ * @description A work desk that manages agent assignment and the task queue.
+ * @property {number} x - Canvas X coordinate of the desk centre.
+ * @property {number} y - Canvas Y coordinate of the desk centre.
+ * @property {string} type - Always `'desk'`.
+ * @property {boolean} occupied - True when an agent is assigned to this desk.
+ * @property {Object} slots - Named slot offsets (`{ seat, computer }`).
+ * @property {Object|null} occupant - Currently assigned agent, or null.
+ * @property {Task[]} queue - Pending tasks sorted by descending priority.
+ * @property {Task|null} currentTask - Task currently being executed, or null.
+ * @property {boolean} paused - When true, {@link claimNextTask} will not pop tasks from the queue.
+ * @property {number} completedTasks - Total number of tasks completed at this desk.
+ * @property {number} failedTasks - Total number of tasks that failed at this desk.
+ * @property {Task|null} lastFailedTask - Most recent failed task, or null.
+ */
+
+/**
+ * @typedef {Object} TaskSummary
+ * @description A safe, read-only view of a task produced by {@link sanitizeTaskForView}.
+ * @property {string} id - Task identifier.
+ * @property {string} type - Task type constant.
+ * @property {string} title - Task title.
+ * @property {string} status - Lifecycle status.
+ * @property {number} priority - Priority level.
+ * @property {number} progress - Accumulated work ticks.
+ * @property {number} required - Required work ticks.
+ * @property {string|null} action - Action identifier, or null.
+ * @property {string|null} tool - Tool name, or null.
+ * @property {string|null} provider - Image provider, or null.
+ * @property {string|null} productId - Product ID, or null.
+ * @property {string|null} renderId - Render job ID, or null.
+ * @property {string|null} workflowId - Parent workflow ID, or null.
+ * @property {number|null} workflowStepIndex - Workflow step index, or null.
+ */
+
 // --- Task factory helpers ---
+/**
+ * @description Infers a numeric task priority from a Discord event's type and title fields.
+ * @param {{ type?: string, title?: string }} event - The Discord source event.
+ * @returns {number} Priority level: 0 (log/passive), 1 (default), or 2 (mention/command).
+ */
 export function inferPriorityFromDiscord(event) {
   const eventType = (event.type || '').toLowerCase();
   const title = (event.title || '').toLowerCase();
@@ -22,6 +133,11 @@ export function inferPriorityFromDiscord(event) {
   return 1;
 }
 
+/**
+ * @description Infers a numeric task priority from a Shopify event's type and title fields.
+ * @param {{ type?: string, title?: string }} event - The Shopify source event.
+ * @returns {number} Priority level: 0 (log/passive), 1 (default), or 2 (order).
+ */
 export function inferPriorityFromShopify(event) {
   const eventType = (event.type || '').toLowerCase();
   const title = (event.title || '').toLowerCase();
@@ -37,6 +153,11 @@ export function inferPriorityFromShopify(event) {
   return 1;
 }
 
+/**
+ * @description Creates a new Discord task object from a raw Discord source event.
+ * @param {{ title?: string, type?: string, channelId?: string, messageId?: string, content?: string, payload?: Object }} event - The raw Discord event data.
+ * @returns {Task} A new Discord task ready to be ingested into the simulation.
+ */
 export function createDiscordTask(event) {
   console.log('[TASK][CREATE_DISCORD]', 'raw_input', event);
 
@@ -55,13 +176,13 @@ export function createDiscordTask(event) {
 
   const createdTask = {
     id: generateId(),
-    type: 'discord',
+    type: TASK_TYPE_DISCORD,
     title: event.title || 'Discord Event',
     priority: inferPriorityFromDiscord(event),
     progress: 0,
-    required: randomInRange(80, 200),
-    status: 'pending',
-    action: 'reply_to_message',
+    required: randomInRange(TASK_REQUIRED_DISCORD_MIN, TASK_REQUIRED_DISCORD_MAX),
+    status: TASK_STATUS_PENDING,
+    action: ACTION_REPLY_TO_MESSAGE,
     payload: {
       channelId,
       messageId,
@@ -74,16 +195,21 @@ export function createDiscordTask(event) {
   return createdTask;
 }
 
+/**
+ * @description Creates a new Shopify task object from a raw Shopify source event.
+ * @param {{ title?: string, type?: string, orderId?: string }} event - The raw Shopify event data.
+ * @returns {Task} A new Shopify task ready to be ingested into the simulation.
+ */
 export function createShopifyTask(event) {
   return {
     id: generateId(),
-    type: 'shopify',
+    type: TASK_TYPE_SHOPIFY,
     title: event.title || 'Shopify Event',
     priority: inferPriorityFromShopify(event),
     progress: 0,
-    required: randomInRange(120, 260),
-    status: 'pending',
-    action: 'process_order',
+    required: randomInRange(TASK_REQUIRED_SHOPIFY_MIN, TASK_REQUIRED_SHOPIFY_MAX),
+    status: TASK_STATUS_PENDING,
+    action: ACTION_PROCESS_ORDER,
     payload: {
       orderId: event.orderId || `order-${generateId()}`
     },
@@ -102,9 +228,9 @@ async function registerTaskInBridge(task) {
   const normalizedPayload = task && task.payload && typeof task.payload === 'object' ? task.payload : {};
   const bridgeTask = {
     id: task.id,
-    type: task.type || 'discord',
+    type: task.type || TASK_TYPE_DISCORD,
     title: task.title || 'Injected task',
-    status: 'pending',
+    status: TASK_STATUS_PENDING,
     correlationId: typeof task.correlationId === 'string' ? task.correlationId : undefined,
     depth: typeof task.depth === 'number' ? task.depth : undefined,
     internal: task.internal === true,
@@ -144,6 +270,11 @@ function isDiscordSnowflake(value) {
   return typeof value === 'string' && /^\d{17,20}$/.test(value);
 }
 
+/**
+ * @description Executes a Discord task via the canonical task pipeline, skipping silently when no valid Discord target is available.
+ * @param {Task} task - The Discord task to execute.
+ * @returns {Promise<ExecutionResult>} Resolves with a success result (possibly `skipped: true`) or a failure result.
+ */
 export async function executeDiscordTask(task) {
   if (!task || !task.id) {
     return { success: false, error: 'Missing task id' };
@@ -169,6 +300,12 @@ export async function executeDiscordTask(task) {
   }
 }
 
+/**
+ * @description Legacy helper that executes an image render task via the canonical task pipeline.
+ * @deprecated Direct invocation bypasses the canonical TaskEngine lifecycle. Prefer task-driven execution.
+ * @param {Task} task - The image render task to execute.
+ * @returns {Promise<ExecutionResult>} Resolves with the execution result.
+ */
 export async function executeImageRenderTask(task) {
   // LEGACY helper: maintained for compatibility while canonical execution remains task-driven.
   warnLegacyExecutionPath('core/task-handling.executeImageRenderTask', {
@@ -200,8 +337,8 @@ export const tools = {
 
       const task = {
         id: (payload && payload.taskId) || generateId(),
-        type: 'discord',
-        action: 'reply_to_message',
+        type: TASK_TYPE_DISCORD,
+        action: ACTION_REPLY_TO_MESSAGE,
         payload: {
           channelId: payload && payload.channelId ? payload.channelId : null,
           messageId: payload && payload.messageId ? payload.messageId : null,
@@ -258,7 +395,7 @@ export const tools = {
       const task = {
         id: payload && payload.taskId ? payload.taskId : generateId(),
         renderId: payload && payload.renderId ? payload.renderId : null,
-        type: 'image_render',
+        type: TASK_TYPE_IMAGE_RENDER,
         productId: payload && payload.productId ? payload.productId : (context && context.keyword ? `product-${context.keyword}` : null),
         designIntent: payload && payload.designIntent ? payload.designIntent : {},
         provider: payload && payload.provider ? payload.provider : 'openai',
@@ -267,7 +404,7 @@ export const tools = {
           renderId: payload && payload.renderId ? payload.renderId : undefined,
           context
         },
-        status: 'pending',
+        status: TASK_STATUS_PENDING,
         priority: typeof payload.priority === 'number' ? payload.priority : 1
       };
 
@@ -311,6 +448,11 @@ export const tools = {
   }
 };
 
+/**
+ * @description Resolves a dot-separated tool path (e.g. `'discord.reply'`) to its handler function.
+ * @param {string} toolName - Dot-separated tool path within the {@link tools} registry.
+ * @returns {Function|null} The handler function, or null if the path does not resolve to a function.
+ */
 export function resolveTool(toolName) {
   if (!toolName || typeof toolName !== 'string') {
     return null;
@@ -330,6 +472,11 @@ export function resolveTool(toolName) {
   return typeof current === 'function' ? current : null;
 }
 
+/**
+ * @description Normalizes an arbitrary tool return value into a standard {@link ToolResult} shape.
+ * @param {*} result - The raw value returned by a tool handler.
+ * @returns {ToolResult} A normalized result with `success`, `data`, and `error` fields.
+ */
 export function normalizeToolResult(result) {
   if (result && typeof result === 'object' && typeof result.success === 'boolean') {
     return {
@@ -345,6 +492,11 @@ export function normalizeToolResult(result) {
   };
 }
 
+/**
+ * @description Infers the dot-separated tool name to use for a task, consulting `task.tool`, the ACTION_TOOL_MAP, and the task type as fallbacks.
+ * @param {Task} task - The task whose tool name should be resolved.
+ * @returns {string|null} The tool name string, or null if no tool can be determined.
+ */
 export function inferToolNameForTask(task) {
   if (task && task.tool) {
     return task.tool;
@@ -354,21 +506,29 @@ export function inferToolNameForTask(task) {
     return ACTION_TOOL_MAP[task.action];
   }
 
-  if (task && task.type === 'discord') {
+  if (task && task.type === TASK_TYPE_DISCORD) {
     return 'discord.reply';
   }
 
-  if (task && task.type === 'shopify') {
+  if (task && task.type === TASK_TYPE_SHOPIFY) {
     return 'shopify.process_order';
   }
 
-  if (task && task.type === 'image_render') {
+  if (task && task.type === TASK_TYPE_IMAGE_RENDER) {
     return 'render.route';
   }
 
   return null;
 }
 
+/**
+ * @description Legacy direct tool execution path — permanently disabled in the canonical pipeline.
+ * @deprecated Direct client-side tool execution bypasses the TaskEngine lifecycle. Always returns a failure result.
+ * @param {string} toolName - Dot-separated tool path (ignored).
+ * @param {Object} payload - Tool payload (ignored).
+ * @param {Object} context - Workflow context (ignored).
+ * @returns {Promise<ExecutionResult>} Always resolves with `{ success: false, error: 'legacy_execution_disabled:executeTool' }`.
+ */
 export async function executeTool(toolName, payload, context) {
   // LEGACY: direct client-side tool execution bypasses canonical TaskEngine lifecycle.
   warnLegacyExecutionPath('core/task-handling.executeTool', {
@@ -381,6 +541,11 @@ export async function executeTool(toolName, payload, context) {
   return { success: false, error: 'legacy_execution_disabled:executeTool' };
 }
 
+/**
+ * @description Executes a task via the bridge server's `/task/{id}/execute` endpoint, registering the task first if needed.
+ * @param {Task} task - The task to execute; must have a valid `type` field.
+ * @returns {Promise<ExecutionResult>} Resolves with the execution result returned by the bridge server.
+ */
 export async function executeTask(task) {
   // Canonical pipeline step: createTask -> enqueueTask -> claimTask -> executeTask -> ackTask
   if (!task || !task.type) {
@@ -426,6 +591,12 @@ export async function executeTask(task) {
 }
 
 // --- Desk/queue helpers ---
+/**
+ * @description Normalizes a raw priority value, falling back to {@link inferDefaultPriority} when the value is not 0, 1, or 2.
+ * @param {*} priority - The priority value to normalize.
+ * @param {Task} task - The task used for inferring default priority when the explicit value is invalid.
+ * @returns {number} Normalized priority: 0, 1, or 2.
+ */
 export function normalizePriority(priority, task) {
   if (priority === 0 || priority === 1 || priority === 2) {
     return priority;
@@ -434,10 +605,20 @@ export function normalizePriority(priority, task) {
   return inferDefaultPriority(task);
 }
 
+/**
+ * @description Computes a load score for a desk equal to its queue length plus one if a task is currently active.
+ * @param {Desk} desk - The desk to score.
+ * @returns {number} Load score; lower is less loaded.
+ */
 export function getDeskLoadScore(desk) {
   return desk.queue.length + (desk.currentTask ? 1 : 0);
 }
 
+/**
+ * @description Selects the least-loaded desk for a given task, preferring desks already processing the same task type.
+ * @param {Task} task - The task that needs a desk assignment.
+ * @returns {Desk|null} The best available desk, or null if no desks exist.
+ */
 export function findBestDeskForTask(task) {
   const sameTypeProcessingDesks = desks.filter((desk) => desk.currentTask && desk.currentTask.type === task.type);
   const deskPool = sameTypeProcessingDesks.length > 0 ? sameTypeProcessingDesks : desks;
@@ -456,6 +637,12 @@ export function findBestDeskForTask(task) {
   return bestDesk;
 }
 
+/**
+ * @description Normalizes a raw task object, applying type-specific defaults and validating required fields.
+ * @param {Partial<Task>} task - The raw task object to normalize.
+ * @returns {Task} A fully normalized task with all required fields set.
+ * @throws {Error} Throws `'missing_prompt'` when normalizing an `image_render` task that has no design prompt.
+ */
 export function normalizeTask(task) {
   const payload = task.payload && typeof task.payload === 'object' ? { ...task.payload } : {};
   const fixedRenderChannelId = '1491500223288184964';
@@ -466,13 +653,13 @@ export function normalizeTask(task) {
 
   const normalizedTask = {
     id: task.id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    type: task.type ?? 'discord',
+    type: task.type ?? TASK_TYPE_DISCORD,
     tool: task.tool ?? null,
     title: task.title ?? 'Untitled task',
     progress: task.progress ?? 0,
     required: task.required ?? 100,
     priority: normalizePriority(task.priority, task),
-    status: task.status ?? 'pending',
+    status: task.status ?? TASK_STATUS_PENDING,
     action: task.action ?? null,
     payload,
     retries: task.retries ?? 0,
@@ -482,7 +669,7 @@ export function normalizeTask(task) {
     workflowContextInput: task.workflowContextInput ? cloneContext(task.workflowContextInput) : null
   };
 
-  if (normalizedTask.type === 'discord') {
+  if (normalizedTask.type === TASK_TYPE_DISCORD) {
     normalizedTask.payload = {
       channelId: normalizedTask.payload && normalizedTask.payload.channelId ? normalizedTask.payload.channelId : null,
       content: normalizedTask.payload && typeof normalizedTask.payload.content === 'string' ? normalizedTask.payload.content : '',
@@ -498,7 +685,7 @@ export function normalizeTask(task) {
     }
   }
 
-  if (normalizedTask.type === 'image_render') {
+  if (normalizedTask.type === TASK_TYPE_IMAGE_RENDER) {
     normalizedTask.renderId = task.renderId ?? payload.renderId ?? normalizedTask.id;
     normalizedTask.productId = task.productId ?? payload.productId ?? normalizedTask.id;
     normalizedTask.provider = task.provider ?? payload.provider ?? 'openai';
@@ -536,6 +723,16 @@ export function normalizeTask(task) {
   return normalizedTask;
 }
 
+/**
+ * @description Sends a task acknowledgement to the bridge server, completing the canonical `execute → ack` lifecycle step.
+ * Accepts two calling conventions: `(taskObject, ackObject)` or `(taskId, status, retries, executionResult, payload)`.
+ * @param {Task|string} taskOrId - The task object or its string ID.
+ * @param {{ status: string, retries: number, executionResult: ExecutionResult|null, payload?: Object }|string} statusOrAck - An ack object when `taskOrId` is a Task, or a status string when `taskOrId` is a string ID.
+ * @param {number} [retries] - Retry count (only used in the string-ID calling convention).
+ * @param {ExecutionResult} [executionResult] - Execution result (only used in the string-ID calling convention).
+ * @param {Object} [payload] - Task payload (only used in the string-ID calling convention).
+ * @returns {Promise<void>}
+ */
 export async function sendTaskAck(taskOrId, statusOrAck, retries, executionResult, payload) {
   let task = null;
   let taskId = null;
@@ -562,7 +759,7 @@ export async function sendTaskAck(taskOrId, statusOrAck, retries, executionResul
     };
   }
 
-  if (!taskId || !ack || (ack.status !== 'done' && ack.status !== 'failed')) {
+  if (!taskId || !ack || (ack.status !== TASK_STATUS_DONE && ack.status !== TASK_STATUS_FAILED)) {
     return;
   }
 
@@ -663,6 +860,13 @@ function completeTaskThroughAck(task, ackStatus, executionResult) {
   });
 }
 
+/**
+ * @description Fires the `/task/{id}/start` bridge request to mark a task as started, with automatic retry on transient failures.
+ * Start sync is observability-only; failures are logged but do not block task execution.
+ * @param {Task} task - The task whose start should be synced to the bridge server.
+ * @param {number} [attempt=0] - Current retry attempt count (used internally for exponential back-off).
+ * @returns {void}
+ */
 export function syncTaskStart(task, attempt = 0) {
   if (!task || !task.id || task._startedSynced || task._startSyncInFlight || task._startSyncDisabled) {
     return;
@@ -672,7 +876,7 @@ export function syncTaskStart(task, attempt = 0) {
 
   (async () => {
     try {
-      if (task.type === 'image_render' || (typeof task.id === 'string' && task.id.startsWith('manual-'))) {
+      if (task.type === TASK_TYPE_IMAGE_RENDER || (typeof task.id === 'string' && task.id.startsWith('manual-'))) {
         await registerTaskInBridge(task);
       }
 
@@ -714,6 +918,11 @@ export function syncTaskStart(task, attempt = 0) {
   })();
 }
 
+/**
+ * @description Checks whether a task with the given ID is currently active or queued at any desk.
+ * @param {string} taskId - The task ID to search for.
+ * @returns {boolean} True if the task is found in any desk's current task or queue; false otherwise.
+ */
 export function hasTaskInSimulation(taskId) {
   if (!taskId) {
     return false;
@@ -732,6 +941,13 @@ export function hasTaskInSimulation(taskId) {
   return false;
 }
 
+/**
+ * @description Triggers asynchronous execution and ACK for a completed task, emitting TASK_COMPLETED and applying workflow completion logic.
+ * Clears the desk's current task slot immediately so the next task can be claimed.
+ * @param {Desk} desk - The desk at which the task was completed.
+ * @param {Task} task - The task that finished its required work ticks.
+ * @returns {void}
+ */
 export function handleTaskExecutionResult(desk, task) {
   console.log('[TASK]', 'completed', task.type, task.title);
   console.log('[TASK]', 'before_execution', task.id, {
@@ -751,7 +967,7 @@ export function handleTaskExecutionResult(desk, task) {
         success: !(executionResult && executionResult.success === false)
       });
 
-      emitEvent('TASK_COMPLETED', {
+      emitEvent(EVENT_TASK_COMPLETED, {
         taskId: task.id,
         taskType: task.type,
         deskIndex: desks.indexOf(desk),
@@ -761,12 +977,12 @@ export function handleTaskExecutionResult(desk, task) {
         content: task.payload && typeof task.payload.content === 'string' ? task.payload.content : null
       });
       applyWorkflowTaskCompletion(task, executionResult);
-      const ackStatus = executionResult && executionResult.success === false ? 'failed' : 'done';
+      const ackStatus = executionResult && executionResult.success === false ? TASK_STATUS_FAILED : TASK_STATUS_DONE;
       task.localLifecycleStatus = ackStatus;
       await completeTaskThroughAck(task, ackStatus, executionResult || { success: false, error: 'Missing execution result' });
       desk.completedTasks += 1;
     } catch (error) {
-      emitEvent('TASK_COMPLETED', {
+      emitEvent(EVENT_TASK_COMPLETED, {
         taskId: task.id,
         taskType: task.type,
         deskIndex: desks.indexOf(desk),
@@ -778,7 +994,7 @@ export function handleTaskExecutionResult(desk, task) {
 
       // If execution never completed, ACK is blocked by guard and we keep lifecycle non-authoritative in UI.
       if (task && task._executionComplete !== true) {
-        task.localLifecycleStatus = 'awaiting_ack';
+        task.localLifecycleStatus = TASK_STATUS_AWAITING_ACK;
         console.error('[TASK]', 'execution_incomplete_ack_blocked', {
           taskId: task.id,
           error: error && error.message ? error.message : 'Execution failed'
@@ -788,8 +1004,8 @@ export function handleTaskExecutionResult(desk, task) {
 
       const failureResult = { success: false, error: error && error.message ? error.message : 'Execution failed' };
       applyWorkflowTaskCompletion(task, failureResult);
-      task.localLifecycleStatus = 'failed';
-      await completeTaskThroughAck(task, 'failed', failureResult);
+      task.localLifecycleStatus = TASK_STATUS_FAILED;
+      await completeTaskThroughAck(task, TASK_STATUS_FAILED, failureResult);
       desk.completedTasks += 1;
     } finally {
       task._executionInFlight = false;
@@ -799,9 +1015,15 @@ export function handleTaskExecutionResult(desk, task) {
   desk.currentTask = null;
 }
 
+/**
+ * @description Normalizes and places a task onto the best available desk, emitting TASK_CREATED (and RENDER_TASK_CREATED for image renders).
+ * @param {Partial<Task>} task - The raw task object to enqueue.
+ * @returns {Desk|null} The desk the task was added to, or null if the task is a duplicate or no desk is available.
+ * @throws {Error} Throws `'missing_prompt'` if the task is an `image_render` type with no design prompt.
+ */
 export function addTaskToDesk(task) {
   const normalizedTask = normalizeTask(task);
-  if (normalizedTask.type === 'image_render' && !normalizedTask.content) {
+  if (normalizedTask.type === TASK_TYPE_IMAGE_RENDER && !normalizedTask.content) {
     throw new Error('missing_prompt');
   }
 
@@ -816,7 +1038,7 @@ export function addTaskToDesk(task) {
 
   const queuedTask = {
     ...normalizedTask,
-    status: 'pending',
+    status: TASK_STATUS_PENDING,
     payload: normalizedTask && typeof normalizedTask.payload === 'object' && normalizedTask.payload !== null
       ? { ...normalizedTask.payload }
       : {}
@@ -842,7 +1064,7 @@ export function addTaskToDesk(task) {
     priority: queuedTask.priority,
     workflowId: queuedTask.workflowId || null
   });
-  if (queuedTask.type === 'image_render') {
+  if (queuedTask.type === TASK_TYPE_IMAGE_RENDER) {
     emitEvent('RENDER_TASK_CREATED', {
       taskId: queuedTask.id,
       productId: queuedTask.productId || (queuedTask.payload && queuedTask.payload.productId) || queuedTask.id,
@@ -854,12 +1076,17 @@ export function addTaskToDesk(task) {
   return desk;
 }
 
+/**
+ * @description Routes an incoming task to the correct handler: starts a product workflow for `start_product_workflow` actions, or enqueues the task directly.
+ * @param {Partial<Task>} task - The task to route and ingest; silently ignored if falsy or missing a type.
+ * @returns {void}
+ */
 export function ingestTask(task) {
   if (!task || !task.type) {
     return;
   }
 
-  if (task.type === 'discord' && task.action === 'start_product_workflow') {
+  if (task.type === TASK_TYPE_DISCORD && task.action === ACTION_START_PRODUCT_WORKFLOW) {
     createProductWorkflowFromTask(task);
     return;
   }
@@ -867,6 +1094,10 @@ export function ingestTask(task) {
   addTaskToDesk(task);
 }
 
+/**
+ * @description Randomly injects synthetic Discord and Shopify tasks into the simulation; only active in DEV_MODE.
+ * @returns {void}
+ */
 export function simulateIncomingTasks() {
   if (!window.DEV_MODE) {
     return;
@@ -887,6 +1118,11 @@ export function simulateIncomingTasks() {
   }
 }
 
+/**
+ * @description Returns a safe, read-only summary of a task, omitting internal lifecycle fields.
+ * @param {Task|null|undefined} task - The task to sanitize.
+ * @returns {TaskSummary|null} A sanitized view object, or null if the task is falsy.
+ */
 export function sanitizeTaskForView(task) {
   if (!task) {
     return null;
@@ -914,6 +1150,11 @@ export function sanitizeTaskForView(task) {
 let bridgeLastEventId = 0;
 let bridgePollingStarted = false;
 
+/**
+ * @description Polls the bridge server for new events and appends them to the event store.
+ * Silently ignores network errors to avoid disrupting the simulation loop.
+ * @returns {Promise<void>}
+ */
 export async function pollBridgeTasks() {
   try {
     const response = await fetch(`/events?after=${bridgeLastEventId}`);
@@ -938,6 +1179,10 @@ export async function pollBridgeTasks() {
   }
 }
 
+/**
+ * @description Starts the recurring bridge polling interval; safe to call multiple times (idempotent).
+ * @returns {void}
+ */
 export function startBridgePolling() {
   if (bridgePollingStarted) {
     return;

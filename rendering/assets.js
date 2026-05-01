@@ -37,7 +37,6 @@ export const assetPaths = [
   // once a compositing strategy for image mode is decided.
   'assets/slothworldassets/sloth_worker_desk_facing_left_back_01.png',
   'assets/slothworldassets/sloth_worker_desk_facing_left_front_01.png',
-  'assets/slothworldassets/sloth_worker_desk_facing_left_front_02.png',
   // largeFront: tall individual sprite (875×1216 RGB, no alpha). Preloaded; not yet wired
   // into rendering — intended use (blend mode / crop / position) to be determined.
   'assets/slothworldassets/sloth_worker_desk_facing_right_front_01.png',
@@ -118,14 +117,15 @@ export const assetPaths = [
  */
 export const ASSET_MAPPING = Object.freeze({
   agents: Object.freeze({
-    // Cropped individual sprite (435×381 RGBA) — drawn centred on resolved desk position.
+    // Cropped individual sprite (435×381 RGBA) — fallback for entity layer.
     base: 'sloth_worker_desk_facing_right_back_01.png',
-    // Full-scene RGB layer sprites (1376×768, no alpha) — preloaded for future use.
-    // Not active in rendering: SCENE_COMPOSITE.slothSceneLayers = false.
-    sceneLayers: Object.freeze([
+    // All confirmed sloth variants. Order matches SLOTH_SLOTS in world-scene-asset-renderer.js.
+    // Do not add filenames here that have not been verified to exist on disk.
+    variants: Object.freeze([
+      'sloth_worker_desk_facing_right_back_01.png',
       'sloth_worker_desk_facing_left_back_01.png',
       'sloth_worker_desk_facing_left_front_01.png',
-      'sloth_worker_desk_facing_left_front_02.png',
+      'sloth_worker_desk_facing_right_front_01.png',
     ]),
     // Large front sprite (875×1216 RGB, no alpha) — preloaded; rendering use TBD.
     largeFront: 'sloth_worker_desk_facing_right_front_01.png',

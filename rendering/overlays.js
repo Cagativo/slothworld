@@ -1,5 +1,17 @@
 import { canvas } from '../core/app-state.js';
-import { spriteConfigs } from '../core/constants.js';
+import {
+  spriteConfigs,
+  TASK_TYPE_DISCORD,
+  TASK_TYPE_SHOPIFY,
+  TASK_STATUS_FAILED,
+  TASK_STATUS_AWAITING_ACK,
+  TASK_STATUS_DONE,
+  WORKFLOW_STATUS_RUNNING,
+  TASK_PROGRESS_ACK_THRESHOLD,
+  AGENT_STATE_MOVING,
+  AGENT_STATE_SITTING,
+  AGENT_STATE_WORKING
+} from '../core/constants.js';
 
 // --- Shared rendering state ---
 export const uiFxState = {
@@ -81,11 +93,11 @@ export function getDeskPriorityColor(priority) {
 }
 
 export function getTaskIcon(taskType) {
-  if (taskType === 'discord') {
+  if (taskType === TASK_TYPE_DISCORD) {
     return 'D';
   }
 
-  if (taskType === 'shopify') {
+  if (taskType === TASK_TYPE_SHOPIFY) {
     return 'S';
   }
 
@@ -107,11 +119,11 @@ export function getRoleTint(role) {
 export function getAgentStateLabel(agent) {
   const status = String(agent.status || '').toLowerCase();
 
-  if (status === 'working' || status === 'executing' || status === 'claimed') {
+  if (status === AGENT_STATE_WORKING || status === 'executing' || status === 'claimed') {
     return 'WORK';
   }
 
-  if (status === 'moving') {
+  if (status === AGENT_STATE_MOVING) {
     return 'MOVE';
   }
 
@@ -119,11 +131,11 @@ export function getAgentStateLabel(agent) {
     return 'DONE';
   }
 
-  if (status === 'failed' || status === 'error') {
+  if (status === TASK_STATUS_FAILED || status === 'error') {
     return 'FAIL';
   }
 
-  if (status === 'sitting') {
+  if (status === AGENT_STATE_SITTING) {
     return 'SEAT';
   }
 
@@ -211,10 +223,10 @@ export function drawDeskTaskOverlay(ctx, desk) {
   const nodeStatus = String(activeNode.status || '').toLowerCase();
   let progressRatio = 0;
 
-  if (nodeStatus === 'completed' || nodeStatus === 'acknowledged' || nodeStatus === 'failed') {
+  if (nodeStatus === 'completed' || nodeStatus === 'acknowledged' || nodeStatus === TASK_STATUS_FAILED) {
     progressRatio = 1;
-  } else if (nodeStatus === 'awaiting_ack') {
-    progressRatio = 0.95;
+  } else if (nodeStatus === TASK_STATUS_AWAITING_ACK) {
+    progressRatio = TASK_PROGRESS_ACK_THRESHOLD;
   } else if (nodeStatus === 'executing' || nodeStatus === 'claimed') {
     progressRatio = 0.6;
   }
@@ -229,7 +241,7 @@ export function drawDeskTaskOverlay(ctx, desk) {
   const taskType = activeNode.metadata && typeof activeNode.metadata.taskType === 'string'
     ? activeNode.metadata.taskType
     : '';
-  if (taskType === 'shopify') {
+  if (taskType === TASK_TYPE_SHOPIFY) {
     barGradient.addColorStop(0, '#2f8e68');
     barGradient.addColorStop(0.5, '#50d890');
     barGradient.addColorStop(1, '#95ffe8');
@@ -385,7 +397,7 @@ export function drawAgentIdentityLayer(ctx, agent, currentTaskNode) {
   const iconY = agent.y - 24;
   ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
   ctx.fillRect(iconX - 6, iconY - 8, 12, 12);
-  ctx.fillStyle = taskType === 'shopify' ? '#7ef7b3' : '#7ecfff';
+  ctx.fillStyle = taskType === TASK_TYPE_SHOPIFY ? '#7ef7b3' : '#7ecfff';
   ctx.font = '9px monospace';
   ctx.fillText(icon, iconX, iconY + 1);
 }
@@ -446,11 +458,11 @@ export function drawWorkflowOverlay(ctx, workflowList) {
       const x = baseX + 10 + stepIndex * 44;
       const status = workflow.stepStatuses[stepIndex] || 'pending';
       let fill = 'rgba(112, 132, 158, 0.6)';
-      if (status === 'done') {
+      if (status === TASK_STATUS_DONE) {
         fill = 'rgba(126, 247, 179, 0.95)';
-      } else if (status === 'running') {
+      } else if (status === WORKFLOW_STATUS_RUNNING) {
         fill = 'rgba(127, 207, 255, 0.95)';
-      } else if (status === 'failed') {
+      } else if (status === TASK_STATUS_FAILED) {
         fill = 'rgba(255, 120, 120, 0.95)';
       }
 
