@@ -1,10 +1,10 @@
 export const agentVisualConfig = {
   operator: {
-    baseSprite: 'julia_idle.png',
+    baseSprite: 'sloth_idle.png',
     animations: {
       idle: {
-        key: 'julia_idle',
-        sprite: 'Julia-Idle.png',
+        key: 'sloth_idle',
+        sprite: 'sloth_idle.png',
         frameWidth: 32,
         frameHeight: 32,
         frameCount: 4,
@@ -12,26 +12,17 @@ export const agentVisualConfig = {
         loop: true
       },
       queued: {
-        key: 'julia_idle',
-        sprite: 'Julia-Idle.png',
+        key: 'sloth_idle',
+        sprite: 'sloth_idle.png',
         frameWidth: 32,
         frameHeight: 32,
         frameCount: 4,
         fps: 4,
         loop: true
       },
-      moving: {
-        key: 'julia_walk',
-        sprite: 'Julia_walk_Foward.png',
-        frameWidth: 64,
-        frameHeight: 64,
-        frameCount: 4,
-        fps: 8,
-        loop: true
-      },
       working: {
-        key: 'julia_typing',
-        sprite: 'Julia_PC.png',
+        key: 'sloth_working',
+        sprite: 'sloth_working.png',
         frameWidth: 64,
         frameHeight: 64,
         frameCount: 6,
@@ -39,30 +30,30 @@ export const agentVisualConfig = {
         loop: true
       },
       awaiting_ack: {
-        key: 'julia_typing',
-        sprite: 'Julia_PC.png',
+        key: 'sloth_working',
+        sprite: 'sloth_working.png',
         frameWidth: 64,
         frameHeight: 64,
         frameCount: 6,
         fps: 5,
         loop: true
       },
-      delivering: {
-        key: 'julia_walk',
-        sprite: 'Julia_walk_Foward.png',
-        frameWidth: 64,
-        frameHeight: 64,
-        frameCount: 4,
-        fps: 8,
-        loop: true
-      },
       error: {
-        key: 'julia_error',
-        sprite: 'Julia.png',
+        key: 'sloth_error',
+        sprite: 'sloth_error.png',
         frameWidth: 32,
         frameHeight: 32,
         frameCount: 4,
         fps: 7,
+        loop: true
+      },
+      acknowledged: {
+        key: 'sloth_idle',
+        sprite: 'sloth_idle.png',
+        frameWidth: 32,
+        frameHeight: 32,
+        frameCount: 4,
+        fps: 5,
         loop: true
       }
     }
@@ -72,10 +63,9 @@ export const agentVisualConfig = {
 // UI-only sprite atlas aliases.
 // Keys are animation identifiers referenced by the role config above.
 export const agentAnimationSprites = {
-  julia_idle: 'Julia-Idle.png',
-  julia_typing: 'Julia_PC.png',
-  julia_walk: 'Julia_walk_Foward.png',
-  julia_error: 'Julia.png'
+  sloth_idle: 'sloth_idle.png',
+  sloth_working: 'sloth_working.png',
+  sloth_error: 'sloth_error.png'
 };
 
 export function resolveAgentVisual(role, state) {
