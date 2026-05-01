@@ -1,19 +1,7 @@
 import { isSystemEvent } from '../../core/world/eventTaxonomy.js';
 
-function isDevMode() {
-  if (typeof process !== 'undefined' && process && process.env && process.env.NODE_ENV) {
-    return process.env.NODE_ENV !== 'production';
-  }
-
-  if (typeof window !== 'undefined' && window && window.location) {
-    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  }
-
-  return true;
-}
-
 export function assertNoSystemEventInLifecycleDerivation(events, context) {
-  if (!isDevMode() || !Array.isArray(events)) {
+  if (!Array.isArray(events)) {
     return;
   }
 
