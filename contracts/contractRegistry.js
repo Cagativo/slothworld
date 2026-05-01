@@ -138,7 +138,10 @@ export const TAXONOMY_CTX = Object.freeze({
     'TASK_CLAIMED',
     'TASK_EXECUTE_STARTED',
     'TASK_EXECUTE_FINISHED',
-    'TASK_ACKED'
+    'TASK_ACKED',
+    'TASK_REQUEUED',
+    'TASK_EXECUTE_SKIPPED_IDEMPOTENT',
+    'TASK_ACK_SIDE_EFFECT_FAILED'
   ]),
   SYSTEM_EVENTS: Object.freeze([
     'TASK_NOTIFICATION_SENT',
@@ -150,9 +153,7 @@ export const TAXONOMY_CTX = Object.freeze({
     'AGENT_ASSIGNED_IDLE'
   ]),
   UNREGISTERED_EVENTS: Object.freeze([
-    'TASK_REQUEUED',
-    'TASK_EXECUTE_SKIPPED_IDEMPOTENT',
-    'TASK_ACK_SIDE_EFFECT_FAILED'
+    // empty — TASK_REQUEUED, TASK_EXECUTE_SKIPPED_IDEMPOTENT, and TASK_ACK_SIDE_EFFECT_FAILED moved to LIFECYCLE_EVENTS
   ]),
   TASK_STATUS_ENUM: Object.freeze([
     'unknown', 'created', 'queued', 'claimed',

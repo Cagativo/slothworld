@@ -4,7 +4,10 @@ export const LIFECYCLE_EVENTS = Object.freeze([
   'TASK_CLAIMED',
   'TASK_EXECUTE_STARTED',
   'TASK_EXECUTE_FINISHED',
-  'TASK_ACKED'
+  'TASK_ACKED',
+  'TASK_REQUEUED',
+  'TASK_EXECUTE_SKIPPED_IDEMPOTENT',
+  'TASK_ACK_SIDE_EFFECT_FAILED'
 ]);
 
 export const SYSTEM_EVENTS = Object.freeze([
@@ -13,8 +16,14 @@ export const SYSTEM_EVENTS = Object.freeze([
   'TASK_NOTIFICATION_FAILED'
 ]);
 
+export const AGENT_EVENTS = Object.freeze([
+  'AGENT_SPAWNED',
+  'AGENT_ASSIGNED_IDLE'
+]);
+
 const lifecycleSet = new Set(LIFECYCLE_EVENTS);
 const systemSet = new Set(SYSTEM_EVENTS);
+const agentSet = new Set(AGENT_EVENTS);
 const warnedUnknownTypes = new Set();
 
 const strictUnknownEventTypes = typeof process !== 'undefined'
@@ -36,13 +45,14 @@ function isDevMode() {
 
 export const LIFECYCLE_EVENT_TYPES = LIFECYCLE_EVENTS;
 export const SYSTEM_EVENT_TYPES = SYSTEM_EVENTS;
+export const AGENT_EVENT_TYPES = AGENT_EVENTS;
 
 function guardUnknownEventType(type) {
   if (!isDevMode() || typeof type !== 'string') {
     return;
   }
 
-  if (lifecycleSet.has(type) || systemSet.has(type) || warnedUnknownTypes.has(type)) {
+  if (lifecycleSet.has(type) || systemSet.has(type) || agentSet.has(type) || warnedUnknownTypes.has(type)) {
     return;
   }
 
