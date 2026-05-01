@@ -290,7 +290,7 @@ describe('E2E — no semantic leakage', () => {
 
   it('agent-sprite components have only the expected structural keys', () => {
     const { components } = runFullPipeline(clone(GRAPH));
-    const expected = 'anomaly,componentType,id,metrics,visualState,x,y,zoneId';
+    const expected = 'anomaly,componentType,currentTaskId,deskId,id,metrics,visualState,x,y,zoneId';
     for (const c of components.filter(c => c.componentType === 'agent-sprite')) {
       const keys = Object.keys(c).sort().join(',');
       assert.equal(keys, expected, `unexpected keys on agent-sprite "${c.id}": ${keys}`);

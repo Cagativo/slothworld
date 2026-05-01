@@ -119,7 +119,7 @@ export const ASSET_MAPPING = Object.freeze({
   agents: Object.freeze({
     // Cropped individual sprite (435×381 RGBA) — fallback for entity layer.
     base: 'sloth_worker_desk_facing_right_back_01.png',
-    // All confirmed sloth variants. Order matches SLOTH_SLOTS in world-scene-asset-renderer.js.
+    // All confirmed sloth variants used by deterministic agent sprite selection.
     // Do not add filenames here that have not been verified to exist on disk.
     variants: Object.freeze([
       'sloth_worker_desk_facing_right_back_01.png',

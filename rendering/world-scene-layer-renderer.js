@@ -34,12 +34,10 @@ import {
   renderCoreLayer,
   renderZoneLayer,
   renderConnectionLayer,
-  renderEntityLayer,
   renderPropLayer,
   renderEffectLayer,
   renderUIOverlayLayer,
 } from './world-scene-asset-renderer.js';
-import { ASSET_MAPPING, loadedAssets } from './assets.js';
 
 /**
  * Draw the complete WorldScene in the fixed 8-layer order.
@@ -87,15 +85,9 @@ export function renderAllLayers(ctx, components, frame) {
   renderConnectionLayer(ctx, components, entityPositions);
 
   // ── Layers 5–8: agents, props, effects, UI overlay ─────────────────────
-  // Suppressed in image mode — the background image is the sole visual for now.
-  // Agent sprites, props, and UI panels will be re-enabled once placement and
-  // visual integration with the background are confirmed correct.
-  // In procedural mode (no background image) geometry circles remain as fallback.
-  const bgLoaded = !!loadedAssets[ASSET_MAPPING.environment.sceneBackground];
-  if (!bgLoaded) {
-    renderAllAgentEntities(ctx, components, entityPositions);
-  }
-  renderEntityLayer(ctx, components, entityPositions);
+  // Layer 5 agent rendering always runs and resolves positions through
+  // entityPositions. Geometry fallback still applies while sprite assets load.
+  renderAllAgentEntities(ctx, components, entityPositions);
   // renderPropLayer, renderEffectLayer, renderUIOverlayLayer
   // are still suppressed in image mode. renderEffectLayer is already a hard no-op.
 }

@@ -15,6 +15,8 @@
  *  - Pure mapping: visualState → { fillStyle, strokeStyle, radius, label }
  */
 
+import { loadedAssets, ASSET_MAPPING } from './assets.js';
+
 // ---------------------------------------------------------------------------
 // Static visual style table — one entry per supported visualState
 // ---------------------------------------------------------------------------
@@ -43,6 +45,84 @@ export const AGENT_VISUAL_STYLES = Object.freeze({
 /** Fallback style used when visualState is not in AGENT_VISUAL_STYLES. */
 const FALLBACK_STYLE = AGENT_VISUAL_STYLES.unknown;
 
+const AGENT_W = 62;
+const AGENT_H = 54;
+
+/**
+ * Per-desk render dimensions — sized to match each sprite's natural aspect ratio
+ * at a scale appropriate for the 1060×520 canvas.
+ *
+ * right_front: 360×500 (portrait)   → 90×125
+ * right_back:  365×320 (near-square) → 110×96
+ * left_front:  392×219 (landscape)  → 110×61
+ * left_back:   392×219 (landscape)  → 110×61
+ */
+const DESK_SPRITE_SIZES = Object.freeze({
+  'desk-0': Object.freeze({ w: 180, h: 170  }),
+  'desk-1': Object.freeze({ w: 300, h: 150  }),
+  'desk-2': Object.freeze({ w: 300, h: 150  }),
+  'desk-3': Object.freeze({ w: 200, h: 175  }),
+  'desk-4': Object.freeze({ w: 300, h: 150  }),
+  'desk-5': Object.freeze({ w: 300, h: 150  }),
+});
+
+/**
+ * Per-desk draw offset — compensates for sprite composition asymmetry where the
+ * desk graphic visual center is not at the frame center.
+ *
+ * Analysis (natural image → scaled frame):
+ *  right_front: desk at ~50% x  → dx≈0
+ *  left_front:  desk at ~47% x  → dx≈+3   (3px left of center)
+ *  right_back:  desk at ~52% x  → dx≈-2
+ *  left_back:   desk at ~35% x  → dx≈+16.5 (16.5px left of center)
+ *
+ * Desks 1/2 (left_front) are calibration reference (+3px offset baked into
+ * DESK_POSITIONS). Desks 4/5 (left_back) need +14 extra to match that reference.
+ */
+const DESK_SPRITE_OFFSETS = Object.freeze({
+  'desk-0': Object.freeze({ dx:  0, dy: 0 }),
+  'desk-1': Object.freeze({ dx:  0, dy: 0 }),
+  'desk-2': Object.freeze({ dx:  0, dy: 0 }),
+  'desk-3': Object.freeze({ dx:  0, dy: 0 }),
+  'desk-4': Object.freeze({ dx: 14, dy: 0 }),  // left_back: desk 14px further left than left_front
+  'desk-5': Object.freeze({ dx: 14, dy: 0 }),
+});
+
+const DESK_SPRITE_BY_ID = Object.freeze({
+  'desk-0': 'sloth_worker_desk_facing_right_front_01.png',
+  'desk-1': 'sloth_worker_desk_facing_left_front_01.png',
+  'desk-2': 'sloth_worker_desk_facing_left_front_01.png',
+  'desk-3': 'sloth_worker_desk_facing_right_back_01.png',
+  'desk-4': 'sloth_worker_desk_facing_left_back_01.png',
+  'desk-5': 'sloth_worker_desk_facing_left_back_01.png',
+});
+
+function spriteForComponent(component) {
+  if (component && component.deskId && DESK_SPRITE_BY_ID[component.deskId]) {
+    return DESK_SPRITE_BY_ID[component.deskId];
+  }
+
+  const match = component && typeof component.id === 'string'
+    ? /^sloth-(\d+)$/.exec(component.id)
+    : null;
+  if (match) {
+    const idx = Number(match[1]) - 1;
+    const spriteByIndex = [
+      'sloth_worker_desk_facing_right_front_01.png',
+      'sloth_worker_desk_facing_left_front_01.png',
+      'sloth_worker_desk_facing_left_front_01.png',
+      'sloth_worker_desk_facing_right_back_01.png',
+      'sloth_worker_desk_facing_left_back_01.png',
+      'sloth_worker_desk_facing_left_back_01.png',
+    ];
+    if (idx >= 0 && idx < spriteByIndex.length) {
+      return spriteByIndex[idx];
+    }
+  }
+
+  return ASSET_MAPPING.agents.base;
+}
+
 // ---------------------------------------------------------------------------
 // Renderer
 // ---------------------------------------------------------------------------
@@ -62,15 +142,31 @@ export function renderAgentEntity(ctx, component) {
   const x     = typeof component.x === 'number' ? component.x : 0;
   const y     = typeof component.y === 'number' ? component.y : 0;
   const style = AGENT_VISUAL_STYLES[component.visualState] ?? FALLBACK_STYLE;
+  const spriteFilename = spriteForComponent(component);
+  const spriteImage = loadedAssets[spriteFilename];
 
-  // Body circle
-  ctx.beginPath();
-  ctx.arc(x, y, style.radius, 0, Math.PI * 2);
-  ctx.fillStyle   = style.fill;
-  ctx.strokeStyle = style.stroke;
-  ctx.lineWidth   = 2;
-  ctx.fill();
-  ctx.stroke();
+  const sizes   = (component.deskId && DESK_SPRITE_SIZES[component.deskId])
+    ? DESK_SPRITE_SIZES[component.deskId]
+    : { w: AGENT_W, h: AGENT_H };
+  const offsets = (component.deskId && DESK_SPRITE_OFFSETS[component.deskId])
+    ? DESK_SPRITE_OFFSETS[component.deskId]
+    : { dx: 0, dy: 0 };
+
+  if (spriteImage) {
+    ctx.drawImage(spriteImage,
+      x - sizes.w / 2 + offsets.dx,
+      y - sizes.h / 2 + offsets.dy,
+      sizes.w, sizes.h);
+  } else {
+    // Keep geometry fallback while images are still loading.
+    ctx.beginPath();
+    ctx.arc(x, y, style.radius, 0, Math.PI * 2);
+    ctx.fillStyle   = style.fill;
+    ctx.strokeStyle = style.stroke;
+    ctx.lineWidth   = 2;
+    ctx.fill();
+    ctx.stroke();
+  }
 
   // Anomaly ring — drawn over the body when anomaly is present
   if (component.anomaly) {
@@ -81,11 +177,33 @@ export function renderAgentEntity(ctx, component) {
     ctx.stroke();
   }
 
-  // State label — small text centred below the circle
-  ctx.font      = '8px monospace';
-  ctx.fillStyle = style.stroke;
-  ctx.textAlign = 'center';
-  ctx.fillText(style.label, x, y + style.radius + 10);
+  // Name tag — always shown above the sprite (follows composition offset so it
+  // centres over the actual sprite rather than the raw anchor point)
+  if (component.id) {
+    const tagX = x + offsets.dx;
+    const tagY = y - sizes.h / 2 + offsets.dy - 4;
+    ctx.font         = 'bold 9px monospace';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle    = 'rgba(0,0,0,0.55)';
+    const metrics    = ctx.measureText(component.id);
+    const pad        = 3;
+    ctx.fillRect(tagX - metrics.width / 2 - pad, tagY - 11, metrics.width + pad * 2, 13);
+    ctx.fillStyle = '#e8d8b0';
+    ctx.fillText(component.id, tagX, tagY);
+  }
+
+  // Debug-only filename label for seat calibration.
+  const isRenderDebug = typeof window !== 'undefined' &&
+    (window.__SLOTHWORLD_RENDER_DEBUG__ === true ||
+      (() => { try { return new URLSearchParams(window.location.search).has('renderDebug'); } catch (_) { return false; } })());
+  if (isRenderDebug) {
+    const label = spriteFilename.replace('.png', '');
+    ctx.font      = '8px monospace';
+    ctx.fillStyle = style.stroke;
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x, y + style.radius + 10);
+  }
 }
 
 /**
