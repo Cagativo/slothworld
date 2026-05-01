@@ -9,6 +9,14 @@
 import { getAgentState as _getAgentState, getAgentTasks } from '../../ui/selectors/agentSelectors.js';
 import { validate, runInvariants } from '../contractRegistry.js';
 
+// Wiring safety: assert the imported module is the UI-layer selector (not core/world/agentSelectors.js)
+if (typeof getAgentTasks !== 'function') {
+  throw new Error(
+    'WIRING_VIOLATION: agentSelectorsGuard imported wrong module — getAgentTasks must be a function. ' +
+    'Expected: ui/selectors/agentSelectors.js'
+  );
+}
+
 const STRICT = process.env.CONTRACT_STRICT_MODE === '1';
 
 /**
