@@ -94,6 +94,8 @@ export const assetPaths = [
   // ── UI overlays ────────────────────────────────────────────────────────────
   'assets/slothworldassets/ui_floating_display_01.png',
   'assets/slothworldassets/ui_panel_small_01.png',
+  'assets/slothworldassets/createtask.png',
+  'assets/slothworldassets/createtaskselected.png',
 
   // ── Unclassified ───────────────────────────────────────────────────────────
   'assets/slothworldassets/other_unknown_07.png',

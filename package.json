@@ -5,19 +5,20 @@
   "private": true,
   "description": "Lightweight event bridge for slothworld task ingestion",
   "scripts": {
-    "start": "node bridge-server.js",
-    "lint": "eslint rendering/",
-    "test": "npm run test:enforcement",
-    "test:enforcement": "node --test tests/adversarial-enforcement.test.mjs",
-    "test:architecture": "node --test tests/selector-contract-freeze.test.mjs tests/taxonomy-contract.test.mjs tests/anomaly-cluster-contract.test.mjs",
-    "test:readme-contract": "node --test tests/readme-architecture-contract.test.mjs",
-    "test:golden-path": "node --test tests/golden-path.test.mjs",
-    "test:adversarial": "node --test tests/adversarial-enforcement.test.mjs",
-    "test:bridge-intake": "node --test tests/bridge-intake-contract.test.mjs",
-    "test:selector-missing": "node --test tests/selector-missing-contract.test.mjs",
-    "events:list": "node cli/event-stream.js list",
-    "events:stats": "node cli/event-stream.js stats",
-    "events:task": "node cli/event-stream.js task"
+  "start": "node bridge-server.js",
+  "lint": "eslint rendering/",
+  "test": "npm run test:enforcement && npm run test:contracts",
+  "test:enforcement": "node --test tests/adversarial-enforcement.test.mjs",
+  "test:architecture": "node --test tests/selector-contract-freeze.test.mjs tests/taxonomy-contract.test.mjs tests/anomaly-cluster-contract.test.mjs",
+  "test:readme-contract": "node --test tests/readme-architecture-contract.test.mjs",
+  "test:golden-path": "node --test tests/golden-path.test.mjs",
+  "test:adversarial": "node --test tests/adversarial-enforcement.test.mjs",
+  "test:bridge-intake": "node --test tests/bridge-intake-contract.test.mjs",
+  "test:selector-missing": "node --test tests/selector-missing-contract.test.mjs",
+  "test:contracts": "cross-env CONTRACT_STRICT_MODE=1 node --test tests/contract-system.test.mjs",
+  "events:list": "node cli/event-stream.js list",
+  "events:stats": "node cli/event-stream.js stats",
+  "events:task": "node cli/event-stream.js task"
   },
   "dependencies": {
     "discord.js": "^14.16.3",
@@ -25,6 +26,7 @@
     "openai": "^6.34.0"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "eslint": "^10.2.1"
   }
 }

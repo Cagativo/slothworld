@@ -1,0 +1,460 @@
+[
+  {
+    "name": "eventTaxonomy.isLifecycleEvent",
+    "inputSchema": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "boolean"
+    },
+    "allowedValues": [
+      "TASK_CREATED",
+      "TASK_ENQUEUED",
+      "TASK_CLAIMED",
+      "TASK_EXECUTE_STARTED",
+      "TASK_EXECUTE_FINISHED",
+      "TASK_ACKED"
+    ],
+    "forbiddenValues": [
+      "TASK_NOTIFICATION_SENT",
+      "TASK_NOTIFICATION_SKIPPED",
+      "TASK_NOTIFICATION_FAILED",
+      "TASK_REQUEUED",
+      "TASK_EXECUTE_SKIPPED_IDEMPOTENT",
+      "TASK_ACK_SIDE_EFFECT_FAILED",
+      "AGENT_SPAWNED",
+      "AGENT_ASSIGNED_IDLE"
+    ],
+    "invariants": [
+      {
+        "id": "LIFECYCLE_OUTPUT_IS_BOOLEAN",
+        "expression": "return typeof output === 'boolean';"
+      },
+      {
+        "id": "LIFECYCLE_TRUE_IFF_IN_ALLOWED_SET",
+        "expression": "return output === true ? ctx.LIFECYCLE_EVENTS.includes(input.type) : !ctx.LIFECYCLE_EVENTS.includes(input.type);"
+      },
+      {
+        "id": "LIFECYCLE_SYSTEM_MUTUALLY_EXCLUSIVE",
+        "expression": "return !(ctx.LIFECYCLE_EVENTS.includes(input.type) && ctx.SYSTEM_EVENTS.includes(input.type));"
+      }
+    ],
+    "enforcement": {
+      "module": "core/world/eventTaxonomy.js",
+      "function": "isLifecycleEvent",
+      "mode": "both"
+    }
+  },
+
+  {
+    "name": "eventTaxonomy.isSystemEvent",
+    "inputSchema": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "boolean"
+    },
+    "allowedValues": [
+      "TASK_NOTIFICATION_SENT",
+      "TASK_NOTIFICATION_SKIPPED",
+      "TASK_NOTIFICATION_FAILED"
+    ],
+    "forbiddenValues": [
+      "TASK_CREATED",
+      "TASK_ENQUEUED",
+      "TASK_CLAIMED",
+      "TASK_EXECUTE_STARTED",
+      "TASK_EXECUTE_FINISHED",
+      "TASK_ACKED"
+    ],
+    "invariants": [
+      {
+        "id": "SYSTEM_OUTPUT_IS_BOOLEAN",
+        "expression": "return typeof output === 'boolean';"
+      },
+      {
+        "id": "SYSTEM_TRUE_IFF_IN_ALLOWED_SET",
+        "expression": "return output === true ? ctx.SYSTEM_EVENTS.includes(input.type) : !ctx.SYSTEM_EVENTS.includes(input.type);"
+      },
+      {
+        "id": "SYSTEM_LIFECYCLE_MUTUALLY_EXCLUSIVE",
+        "expression": "return !(ctx.LIFECYCLE_EVENTS.includes(input.type) && ctx.SYSTEM_EVENTS.includes(input.type));"
+      }
+    ],
+    "enforcement": {
+      "module": "core/world/eventTaxonomy.js",
+      "function": "isSystemEvent",
+      "mode": "both"
+    }
+  },
+
+  {
+    "name": "deriveWorldState",
+    "inputSchema": {
+      "type": "object",
+      "required": ["events"],
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["timestamp"],
+            "properties": {
+              "event":     { "type": "string" },
+              "taskId":    { "type": "string" },
+              "timestamp": { "type": "number" },
+              "payload":   { "type": "object" }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "required": ["events", "eventsByTaskId", "eventsByWorkerId"],
+      "properties": {
+        "events":           { "type": "array" },
+        "eventsByTaskId":   { "type": "object", "description": "Map<string, EventRecord[]>" },
+        "eventsByWorkerId": { "type": "object", "description": "Map<string, EventRecord[]>" }
+      },
+      "additionalProperties": false
+    },
+    "allowedValues": [],
+    "forbiddenValues": [
+      "status", "metrics", "anomalies", "lifecycle", "severity", "taskStatus"
+    ],
+    "invariants": [
+      {
+        "id": "OUTPUT_HAS_EXACTLY_THREE_KEYS",
+        "expression": "const keys = Object.keys(output); return keys.length === 3 && keys.includes('events') && keys.includes('eventsByTaskId') && keys.includes('eventsByWorkerId');"
+      },
+      {
+        "id": "EVENTS_IS_ARRAY",
+        "expression": "return Array.isArray(output.events);"
+      },
+      {
+        "id": "EVENTS_BY_TASK_ID_IS_MAP",
+        "expression": "return output.eventsByTaskId instanceof Map;"
+      },
+      {
+        "id": "EVENTS_BY_WORKER_ID_IS_MAP",
+        "expression": "return output.eventsByWorkerId instanceof Map;"
+      },
+      {
+        "id": "EVENTS_SORTED_ASC_BY_TIMESTAMP",
+        "expression": "const evts = output.events; for (let i = 1; i < evts.length; i++) { const a = evts[i-1]; const b = evts[i]; const ta = Number.isFinite(a.timestamp) ? a.timestamp : 0; const tb = Number.isFinite(b.timestamp) ? b.timestamp : 0; if (ta > tb) return false; if (ta === tb) { const ia = Number.isFinite(a.id) ? a.id : 0; const ib = Number.isFinite(b.id) ? b.id : 0; if (ia > ib) return false; } } return true;"
+      },
+      {
+        "id": "OUTPUT_CONTAINS_NO_LIFECYCLE_SEMANTICS",
+        "expression": "return !('status' in output) && !('metrics' in output) && !('anomalies' in output);"
+      },
+      {
+        "id": "INPUT_NOT_MUTATED",
+        "expression": "return output.events !== ctx.originalInput;"
+      }
+    ],
+    "enforcement": {
+      "module": "core/world/deriveWorldState.js",
+      "function": "deriveWorldState",
+      "mode": "both"
+    }
+  },
+
+  {
+    "name": "taskSelectors.getTaskStatus",
+    "inputSchema": {
+      "type": "object",
+      "required": ["indexedWorld", "taskId"],
+      "properties": {
+        "indexedWorld": {
+          "type": "object",
+          "required": ["eventsByTaskId"],
+          "properties": {
+            "events":           { "type": "array" },
+            "eventsByTaskId":   { "type": "object" },
+            "eventsByWorkerId": { "type": "object" }
+          }
+        },
+        "taskId": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "string",
+      "enum": [
+        "unknown", "created", "queued", "claimed",
+        "executing", "awaiting_ack", "completed", "failed"
+      ]
+    },
+    "allowedValues": [
+      "unknown", "created", "queued", "claimed",
+      "executing", "awaiting_ack", "completed", "failed"
+    ],
+    "forbiddenValues": [
+      "acknowledged"
+    ],
+    "invariants": [
+      {
+        "id": "OUTPUT_IN_ALLOWED_STATUS_ENUM",
+        "expression": "return ['unknown','created','queued','claimed','executing','awaiting_ack','completed','failed'].includes(output);"
+      },
+      {
+        "id": "OUTPUT_NEVER_ACKNOWLEDGED",
+        "expression": "return output !== 'acknowledged';"
+      },
+      {
+        "id": "COMPLETED_REQUIRES_TASK_ACKED_EVENT",
+        "expression": "if (output !== 'completed') return true; const events = (output === 'completed' && ctx.taskEvents) ? ctx.taskEvents : []; return events.some(e => e.type === 'TASK_ACKED' && e.payload && e.payload.status && e.payload.status !== 'failed');"
+      },
+      {
+        "id": "FAILED_REQUIRES_TASK_ACKED_FAILED_EVENT",
+        "expression": "if (output !== 'failed') return true; const events = ctx.taskEvents || []; return events.some(e => e.type === 'TASK_ACKED' && e.payload && e.payload.status === 'failed');"
+      },
+      {
+        "id": "UNKNOWN_REQUIRES_NO_EVENTS",
+        "expression": "if (output !== 'unknown') return true; const events = ctx.taskEvents || []; return events.filter(e => ctx.LIFECYCLE_EVENTS.includes(e.type)).length === 0;"
+      }
+    ],
+    "enforcement": {
+      "module": "ui/selectors/taskSelectors.js",
+      "function": "getTaskStatus",
+      "mode": "both"
+    }
+  },
+
+  {
+    "name": "agentSelectors.getAgentState",
+    "inputSchema": {
+      "type": "object",
+      "required": ["indexedWorld", "workerId"],
+      "properties": {
+        "indexedWorld": {
+          "type": "object",
+          "required": ["eventsByWorkerId"],
+          "properties": {
+            "eventsByTaskId":   { "type": "object" },
+            "eventsByWorkerId": { "type": "object" }
+          }
+        },
+        "workerId": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "string",
+      "enum": ["idle", "moving", "working", "delivering", "error"]
+    },
+    "allowedValues": ["idle", "moving", "working", "delivering", "error"],
+    "forbiddenValues": [
+      "claimed", "executing", "awaiting_ack", "failed",
+      "created", "queued", "completed", "acknowledged", "unknown"
+    ],
+    "invariants": [
+      {
+        "id": "OUTPUT_IN_AGENT_STATE_ENUM",
+        "expression": "return ['idle','moving','working','delivering','error'].includes(output);"
+      },
+      {
+        "id": "NO_TASK_STATUS_TERM_IN_OUTPUT",
+        "expression": "return !['claimed','executing','awaiting_ack','failed','acknowledged','completed','created','queued','unknown'].includes(output);"
+      },
+      {
+        "id": "NO_TASKS_IMPLIES_IDLE",
+        "expression": "if (!ctx.agentTaskIds || ctx.agentTaskIds.length === 0) return output === 'idle'; return true;"
+      }
+    ],
+    "enforcement": {
+      "module": "ui/selectors/agentSelectors.js",
+      "function": "getAgentState",
+      "mode": "both"
+    }
+  },
+
+  {
+    "name": "anomalySelectors.getIncidentClusters",
+    "inputSchema": {
+      "type": "object",
+      "required": ["indexedWorld"],
+      "properties": {
+        "indexedWorld": {
+          "type": "object",
+          "required": ["eventsByTaskId"],
+          "properties": {
+            "eventsByTaskId":   { "type": "object" },
+            "eventsByWorkerId": { "type": "object" }
+          }
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "thresholdMs":       { "type": "number" },
+            "now":               { "type": "number" },
+            "includeSystemEvents": { "type": "boolean" }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "severity", "taskIds", "summary", "representativeEvents"],
+        "properties": {
+          "type":     { "type": "string", "enum": ["execution_failures", "notification_issues", "stalled_tasks"] },
+          "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+          "taskIds":  { "type": "array", "items": { "type": "string" } },
+          "summary":  { "type": "string", "minLength": 1 },
+          "representativeEvents": { "type": "array" }
+        }
+      }
+    },
+    "allowedValues": ["execution_failures", "notification_issues", "stalled_tasks"],
+    "forbiddenValues": [],
+    "invariants": [
+      {
+        "id": "CLUSTER_COUNT_WITHOUT_SYSTEM_EVENTS_IS_TWO",
+        "expression": "if (ctx.includeSystemEvents !== false) return true; return output.length === 2;"
+      },
+      {
+        "id": "CLUSTER_COUNT_WITH_SYSTEM_EVENTS_IS_THREE",
+        "expression": "if (ctx.includeSystemEvents === false) return true; return output.length === 3;"
+      },
+      {
+        "id": "EXECUTION_FAILURES_ALWAYS_AT_INDEX_ZERO",
+        "expression": "return output.length > 0 && output[0].type === 'execution_failures';"
+      },
+      {
+        "id": "STALLED_TASKS_ALWAYS_LAST",
+        "expression": "return output.length > 0 && output[output.length - 1].type === 'stalled_tasks';"
+      },
+      {
+        "id": "NOTIFICATION_ISSUES_AT_INDEX_ONE_WHEN_INCLUDED",
+        "expression": "if (ctx.includeSystemEvents === false) return true; return output.length === 3 && output[1].type === 'notification_issues';"
+      },
+      {
+        "id": "ALL_CLUSTER_TYPES_IN_CLOSED_ENUM",
+        "expression": "return output.every(c => ['execution_failures','notification_issues','stalled_tasks'].includes(c.type));"
+      },
+      {
+        "id": "ALL_SEVERITIES_IN_CLOSED_ENUM",
+        "expression": "return output.every(c => ['low','medium','high'].includes(c.severity));"
+      },
+      {
+        "id": "EXECUTION_FAILURES_SEVERITY_RULE",
+        "expression": "const c = output.find(x => x.type === 'execution_failures'); if (!c) return true; return c.taskIds.length > 0 ? c.severity === 'high' : c.severity === 'low';"
+      },
+      {
+        "id": "STALLED_TASKS_SEVERITY_RULE",
+        "expression": "const c = output.find(x => x.type === 'stalled_tasks'); if (!c) return true; return c.taskIds.length > 0 ? c.severity === 'medium' : c.severity === 'low';"
+      },
+      {
+        "id": "REPRESENTATIVE_EVENTS_MAX_FIVE",
+        "expression": "return output.every(c => c.representativeEvents.length <= 5);"
+      }
+    ],
+    "enforcement": {
+      "module": "ui/selectors/anomalySelectors.js",
+      "function": "getIncidentClusters",
+      "mode": "both"
+    }
+  },
+
+  {
+    "name": "buildVisualWorldGraph",
+    "inputSchema": {
+      "type": "object",
+      "required": ["tasks"],
+      "properties": {
+        "tasks":        { "type": "array" },
+        "agents":       { "type": "array" },
+        "transitions":  { "type": "object" },
+        "metrics":      { "type": "object" },
+        "incidents":    { "type": "array" },
+        "systemEvents": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "required": ["nodes", "edges", "metadata", "observability"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "status", "metadata"],
+            "properties": {
+              "id":       { "type": "string" },
+              "type":     { "type": "string", "enum": ["task", "worker"] },
+              "status":   { "type": "string" },
+              "metadata": { "type": "object" }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "to", "label"],
+            "properties": {
+              "from":  { "type": "string" },
+              "to":    { "type": "string" },
+              "label": { "type": "string" }
+            }
+          }
+        },
+        "metadata": { "type": "object" },
+        "observability": {
+          "type": "object",
+          "required": ["enabled", "byTaskId"],
+          "properties": {
+            "enabled":   { "type": "boolean" },
+            "byTaskId":  { "type": "object" }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "allowedValues": ["task", "worker"],
+    "forbiddenValues": [],
+    "invariants": [
+      {
+        "id": "NODE_COUNT_EQUALS_TASKS_PLUS_AGENTS",
+        "expression": "const taskCount = Array.isArray(input.tasks) ? input.tasks.length : 0; const agentCount = Array.isArray(input.agents) ? input.agents.length : 0; return output.nodes.length === taskCount + agentCount;"
+      },
+      {
+        "id": "ALL_NODE_TYPES_IN_CLOSED_ENUM",
+        "expression": "return output.nodes.every(n => n.type === 'task' || n.type === 'worker');"
+      },
+      {
+        "id": "OBSERVABILITY_DISABLED_MEANS_EMPTY_MAP",
+        "expression": "if (output.observability.enabled) return true; return output.observability.byTaskId instanceof Map ? output.observability.byTaskId.size === 0 : Object.keys(output.observability.byTaskId).length === 0;"
+      },
+      {
+        "id": "INPUT_CONTAINS_NO_RAW_EVENTS_ARRAY",
+        "expression": "return !('events' in input) && !('eventsByTaskId' in input) && !('eventsByWorkerId' in input);"
+      },
+      {
+        "id": "OUTPUT_HAS_EXACTLY_FOUR_KEYS",
+        "expression": "const keys = Object.keys(output); return keys.length === 4 && ['nodes','edges','metadata','observability'].every(k => keys.includes(k));"
+      }
+    ],
+    "enforcement": {
+      "module": "core/world/buildVisualWorldGraph.js",
+      "function": "buildVisualWorldGraph",
+      "mode": "both"
+    }
+  }
+]
