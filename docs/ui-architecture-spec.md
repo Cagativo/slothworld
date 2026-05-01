@@ -2,8 +2,6 @@
 
 This document reflects the current architecture. It is versionless by design.
 
-Historical evolution (v1 → v2) has been fully consolidated into this spec.
-
 ---
 
 ## Purpose

@@ -318,106 +318,268 @@ canvas {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   Task Creator Panel
-   Surface: slightly darker/cooler — tertiary/input panel
+   Task Creator Panel — Wood & Parchment HTML/CSS Component
 ───────────────────────────────────────────────────────────────── */
 
 #task-creator-panel {
   width: 100%;
   box-sizing: border-box;
-  background: rgba(36, 20, 7, 0.80);
-  border: 1px solid #5c3d1e;
-  border-radius: 4px;
-  padding: 12px 14px;
 }
 
-.tcp-container h3 {
-  margin: 0 0 10px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #d4b896;
+/* Outer wood frame */
+#task-creator-panel .tcp-frame {
+  background: linear-gradient(160deg, #4a2a10 0%, #2e1608 50%, #3d2010 100%);
+  border: 3px solid #1c0c03;
+  border-radius: 6px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 200, 120, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(255, 180, 80, 0.08);
+  padding: 0 10px 12px;
 }
 
-.tcp-group {
-  margin-bottom: 9px;
+/* Title plaque */
+#task-creator-panel .tcp-plaque {
+  text-align: center;
+  padding: 10px 8px 9px;
+  margin: 0 -10px 10px;
+  background: linear-gradient(180deg, #5c3418 0%, #3d2010 100%);
+  border-bottom: 2px solid #1c0c03;
+  border-top-left-radius: 3px;
+  border-top-right-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 180, 80, 0.15),
+    0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-.tcp-group label {
-  display: block;
-  font-size: 9px;
-  color: #b8a88a;
-  margin-bottom: 3px;
+#task-creator-panel .tcp-plaque-text {
+  margin: 0;
+  font: 700 13px/1 'Georgia', serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #f0d89a;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 8px rgba(240, 200, 80, 0.2);
 }
 
-.tcp-group input,
-.tcp-group select,
-.tcp-group textarea {
+/* Parchment body */
+#task-creator-panel .tcp-body {
+  background: linear-gradient(170deg, #f5e8c8 0%, #ede0b0 40%, #e8d89e 100%);
+  border-radius: 3px;
+  border: 1px solid #b89050;
+  box-shadow:
+    inset 0 0 20px rgba(100, 60, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 220, 0.5);
+  padding: 12px 12px 10px;
+}
+
+/* Form layout */
+#task-creator-panel .tcp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* Field groups */
+#task-creator-panel .tcp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+#task-creator-panel .tcp-label {
+  font: 600 10px/1 'Georgia', serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b3d15;
+  padding-left: 2px;
+}
+
+/* Shared input / select / textarea */
+#task-creator-panel input,
+#task-creator-panel textarea,
+#task-creator-panel select {
   width: 100%;
   box-sizing: border-box;
-  background: #2a1808;
-  color: #e8d5b0;
-  border: 1px solid #5c3d1e;
-  padding: 4px;
-  font: 10px monospace;
-  font-family: inherit;
-}
-
-.tcp-group input:focus,
-.tcp-group select:focus,
-.tcp-group textarea:focus {
+  background: linear-gradient(180deg, #fdf5dc 0%, #f7ecca 100%);
+  border: 1px solid #b89050;
+  border-radius: 2px;
+  box-shadow: inset 0 2px 4px rgba(80, 40, 0, 0.12);
+  color: #2f190a;
+  font: 400 12px/1.3 'Georgia', serif;
+  padding: 6px 9px;
   outline: none;
-  border-color: #8b6347;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.tcp-submit {
-  width: 100%;
-  padding: 6px;
-  background: #1a5c4a;
-  color: #c8f0e8;
-  border: 1px solid #2a7a60;
-  font: 11px monospace;
+#task-creator-panel input:focus,
+#task-creator-panel textarea:focus,
+#task-creator-panel select:focus {
+  border-color: #8a5a20;
+  box-shadow:
+    inset 0 2px 4px rgba(80, 40, 0, 0.12),
+    0 0 0 2px rgba(180, 120, 40, 0.28);
+}
+
+#task-creator-panel input::placeholder,
+#task-creator-panel textarea::placeholder {
+  color: rgba(47, 25, 10, 0.4);
+  font-style: italic;
+}
+
+#task-creator-panel textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.45;
+}
+
+/* Select wrapper — custom arrow + type badge */
+#task-creator-panel .tcp-select-wrap {
+  position: relative;
+}
+
+#task-creator-panel .tcp-select-wrap select {
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+/* Type badge dot (left side of select) */
+#task-creator-panel .tcp-select-wrap::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+  background: #5865f2; /* Discord blurple default */
+  box-shadow: 0 0 4px rgba(88, 101, 242, 0.5);
+}
+
+#task-creator-panel .tcp-select-wrap[data-type="shopify"]::before {
+  background: #96bf48; /* Shopify green */
+  box-shadow: 0 0 4px rgba(150, 191, 72, 0.5);
+}
+
+#task-creator-panel .tcp-select-wrap select {
+  padding-left: 24px;
+}
+
+#task-creator-panel .tcp-chevron {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #7a4820;
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* Action buttons */
+#task-creator-panel .tcp-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+#task-creator-panel .tcp-submit,
+#task-creator-panel .tcp-cancel {
   cursor: pointer;
   border-radius: 2px;
-}
-
-.tcp-submit:hover {
-  background: #2a7a60;
-}
-
-.tcp-create-product {
+  font: 700 11px/1 'Georgia', serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 9px 6px;
+  transition: filter 0.1s, transform 0.1s, box-shadow 0.1s;
+  box-sizing: border-box;
+  outline: none;
   width: 100%;
+}
+
+#task-creator-panel .tcp-submit {
+  background: linear-gradient(180deg, #6b3a14 0%, #4a2408 100%);
+  border: 1px solid #2e1206;
+  color: #f0d89a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 200, 100, 0.18),
+    0 2px 4px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
+}
+
+#task-creator-panel .tcp-submit:hover {
+  filter: brightness(1.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 200, 100, 0.25),
+    0 2px 6px rgba(0, 0, 0, 0.4),
+    0 0 8px rgba(220, 160, 60, 0.2);
+}
+
+#task-creator-panel .tcp-submit:active {
+  transform: translateY(1px);
+  filter: brightness(0.9);
+}
+
+#task-creator-panel .tcp-cancel {
+  background: linear-gradient(180deg, #8a7a60 0%, #6a5a40 100%);
+  border: 1px solid #4a3a20;
+  color: #f0e8d0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 200, 0.12),
+    0 2px 4px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+}
+
+#task-creator-panel .tcp-cancel:hover {
+  filter: brightness(1.12);
+}
+
+#task-creator-panel .tcp-cancel:active {
+  transform: translateY(1px);
+}
+
+#task-creator-panel .tcp-submit:focus-visible,
+#task-creator-panel .tcp-cancel:focus-visible,
+#task-creator-panel select:focus-visible,
+#task-creator-panel input:focus-visible,
+#task-creator-panel textarea:focus-visible {
+  box-shadow:
+    inset 0 2px 4px rgba(80, 40, 0, 0.12),
+    0 0 0 2px rgba(180, 120, 40, 0.45);
+}
+
+/* Status message */
+#task-creator-panel .tcp-status {
   margin-top: 8px;
-  padding: 6px;
-  background: #2a5c38;
-  color: #c8f0d8;
-  border: 1px solid #3a7a4a;
-  font: 11px monospace;
-  cursor: pointer;
+  padding: 5px 8px;
+  font: 400 10px/1.4 'Georgia', serif;
+  color: #4a2a0a;
+  background: rgba(200, 160, 80, 0.15);
+  border: 1px solid transparent;
   border-radius: 2px;
+  min-height: 18px;
 }
 
-.tcp-create-product:hover {
-  background: #3a7a4a;
+#task-creator-panel .tcp-status:empty {
+  display: none;
 }
 
-.tcp-status {
-  margin-top: 8px;
-  padding: 4px;
-  font-size: 9px;
-  border-radius: 2px;
-  min-height: 14px;
+#task-creator-panel .tcp-status.tcp-success {
+  color: #1d4b21;
+  background: rgba(198, 239, 189, 0.46);
+  border-color: rgba(100, 180, 100, 0.3);
 }
 
-.tcp-status.tcp-success {
-  background: rgba(76, 175, 80, 0.20);
-  color: #7ac98a;
-  border: 1px solid #4caf50;
-}
-
-.tcp-status.tcp-error {
-  background: rgba(229, 57, 53, 0.20);
-  color: #f08080;
-  border: 1px solid #e53935;
+#task-creator-panel .tcp-status.tcp-error {
+  color: #6f1d14;
+  background: rgba(251, 209, 202, 0.5);
+  border-color: rgba(200, 100, 80, 0.3);
 }
 
 /* ─────────────────────────────────────────────────────────────────
