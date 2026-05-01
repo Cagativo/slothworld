@@ -289,8 +289,8 @@
       "properties": {
         "indexedWorld": {
           "type": "object",
-          "required": ["eventsByTaskId"],
           "properties": {
+            "events":           { "type": "array" },
             "eventsByTaskId":   { "type": "object" },
             "eventsByWorkerId": { "type": "object" }
           }
