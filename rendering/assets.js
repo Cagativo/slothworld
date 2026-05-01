@@ -41,6 +41,13 @@ export const assetPaths = [
   // into rendering — intended use (blend mode / crop / position) to be determined.
   'assets/slothworldassets/sloth_worker_desk_facing_right_front_01.png',
 
+  // ── Agent animation sprites (placeholder — files may not exist yet) ────────
+  // The asset loader skips any path that fails to load (see loadAll catch block),
+  // so missing files produce only a console warning and do not break the application.
+  'assets/slothworldassets/sloth_idle.png',
+  'assets/slothworldassets/sloth_working.png',
+  'assets/slothworldassets/sloth_error.png',
+
   // ── Unified scene background ───────────────────────────────────────────────
   // Place the reference image at this path to activate the image-backed mode.
   // When absent the renderer falls back to the procedural room (drawRoomScene).
@@ -129,6 +136,12 @@ export const ASSET_MAPPING = Object.freeze({
     ]),
     // Large front sprite (875×1216 RGB, no alpha) — preloaded; rendering use TBD.
     largeFront: 'sloth_worker_desk_facing_right_front_01.png',
+    // Animation state sprites — placeholder filenames; asset loader skips missing files.
+    animations: Object.freeze({
+      idle:    'sloth_idle.png',
+      working: 'sloth_working.png',
+      error:   'sloth_error.png',
+    }),
   }),
   zones: Object.freeze({
     CREATED:  'desk_wood_02.png',
