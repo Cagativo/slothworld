@@ -47,13 +47,17 @@ export const ZONE_STYLE = Object.freeze({
 /**
  * @type {Readonly<Record<string, Readonly<{ x: number, y: number }>>>}
  */
-// Positions sit inside the new CLAIMED zone (x:218–376, y:140–360).
-// Centred vertically at y≈250, spread horizontally across the zone's mid-section.
-// Derived from the new reference image: centre-left stream-adjacent floor area.
+// Slot anchors aligned to desk seating in scene_background_01.jpg.
+// Background image is 1376×768; canvas is 1060×520 (scale ≈ 0.770x, 0.677y).
+// Anchor = desk surface centre. left_back dx offset is handled in
+// agent-entity-renderer.js (DESK_SPRITE_OFFSETS), not here.
 export const DESK_POSITIONS = Object.freeze({
-  'desk-0': Object.freeze({ x: 272, y: 250 }),
-  'desk-1': Object.freeze({ x: 304, y: 255 }),
-  'desk-2': Object.freeze({ x: 336, y: 250 }),
+  'desk-0': Object.freeze({ x: 370, y: 220 }),  // left mushroom platform (right_front)
+  'desk-1': Object.freeze({ x: 740, y: 230 }),  // upper-right first desk  (left_front)
+  'desk-2': Object.freeze({ x: 840, y: 275 }),  // upper-right second desk (left_front)
+  'desk-3': Object.freeze({ x: 580, y: 420 }),  // lower-centre desk       (right_back)
+  'desk-4': Object.freeze({ x: 750, y: 450 }),  // lower-right first desk  (left_back) +14dx in renderer
+  'desk-5': Object.freeze({ x: 880, y: 380 }),  // far lower-right desk    (left_back) +14dx in renderer
 });
 
 // ---------------------------------------------------------------------------

@@ -659,64 +659,19 @@ export function renderConnectionLayer(ctx, components, entityPositions) {
 }
 
 // ---------------------------------------------------------------------------
-// Layer 5 — Entity (agent base sprite)
+// Layer 5 — Entity
 // ---------------------------------------------------------------------------
 
 /**
- * Fixed desk positions calibrated to scene_background_01.jpg (canvas: 1060 × 520).
+ * Legacy no-op.
  *
- * One slot per confirmed, browser-verified sprite filename.
- * Agents are assigned by index — first agent → slot 0, etc.
- * Fewer agents than slots: only the filled slots are drawn.
- * More agents than slots: remainder are silently skipped.
- *
- * sprite — explicit filename; looked up directly in loadedAssets, no inference.
- * Adjust x/y here to re-align with the background image without touching any other code.
- */
-const SLOTH_SLOTS = Object.freeze([
-  Object.freeze({ x: 350, y: 260, sprite: 'sloth_worker_desk_facing_right_front_01.png' }),
-  Object.freeze({ x: 700, y: 255, sprite: 'sloth_worker_desk_facing_left_front_01.png'  }),
-  Object.freeze({ x: 790, y: 310, sprite: 'sloth_worker_desk_facing_right_back_01.png'  }),
-  Object.freeze({ x: 570, y: 400, sprite: 'sloth_worker_desk_facing_left_back_01.png'   }),
-]);
-
-/**
- * Draw the sloth-at-desk sprite for each agent-sprite component.
- *
- * Agents are assigned to SLOTH_SLOTS by index (first agent → slot 0).
- * Position and sprite come entirely from the slot — entityPositions is not
- * consulted here. No filename inference: slot.sprite is the literal key into
- * loadedAssets.
- *
- * Geometry circles from agent-entity-renderer (Layer 5 geometry pass) are
- * covered by the 62×54 sprite and act as a fallback while assets load.
- *
- * @param {CanvasRenderingContext2D} ctx
- * @param {Array<object>} components
- * @param {Map<string, {x:number, y:number}>} entityPositions  (unused — slots provide positions)
+ * Agent sprite drawing now runs in agent-entity-renderer.js so it always uses
+ * entityPositions and a single deterministic desk mapping path.
  */
 export function renderEntityLayer(ctx, components, entityPositions) {
-  void entityPositions; // Positions come from SLOTH_SLOTS; entity position map is not used here.
-  let agentIndex = 0;
-
-  for (const c of components) {
-    if (c.componentType !== 'agent-sprite') continue;
-
-    // More agents than slots — silently skip the remainder.
-    if (agentIndex >= SLOTH_SLOTS.length) break;
-
-    const slot = SLOTH_SLOTS[agentIndex++];
-
-    if (loadedAssets[slot.sprite]) {
-      ctx.drawImage(
-        loadedAssets[slot.sprite],
-        slot.x - AGENT_W / 2,
-        slot.y - AGENT_H / 2,
-        AGENT_W, AGENT_H,
-      );
-    }
-    // Sprite not yet loaded — geometry circle from agent-entity-renderer is the fallback.
-  }
+  void ctx;
+  void components;
+  void entityPositions;
 }
 
 // ---------------------------------------------------------------------------

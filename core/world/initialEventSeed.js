@@ -6,15 +6,21 @@ function deepClone(value) {
 
 export function createInitialEventSeed() {
   const desks = [
-    { id: 'desk-0', deskIndex: 0, role: 'operator', x: 208, y: 182 },
-    { id: 'desk-1', deskIndex: 1, role: 'operator', x: 348, y: 182 },
-    { id: 'desk-2', deskIndex: 2, role: 'operator', x: 488, y: 182 }
+    { id: 'desk-0', deskIndex: 0, role: 'operator', x: 296, y: 225 },
+    { id: 'desk-1', deskIndex: 1, role: 'operator', x: 682, y: 197 },
+    { id: 'desk-2', deskIndex: 2, role: 'operator', x: 790, y: 245 },
+    { id: 'desk-3', deskIndex: 3, role: 'operator', x: 546, y: 367 },
+    { id: 'desk-4', deskIndex: 4, role: 'operator', x: 716, y: 322 },
+    { id: 'desk-5', deskIndex: 5, role: 'operator', x: 850, y: 382 }
   ];
 
   const agents = [
-    { id: 'agent-julia-0', name: 'Julia', role: 'operator', deskId: 'desk-0' },
-    { id: 'agent-julia-1', name: 'Julia', role: 'operator', deskId: 'desk-1' },
-    { id: 'agent-julia-2', name: 'Julia', role: 'operator', deskId: 'desk-2' },
+    { id: 'sloth-1', name: 'sloth-1', role: 'operator', deskId: 'desk-0' },
+    { id: 'sloth-2', name: 'sloth-2', role: 'operator', deskId: 'desk-1' },
+    { id: 'sloth-3', name: 'sloth-3', role: 'operator', deskId: 'desk-2' },
+    { id: 'sloth-4', name: 'sloth-4', role: 'operator', deskId: 'desk-3' },
+    { id: 'sloth-5', name: 'sloth-5', role: 'operator', deskId: 'desk-4' },
+    { id: 'sloth-6', name: 'sloth-6', role: 'operator', deskId: 'desk-5' },
   ];
 
   const events = [];
