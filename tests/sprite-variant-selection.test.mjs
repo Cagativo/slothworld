@@ -11,7 +11,7 @@
  *
  * Contract summary
  * ────────────────
- *  Active states (idle / waiting / moving / processing / completed)
+ *  Active states (idle / waiting / working / processing / completed)
  *    → select from ASSET_MAPPING.agents.variants (4 sprites)
  *      using deterministicIndex(entity.id, variants.length)
  *
@@ -70,7 +70,7 @@ const BASE     = ASSET_MAPPING.agents.base;
 const VISUAL_STATE_SPRITE_POOLS = Object.freeze({
   idle:       VARIANTS,
   waiting:    VARIANTS,
-  moving:     VARIANTS,
+  working:    VARIANTS,
   processing: VARIANTS,
   completed:  VARIANTS,
   error:      Object.freeze([BASE]),
@@ -257,7 +257,7 @@ const GOLDEN = [
   { id: 'agent-1',       state: 'idle',       expected: VARIANTS[3] }, // right_front
   { id: 'agent-2',       state: 'waiting',    expected: VARIANTS[2] }, // left_front
   { id: 'agent-3',       state: 'processing', expected: VARIANTS[1] }, // left_back
-  { id: 'worker-abc-42', state: 'moving',     expected: VARIANTS[0] }, // right_back
+  { id: 'worker-abc-42', state: 'working',    expected: VARIANTS[0] }, // right_back
   { id: 'w1',            state: 'completed',  expected: VARIANTS[2] }, // left_front
 
   // Fallback states — always pinned to BASE, id is irrelevant.

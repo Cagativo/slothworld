@@ -21,7 +21,6 @@ import {
   TASK_STATUS_FAILED,
   TASK_STATUS_AWAITING_ACK,
   AGENT_STATE_WORKING,
-  AGENT_STATE_MOVING,
 } from '../core/constants.js';
 import { hashString } from '../core/utils.js';
 import { isRenderDebugEnabled, debugPointer } from './debug.js';
@@ -44,7 +43,7 @@ import { isRenderDebugEnabled, debugPointer } from './debug.js';
 export const AGENT_VISUAL_STYLES = Object.freeze({
   idle:        Object.freeze({ fill: '#6b8f5e', stroke: '#3a5c2a', radius: 10, label: 'IDLE' }),
   waiting:     Object.freeze({ fill: '#d4a017', stroke: '#8b6a00', radius: 10, label: 'WAIT' }),
-  moving:      Object.freeze({ fill: '#00b8a9', stroke: '#006b62', radius: 10, label: 'MOVE' }),
+  working:     Object.freeze({ fill: '#00b8a9', stroke: '#006b62', radius: 10, label: 'WORK' }),
   processing:  Object.freeze({ fill: '#7ec8c8', stroke: '#007b7b', radius: 10, label: 'PROC' }),
   completed:   Object.freeze({ fill: '#4caf50', stroke: '#1b5e20', radius: 10, label: 'DONE' }),
   error:       Object.freeze({ fill: '#e53935', stroke: '#7f0000', radius: 10, label: 'ERR'  }),
@@ -150,7 +149,7 @@ export function statusColor(status) {
     return '#e53935';
   }
 
-  if (key === 'delivering' || key === 'acknowledged' || key === 'completed') {
+  if (key === 'acknowledged' || key === 'completed') {
     return '#4caf50';
   }
 
@@ -158,7 +157,7 @@ export function statusColor(status) {
     return '#ffb300';
   }
 
-  if (key === AGENT_STATE_WORKING || key === 'executing' || key === 'claimed' || key === AGENT_STATE_MOVING) {
+  if (key === AGENT_STATE_WORKING || key === 'executing' || key === 'claimed') {
     return '#00b8a9';
   }
 

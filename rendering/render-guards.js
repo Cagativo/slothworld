@@ -35,6 +35,38 @@ export const FORBIDDEN_RENDER_VIEW_KEYS = new Set([
 ]);
 
 /**
+ * Assert that no entity in a WorldScene carries movement-interpolation or
+ * inferred-position fields.
+ *
+ * Throws immediately if any entity has `transitionProgress`, `lerpT`, or
+ * `inferredPosition` — these indicate fabricated movement that is not backed
+ * by a real engine event.
+ *
+ * Null / undefined scenes are silently accepted (no entities to check).
+ *
+ * @param {unknown} scene
+ */
+export function assertEventDriven(scene) {
+  if (scene == null || typeof scene !== 'object' || Array.isArray(scene)) return;
+
+  const FORBIDDEN_ENTITY_FIELDS = ['transitionProgress', 'lerpT', 'inferredPosition'];
+  const entities = Array.isArray(scene.entities) ? scene.entities : [];
+
+  for (const entity of entities) {
+    if (!entity || typeof entity !== 'object') continue;
+    for (const field of FORBIDDEN_ENTITY_FIELDS) {
+      if (Object.hasOwn(entity, field)) {
+        throw new TypeError(
+          `assertEventDriven: entity "${entity.id}" carries forbidden field "${field}". ` +
+          'Movement interpolation and inferred positions are not allowed — ' +
+          'entity state must be driven by events only.'
+        );
+      }
+    }
+  }
+}
+
+/**
  * Assert that the value passed to render() is a pure VisualWorldGraph —
  * an object containing only { nodes, edges, metadata }.
  *

@@ -2,7 +2,7 @@ import { canvas, ctx } from '../core/app-state.js';
 import { buildWorldScene } from './world-scene.js';
 import { toRenderableComponents } from './world-scene-adapter.js';
 import { renderAllLayers } from './world-scene-layer-renderer.js';
-import { assertGraphShape } from './render-guards.js';
+import { assertGraphShape, assertEventDriven } from './render-guards.js';
 
 let _frame = 0;
 
@@ -20,6 +20,7 @@ export function renderErrorState() {
 export function renderFrame(renderView) {
   assertGraphShape(renderView);
   const scene      = buildWorldScene(renderView);
+  assertEventDriven(scene);
   const components = toRenderableComponents(scene);
 
   // Targeted debug — logs once per second (~60 frames) when DEV_MODE is on
