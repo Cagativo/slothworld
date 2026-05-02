@@ -118,11 +118,12 @@ describe('WorldScene determinism', () => {
       if (firstFlow !== -1 && firstAgent !== -1) assert.ok(firstFlow < firstAgent, 'flow-lines before agents');
     });
 
-    it('agent-sprite count equals entity count from buildWorldScene', () => {
+    it('agent-sprite count plus task-chip count equals entity count from buildWorldScene', () => {
       const scene = runScene(clone(GRAPH));
       const comps  = toRenderableComponents(scene);
-      const agents = comps.filter(c => c.componentType === 'agent-sprite');
-      assert.equal(agents.length, scene.entities.length);
+      const agentCount = comps.filter(c => c.componentType === 'agent-sprite').length;
+      const taskCount  = comps.filter(c => c.componentType === 'task-chip').length;
+      assert.equal(agentCount + taskCount, scene.entities.length);
     });
 
     it('flow-line count equals connection count from buildWorldScene', () => {

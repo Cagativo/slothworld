@@ -38,12 +38,12 @@ function zoneToComponent(zone) {
 }
 
 /**
- * Project an entity into an agent-sprite component descriptor.
+ * Project a worker/agent entity into an agent-sprite component descriptor.
  *
  * @param {object} entity
- * @returns {{ componentType: string, id: string, x: number, y: number, visualState: string, zoneId: string|null, metrics: object, anomaly: object|null }}
+ * @returns {{ componentType: string, id: string, x: number, y: number, visualState: string, zoneId: string|null, deskId: string|null, currentTaskId: string|null, metrics: object, anomaly: object|null }}
  */
-function entityToComponent(entity) {
+function entityToAgentSpriteComponent(entity) {
   return {
     componentType: 'agent-sprite',
     id:            entity.id,
@@ -57,6 +57,38 @@ function entityToComponent(entity) {
     metrics:       entity.metrics       ?? { duration: null, queueTime: null, latency: null },
     anomaly:       entity.anomaly       ?? null,
   };
+}
+
+/**
+ * Project a task entity into a task-chip component descriptor.
+ *
+ * @param {object} entity
+ * @returns {{ componentType: string, id: string, x: number, y: number, visualState: string, zoneId: string|null, metrics: object, anomaly: object|null }}
+ */
+function entityToTaskChipComponent(entity) {
+  return {
+    componentType: 'task-chip',
+    id:            entity.id,
+    x:             entity.position ? entity.position.x : 0,
+    y:             entity.position ? entity.position.y : 0,
+    visualState:   entity.visualState ?? 'unknown',
+    zoneId:        entity.zoneId      ?? null,
+    metrics:       entity.metrics     ?? { duration: null, queueTime: null, latency: null },
+    anomaly:       entity.anomaly     ?? null,
+  };
+}
+
+/**
+ * Project an entity into its appropriate component descriptor based on entity type.
+ * Tasks produce task-chip components; workers and agents produce agent-sprite components.
+ *
+ * @param {object} entity
+ * @returns {object}
+ */
+function entityToComponent(entity) {
+  return entity.type === 'task'
+    ? entityToTaskChipComponent(entity)
+    : entityToAgentSpriteComponent(entity);
 }
 
 /**

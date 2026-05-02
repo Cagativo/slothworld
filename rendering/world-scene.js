@@ -254,7 +254,7 @@ export function buildWorldScene(graph) {
       // It is null for idle agents and must never be derived from raw events here.
       const currentTaskId = meta.currentTaskId ?? null;
 
-      return { id: n.id, type: 'agent', zoneId, visualState, position, metrics, anomaly, deskId, currentTaskId };
+      return { id: n.id, type: n.type, zoneId, visualState, position, metrics, anomaly, deskId, currentTaskId };
     });
 
   const connections = edges.map((e) => ({ from: e.from, to: e.to, type: 'flow' }));
