@@ -3,16 +3,20 @@
 /**
  * ProduceFinalOutputWorker
  *
- * Receives an array of candidate strings and returns them sorted
- * alphabetically as the final ranked output.
+ * Receives the candidate array (preserving { item, score } objects from
+ * SelectCandidatesWorker) and returns the items sorted by score descending
+ * as the final ranked string array.
  *
- * @param {{ candidates: string[] }} input
+ * @param {{ candidates: Array<{ item: string, score: number }> }} input
  * @returns {{ success: boolean, result?: { ranked: string[] }, error?: string }}
  */
 export function runProduceFinalOutputWorker(input) {
   const candidates = Array.isArray(input && input.candidates) ? input.candidates : [];
 
-  const ranked = candidates.slice().sort((a, b) => String(a).localeCompare(String(b)));
+  const ranked = candidates
+    .slice()
+    .sort((a, b) => b.score - a.score)
+    .map((entry) => String(entry.item));
 
   return {
     success: true,

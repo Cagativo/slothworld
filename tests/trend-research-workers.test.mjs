@@ -98,7 +98,7 @@ test('SelectCandidatesWorker: returns at most 3 candidates', () => {
   assert.strictEqual(result.result.candidates.length, 3);
 });
 
-test('SelectCandidatesWorker: candidates are ordered by score descending', () => {
+test('SelectCandidatesWorker: candidates preserve { item, score } objects ordered by score descending', () => {
   const scored = [
     { item: 'low', score: 10 },
     { item: 'high', score: 90 },
@@ -106,14 +106,18 @@ test('SelectCandidatesWorker: candidates are ordered by score descending', () =>
   ];
   const result = runSelectCandidatesWorker({ scored });
   assert.strictEqual(result.success, true);
-  assert.deepStrictEqual(result.result.candidates, ['high', 'mid', 'low']);
+  assert.deepStrictEqual(result.result.candidates, [
+    { item: 'high', score: 90 },
+    { item: 'mid', score: 50 },
+    { item: 'low', score: 10 }
+  ]);
 });
 
-test('SelectCandidatesWorker: returns string values only (scores discarded)', () => {
+test('SelectCandidatesWorker: passes score through to candidates', () => {
   const scored = [{ item: 'x', score: 42 }];
   const result = runSelectCandidatesWorker({ scored });
   assert.strictEqual(result.success, true);
-  assert.deepStrictEqual(result.result.candidates, ['x']);
+  assert.deepStrictEqual(result.result.candidates, [{ item: 'x', score: 42 }]);
 });
 
 test('SelectCandidatesWorker: output is deterministic', () => {
@@ -141,15 +145,23 @@ test('SelectCandidatesWorker: returns success with empty candidates when scored 
 
 // ─── ProduceFinalOutputWorker ─────────────────────────────────────────────────
 
-test('ProduceFinalOutputWorker: returns candidates sorted alphabetically', () => {
-  const candidates = ['zebra', 'apple', 'mango'];
+test('ProduceFinalOutputWorker: returns items sorted by score descending', () => {
+  const candidates = [
+    { item: 'apple', score: 10 },
+    { item: 'zebra', score: 80 },
+    { item: 'mango', score: 50 }
+  ];
   const result = runProduceFinalOutputWorker({ candidates });
   assert.strictEqual(result.success, true);
-  assert.deepStrictEqual(result.result.ranked, ['apple', 'mango', 'zebra']);
+  assert.deepStrictEqual(result.result.ranked, ['zebra', 'mango', 'apple']);
 });
 
 test('ProduceFinalOutputWorker: output is deterministic', () => {
-  const candidates = ['cats_1', 'cats', 'cats_2'];
+  const candidates = [
+    { item: 'cats_1', score: 51 },
+    { item: 'cats', score: 37 },
+    { item: 'cats_2', score: 22 }
+  ];
   const a = runProduceFinalOutputWorker({ candidates });
   const b = runProduceFinalOutputWorker({ candidates });
   assert.deepStrictEqual(a, b);

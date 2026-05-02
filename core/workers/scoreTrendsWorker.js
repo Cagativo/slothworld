@@ -15,7 +15,7 @@ export function runScoreTrendsWorker(input) {
 
   const scored = signals.map((item) => ({
     item: String(item),
-    score: hashString(String(item)) % 100
+    score: hashString(String(item)) % 100 || 0
   }));
 
   return {
