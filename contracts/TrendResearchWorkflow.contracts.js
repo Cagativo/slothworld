@@ -8,9 +8,9 @@
  * @typedef {{ scored: Array<{ item: string, score: number }> }} ScoreTrendsOutput
  *
  * @typedef {{ scored: Array<{ item: string, score: number }> }} SelectCandidatesInput
- * @typedef {{ candidates: string[] }} SelectCandidatesOutput
+ * @typedef {{ candidates: Array<{ item: string, score: number }> }} SelectCandidatesOutput
  *
- * @typedef {{ candidates: string[] }} ProduceFinalOutputInput
+ * @typedef {{ candidates: Array<{ item: string, score: number }> }} ProduceFinalOutputInput
  * @typedef {{ ranked: string[] }} ProduceFinalOutputOutput
  */
 

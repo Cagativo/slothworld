@@ -6,6 +6,10 @@ import {
 } from '../constants.js';
 import { normalizeDesignIntent, buildProviderPrompt } from '../../integrations/rendering/prompt-builder.js';
 import { runImageRenderWorker } from './imageRenderWorker.js';
+import { runCollectSignalsWorker } from './collectSignalsWorker.js';
+import { runScoreTrendsWorker } from './scoreTrendsWorker.js';
+import { runSelectCandidatesWorker } from './selectCandidatesWorker.js';
+import { runProduceFinalOutputWorker } from './produceFinalOutputWorker.js';
 
 import { assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
 
@@ -139,6 +143,43 @@ async function executeResearchTask(task) {
   });
 }
 
+async function executeTrendResearchStepTask(task) {
+  const payload = task && task.payload && typeof task.payload === 'object' ? task.payload : {};
+  const context = payload.context && typeof payload.context === 'object' ? payload.context : {};
+  const action = String(task && task.action || '').toLowerCase();
+
+  if (action === 'collectsignals') {
+    const keyword = context.keyword || '';
+    return runCollectSignalsWorker({ keyword });
+  }
+
+  if (action === 'scoretrends') {
+    const collectSignalsOutput = context.collect_signals && context.collect_signals.output;
+    const signals = collectSignalsOutput && collectSignalsOutput.result && Array.isArray(collectSignalsOutput.result.signals)
+      ? collectSignalsOutput.result.signals
+      : [];
+    return runScoreTrendsWorker({ signals });
+  }
+
+  if (action === 'selectcandidates') {
+    const scoreTrendsOutput = context.score_trends && context.score_trends.output;
+    const scored = scoreTrendsOutput && scoreTrendsOutput.result && Array.isArray(scoreTrendsOutput.result.scored)
+      ? scoreTrendsOutput.result.scored
+      : [];
+    return runSelectCandidatesWorker({ scored });
+  }
+
+  if (action === 'producefinaloutput') {
+    const selectCandidatesOutput = context.select_candidates && context.select_candidates.output;
+    const candidates = selectCandidatesOutput && selectCandidatesOutput.result && Array.isArray(selectCandidatesOutput.result.candidates)
+      ? selectCandidatesOutput.result.candidates
+      : [];
+    return runProduceFinalOutputWorker({ candidates });
+  }
+
+  return fail(`Unknown TrendResearchWorkflow action: ${action}`);
+}
+
 async function executeImageRenderTask(task) {
   const payload = task && task.payload && typeof task.payload === 'object' ? task.payload : {};
   const taskContext = payload.context && typeof payload.context === 'object' ? payload.context : {};
@@ -238,6 +279,15 @@ export function createTaskExecutionWorker({ getDiscordClient, taskTriggeredMessa
 
         if (action === 'research_product' || action === 'research.query') {
           return executeResearchTask(task);
+        }
+
+        if (
+          action === 'collectsignals'
+          || action === 'scoretrends'
+          || action === 'selectcandidates'
+          || action === 'producefinaloutput'
+        ) {
+          return executeTrendResearchStepTask(task);
         }
 
         if (task.type === TASK_TYPE_SHOPIFY) {
