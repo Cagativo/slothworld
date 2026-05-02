@@ -1,5 +1,4 @@
 import { emitEvent } from '../../core/app-state.js';
-import { executeRenderRoute, normalizeRenderTask } from './render-router.js';
 import { warnLegacyExecutionPath } from '../../core/execution-pipeline.js';
 import {
   getRenderQueueSnapshot,
@@ -82,7 +81,7 @@ class RenderQueue {
       throw new Error('render_queue_backpressure');
     }
 
-    const task = normalizeRenderTask(taskInput);
+    const task = taskInput && typeof taskInput === 'object' ? taskInput : {};
     const entry = {
       id: `render-queue-${task.id}`,
       sequence: this.sequence += 1,
@@ -162,7 +161,7 @@ class RenderQueue {
     });
 
     try {
-      const result = await executeRenderRoute(entry.task);
+      const result = await Promise.resolve({ success: false, error: 'legacy_execution_disabled' });
       if (!result.success) {
         throw new Error(result.error || 'render_failed');
       }
