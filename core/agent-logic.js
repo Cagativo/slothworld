@@ -5,12 +5,8 @@ import {
   TASK_TYPE_DISCORD,
   TASK_TYPE_SHOPIFY,
   TASK_TYPE_IMAGE_RENDER,
-  TASK_STATUS_PENDING,
-  TASK_STATUS_DONE,
   TASK_STATUS_FAILED,
   TASK_STATUS_AWAITING_ACK,
-  TASK_STATUS_PROCESSING,
-  EVENT_TASK_COMPLETED,
   AGENT_STATE_IDLE,
   AGENT_STATE_MOVING,
   AGENT_STATE_SITTING,
@@ -319,11 +315,11 @@ function syncCompletionStatuses() {
     const event = eventStream[completionEventCursor];
     completionEventCursor += 1;
 
-    if (!event || event.type !== EVENT_TASK_COMPLETED || !event.payload || !event.payload.taskId) {
+    if (!event || event.type !== 'TASK_ACKED' || !event.payload || !event.payload.taskId) {
       continue;
     }
 
-    completionStatusByTaskId.set(String(event.payload.taskId), event.payload.success === false ? TASK_STATUS_FAILED : TASK_STATUS_DONE);
+    completionStatusByTaskId.set(String(event.payload.taskId), event.payload.success === false ? TASK_STATUS_FAILED : 'done');
   }
 }
 
@@ -402,7 +398,7 @@ function deriveTaskProgressRatio(task) {
     ? clamp(task.progress / task.required, 0, 1)
     : 0;
 
-  if (status === TASK_STATUS_DONE || status === TASK_STATUS_FAILED) {
+  if (status === 'done' || status === TASK_STATUS_FAILED) {
     return 1;
   }
 
@@ -443,7 +439,7 @@ function syncAgentTaskSpeech(agent, task) {
     agent.lastTaskStatus = status;
   }
 
-  if (status === TASK_STATUS_DONE || status === TASK_STATUS_FAILED) {
+  if (status === 'done' || status === TASK_STATUS_FAILED) {
     return;
   }
 
@@ -694,7 +690,7 @@ export function claimNextTask(desk) {
   }
 
   const nextTask = desk.queue.shift();
-  nextTask.runtimeStatus = TASK_STATUS_PROCESSING;
+  nextTask.runtimeStatus = 'processing';
   syncTaskStart(nextTask);
   desk.currentTask = nextTask;
   if (desk.occupant) {
@@ -854,8 +850,8 @@ export function update() {
       console.log('[Agent Status]', agent.id, task ? task.id : null, task ? getTaskStatus(task) : null);
     }
     const taskStatus = getTaskStatus(task);
-    if (task && (taskStatus === TASK_STATUS_DONE || taskStatus === TASK_STATUS_FAILED) && agent.state !== 'complete_react') {
-      beginCompletionReaction(agent, taskStatus === TASK_STATUS_DONE ? 'Done!' : 'Finished.');
+    if (task && (taskStatus === 'done' || taskStatus === TASK_STATUS_FAILED) && agent.state !== 'complete_react') {
+      beginCompletionReaction(agent, taskStatus === 'done' ? 'Done!' : 'Finished.');
       continue;
     }
 
@@ -897,8 +893,8 @@ export function update() {
 
       const trackedStatus = getTaskStatus(trackedTask);
 
-      if (trackedStatus === TASK_STATUS_DONE || trackedStatus === TASK_STATUS_FAILED) {
-        beginCompletionReaction(agent, trackedStatus === TASK_STATUS_DONE ? 'Done!' : 'Finished.');
+      if (trackedStatus === 'done' || trackedStatus === TASK_STATUS_FAILED) {
+        beginCompletionReaction(agent, trackedStatus === 'done' ? 'Done!' : 'Finished.');
         continue;
       }
 
@@ -974,7 +970,7 @@ export function update() {
 
         const postExecutionStatus = getTaskStatus(activeTask);
 
-        if (postExecutionStatus === TASK_STATUS_PENDING) {
+        if (postExecutionStatus === 'pending') {
           agent.awaitingTaskCompletion = false;
           agent.currentTask = null;
           agent.currentTaskId = null;

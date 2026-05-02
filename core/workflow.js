@@ -6,8 +6,6 @@ import {
   TASK_TYPE_IMAGE_RENDER,
   ACTION_REPLY_TO_MESSAGE,
   ACTION_RENDER_PRODUCT_IMAGE,
-  TASK_STATUS_PENDING,
-  TASK_STATUS_DONE,
   TASK_STATUS_FAILED,
   WORKFLOW_STATUS_PENDING_APPROVAL,
   WORKFLOW_STATUS_RUNNING,
@@ -81,7 +79,7 @@ import { addTaskToDesk, sendTaskAck, executeDiscordTask } from './task-handling.
  * @typedef {Object} WorkflowContextEntry
  * @description Record written into the workflow context when a step finishes.
  * @property {string} taskId - ID of the task that executed this step.
- * @property {string} status - Final step status (TASK_STATUS_DONE or TASK_STATUS_FAILED).
+ * @property {string} status - Final step status ('done' or 'failed').
  * @property {Object|null} input - Snapshot of context passed into the step.
  * @property {Object|null} output - Execution result returned by the tool.
  * @property {number} attempts - Number of attempts made (including the current one).
@@ -174,7 +172,7 @@ export function createWorkflow(workflowInput) {
     id: workflowInput.id || `workflow-${generateId()}`,
     context: cloneContext(workflowInput.context),
     steps: Array.isArray(workflowInput.steps) ? workflowInput.steps.slice() : [],
-    stepStatuses: Array.isArray(workflowInput.steps) ? workflowInput.steps.map(() => TASK_STATUS_PENDING) : [],
+    stepStatuses: Array.isArray(workflowInput.steps) ? workflowInput.steps.map(() => 'pending') : [],
     stepAttempts: Array.isArray(workflowInput.steps) ? workflowInput.steps.map(() => 0) : [],
     stepMaxRetries: Array.isArray(workflowInput.steps)
       ? workflowInput.steps.map((step) => {
@@ -297,14 +295,14 @@ export function buildWorkflowSnapshot(workflow) {
   }
 
   const currentStepName = getWorkflowStepName(workflow, workflow.currentStepIndex);
-  const currentStepStatus = workflow.stepStatuses[workflow.currentStepIndex] || TASK_STATUS_PENDING;
+  const currentStepStatus = workflow.stepStatuses[workflow.currentStepIndex] || 'pending';
   const completedSteps = workflow.steps
     .map((step, index) => ({
       index,
       name: step.action || step.title || `step_${index}`,
-      status: workflow.stepStatuses[index] || TASK_STATUS_PENDING
+      status: workflow.stepStatuses[index] || 'pending'
     }))
-    .filter((step) => step.status === TASK_STATUS_DONE);
+    .filter((step) => step.status === 'done');
 
   return {
     id: workflow.id,
@@ -389,7 +387,7 @@ export function enqueueWorkflowStep(workflowId, stepIndex) {
     workflowId,
     workflowStepIndex: stepIndex,
     workflowContextInput: cloneContext(workflow.context),
-    status: TASK_STATUS_PENDING
+    status: 'pending'
   };
 
   const desk = addTaskToDesk(task);
@@ -429,7 +427,7 @@ export function applyWorkflowTaskCompletion(task, executionResult) {
   const isFailedStep = executionResult && executionResult.success === false;
   const currentAttempt = (workflow.stepAttempts[stepIndex] || 0) + 1;
   const maxRetries = workflow.stepMaxRetries[stepIndex] ?? DEFAULT_WORKFLOW_STEP_MAX_RETRIES;
-  const stepStatus = isFailedStep ? TASK_STATUS_FAILED : TASK_STATUS_DONE;
+  const stepStatus = isFailedStep ? TASK_STATUS_FAILED : 'done';
   const contextEntry = validateWorkflowContextEntry({
     taskId: task.id,
     status: stepStatus,
@@ -473,7 +471,7 @@ export function applyWorkflowTaskCompletion(task, executionResult) {
 
   const nextStepIndex = stepIndex + 1;
   if (nextStepIndex >= workflow.steps.length) {
-    workflow.status = TASK_STATUS_DONE;
+    workflow.status = 'done';
     workflow.completedAt = Date.now();
     return;
   }
@@ -570,7 +568,7 @@ export function createProductWorkflowFromTask(task) {
 
   // Mark the command trigger task as resolved so polling does not re-deliver it.
   sendTaskAck(task, {
-    status: TASK_STATUS_DONE,
+    status: 'done',
     retries: task.retries || 0,
     executionResult: {
       success: true,

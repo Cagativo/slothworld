@@ -9,11 +9,8 @@ import {
   ACTION_REPLY_TO_MESSAGE,
   ACTION_PROCESS_ORDER,
   ACTION_START_PRODUCT_WORKFLOW,
-  TASK_STATUS_PENDING,
-  TASK_STATUS_DONE,
   TASK_STATUS_FAILED,
   TASK_STATUS_AWAITING_ACK,
-  EVENT_TASK_COMPLETED,
   TASK_PROGRESS_ACK_THRESHOLD,
   TASK_REQUIRED_DISCORD_MIN,
   TASK_REQUIRED_DISCORD_MAX,
@@ -181,7 +178,7 @@ export function createDiscordTask(event) {
     priority: inferPriorityFromDiscord(event),
     progress: 0,
     required: randomInRange(TASK_REQUIRED_DISCORD_MIN, TASK_REQUIRED_DISCORD_MAX),
-    status: TASK_STATUS_PENDING,
+    status: 'pending',
     action: ACTION_REPLY_TO_MESSAGE,
     payload: {
       channelId,
@@ -208,7 +205,7 @@ export function createShopifyTask(event) {
     priority: inferPriorityFromShopify(event),
     progress: 0,
     required: randomInRange(TASK_REQUIRED_SHOPIFY_MIN, TASK_REQUIRED_SHOPIFY_MAX),
-    status: TASK_STATUS_PENDING,
+    status: 'pending',
     action: ACTION_PROCESS_ORDER,
     payload: {
       orderId: event.orderId || `order-${generateId()}`
@@ -230,7 +227,7 @@ async function registerTaskInBridge(task) {
     id: task.id,
     type: task.type || TASK_TYPE_DISCORD,
     title: task.title || 'Injected task',
-    status: TASK_STATUS_PENDING,
+    status: 'pending',
     correlationId: typeof task.correlationId === 'string' ? task.correlationId : undefined,
     depth: typeof task.depth === 'number' ? task.depth : undefined,
     internal: task.internal === true,
@@ -404,7 +401,7 @@ export const tools = {
           renderId: payload && payload.renderId ? payload.renderId : undefined,
           context
         },
-        status: TASK_STATUS_PENDING,
+        status: 'pending',
         priority: typeof payload.priority === 'number' ? payload.priority : 1
       };
 
@@ -659,7 +656,7 @@ export function normalizeTask(task) {
     progress: task.progress ?? 0,
     required: task.required ?? 100,
     priority: normalizePriority(task.priority, task),
-    status: task.status ?? TASK_STATUS_PENDING,
+    status: task.status ?? 'pending',
     action: task.action ?? null,
     payload,
     retries: task.retries ?? 0,
@@ -759,7 +756,7 @@ export async function sendTaskAck(taskOrId, statusOrAck, retries, executionResul
     };
   }
 
-  if (!taskId || !ack || (ack.status !== TASK_STATUS_DONE && ack.status !== TASK_STATUS_FAILED)) {
+  if (!taskId || !ack || (ack.status !== 'done' && ack.status !== TASK_STATUS_FAILED)) {
     return;
   }
 
@@ -967,7 +964,7 @@ export function handleTaskExecutionResult(desk, task) {
         success: !(executionResult && executionResult.success === false)
       });
 
-      emitEvent(EVENT_TASK_COMPLETED, {
+      emitEvent('TASK_ACKED', {
         taskId: task.id,
         taskType: task.type,
         deskIndex: desks.indexOf(desk),
@@ -977,12 +974,12 @@ export function handleTaskExecutionResult(desk, task) {
         content: task.payload && typeof task.payload.content === 'string' ? task.payload.content : null
       });
       applyWorkflowTaskCompletion(task, executionResult);
-      const ackStatus = executionResult && executionResult.success === false ? TASK_STATUS_FAILED : TASK_STATUS_DONE;
+      const ackStatus = executionResult && executionResult.success === false ? TASK_STATUS_FAILED : 'done';
       task.localLifecycleStatus = ackStatus;
       await completeTaskThroughAck(task, ackStatus, executionResult || { success: false, error: 'Missing execution result' });
       desk.completedTasks += 1;
     } catch (error) {
-      emitEvent(EVENT_TASK_COMPLETED, {
+      emitEvent('TASK_ACKED', {
         taskId: task.id,
         taskType: task.type,
         deskIndex: desks.indexOf(desk),
@@ -1038,7 +1035,7 @@ export function addTaskToDesk(task) {
 
   const queuedTask = {
     ...normalizedTask,
-    status: TASK_STATUS_PENDING,
+    status: 'pending',
     payload: normalizedTask && typeof normalizedTask.payload === 'object' && normalizedTask.payload !== null
       ? { ...normalizedTask.payload }
       : {}

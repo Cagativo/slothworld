@@ -33,11 +33,8 @@ import {
   ACTION_START_PRODUCT_WORKFLOW,
   ACTION_SEND_CHANNEL_MESSAGE,
   ACTION_RENDER_PRODUCT_IMAGE,
-  TASK_STATUS_PENDING,
-  TASK_STATUS_DONE,
   TASK_STATUS_FAILED,
   TASK_STATUS_AWAITING_ACK,
-  TASK_STATUS_PROCESSING,
   TASK_REQUIRED_DISCORD_MIN,
   TASK_REQUIRED_DISCORD_MAX,
   TASK_REQUIRED_SHOPIFY_MIN,
@@ -353,7 +350,7 @@ function mapTaskResultToExecution(taskResult) {
 
 function mapEngineStatusToPublic(engineStatus) {
   if (engineStatus === 'acknowledged') {
-    return TASK_STATUS_DONE;
+    return 'done';
   }
 
   if (engineStatus === 'failed') {
@@ -361,14 +358,14 @@ function mapEngineStatusToPublic(engineStatus) {
   }
 
   if (engineStatus === 'executing' || engineStatus === 'claimed') {
-    return TASK_STATUS_PROCESSING;
+    return 'processing';
   }
 
   if (engineStatus === TASK_STATUS_AWAITING_ACK) {
-    return TASK_STATUS_PROCESSING;
+    return 'processing';
   }
 
-  return TASK_STATUS_PENDING;
+  return 'pending';
 }
 
 function projectTaskForRead(task) {
@@ -1176,9 +1173,9 @@ async function autoExecuteAndAck(taskId) {
         ? mapTaskResultToExecution(engineTask.executionRecord.result)
         : execution;
       const now = Date.now();
-      const completedAt = resolvedStatus === TASK_STATUS_DONE ? now : existing.completedAt;
+      const completedAt = resolvedStatus === 'done' ? now : existing.completedAt;
       const failedAt = resolvedStatus === TASK_STATUS_FAILED ? now : existing.failedAt;
-      const finishedAt = resolvedStatus === TASK_STATUS_DONE ? completedAt : failedAt;
+      const finishedAt = resolvedStatus === 'done' ? completedAt : failedAt;
       existing.executionResult = engineExecutionResult;
       existing.startedAt = existing.startedAt || now;
       existing.completedAt = completedAt;
@@ -1318,9 +1315,7 @@ const routeContext = {
   readJsonBody,
   serveStatic,
   TASK_STATUS_AWAITING_ACK,
-  TASK_STATUS_DONE,
-  TASK_STATUS_FAILED,
-  TASK_STATUS_PROCESSING
+  TASK_STATUS_FAILED
 };
 
 // Initialise route modules
