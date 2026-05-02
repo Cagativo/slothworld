@@ -237,15 +237,15 @@ test('Renderer boundary: no rendering file indexes into a .events array directly
 
 // ─── 4. render() is a void function (stateless per-call contract) ─────────────
 
-test('Renderer boundary: render() in canvas-renderer.js does not return a value', () => {
-  const canvasRenderer = RENDER_FILES.find((f) => f.endsWith('canvas-renderer.js'));
-  assert.ok(canvasRenderer, 'canvas-renderer.js must exist in rendering/');
+test('Renderer boundary: renderFrame() in renderer-loop.js does not return a value', () => {
+  const rendererLoop = RENDER_FILES.find((f) => f.endsWith('renderer-loop.js'));
+  assert.ok(rendererLoop, 'renderer-loop.js must exist in rendering/');
 
-  const source = src(canvasRenderer);
-  // Extract the body of the exported `render` function.
-  // Strategy: find `export function render(` and scan until the matching closing brace.
-  const exportStart = source.indexOf('export function render(');
-  assert.ok(exportStart !== -1, 'canvas-renderer.js must export a `render` function');
+  const source = src(rendererLoop);
+  // Extract the body of the exported `renderFrame` function.
+  // Strategy: find `export function renderFrame(` and scan until the matching closing brace.
+  const exportStart = source.indexOf('export function renderFrame(');
+  assert.ok(exportStart !== -1, 'renderer-loop.js must export a `renderFrame` function');
 
   // Find the opening brace of the function body.
   let depth = 0;
@@ -264,14 +264,14 @@ test('Renderer boundary: render() in canvas-renderer.js does not return a value'
     }
   }
 
-  assert.ok(bodyStart !== -1 && bodyEnd !== -1, 'Could not locate render() function body');
+  assert.ok(bodyStart !== -1 && bodyEnd !== -1, 'Could not locate renderFrame() function body');
 
   const body = source.slice(bodyStart, bodyEnd + 1);
 
-  // A value-returning render() would have `return <expr>;` (not bare `return;`).
+  // A value-returning renderFrame() would have `return <expr>;` (not bare `return;`).
   const returnWithValue = /\breturn\s+(?!;)[^\n;]+/;
   assert.ok(!returnWithValue.test(body),
-    'render() must not return a value — it is a stateless projection, not a data-producing function');
+    'renderFrame() must not return a value — it is a stateless projection, not a data-producing function');
 });
 
 // ─── 5. No lifecycle-derived accumulation state ───────────────────────────────

@@ -16,6 +16,15 @@
  */
 
 import { loadedAssets, ASSET_MAPPING } from './assets.js';
+import {
+  spriteConfigs,
+  TASK_STATUS_FAILED,
+  TASK_STATUS_AWAITING_ACK,
+  AGENT_STATE_WORKING,
+  AGENT_STATE_MOVING,
+} from '../core/constants.js';
+import { hashString } from '../core/utils.js';
+import { isRenderDebugEnabled, debugPointer } from './debug.js';
 
 // ---------------------------------------------------------------------------
 // Static visual style table — one entry per supported visualState
@@ -124,6 +133,134 @@ function spriteForComponent(component) {
 }
 
 // ---------------------------------------------------------------------------
+// Sprite sheet helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps a lifecycle status string to a representative canvas colour.
+ * Used for error-state rings and name-tag backgrounds.
+ *
+ * @param {string} status
+ * @returns {string}
+ */
+export function statusColor(status) {
+  const key = String(status || '').toLowerCase();
+
+  if (key === TASK_STATUS_FAILED || key === 'error') {
+    return '#e53935';
+  }
+
+  if (key === 'delivering' || key === 'acknowledged' || key === 'completed') {
+    return '#4caf50';
+  }
+
+  if (key === TASK_STATUS_AWAITING_ACK) {
+    return '#ffb300';
+  }
+
+  if (key === AGENT_STATE_WORKING || key === 'executing' || key === 'claimed' || key === AGENT_STATE_MOVING) {
+    return '#00b8a9';
+  }
+
+  return '#8fbc8f';
+}
+
+/**
+ * Calculate the source rectangle and frame index for a sprite sheet animation.
+ *
+ * @param {object} visual  Animation descriptor from resolveAgentVisual()
+ * @param {HTMLImageElement} spriteImage
+ * @param {number} frameNow  Current timestamp in ms (e.g. Date.now())
+ * @param {string} agentId   Used to stagger per-agent frame offset
+ * @returns {{ sourceX, sourceY, sourceWidth, sourceHeight, frameIndex, frameCount }}
+ */
+export function resolveSpriteFrame(visual, spriteImage, frameNow, agentId) {
+  const imageWidth = spriteImage && Number.isFinite(spriteImage.naturalWidth) ? spriteImage.naturalWidth : spriteImage.width;
+  const imageHeight = spriteImage && Number.isFinite(spriteImage.naturalHeight) ? spriteImage.naturalHeight : spriteImage.height;
+  const frameWidth = Number.isFinite(visual && visual.frameWidth) ? visual.frameWidth : imageWidth;
+  const frameHeight = Number.isFinite(visual && visual.frameHeight) ? visual.frameHeight : imageHeight;
+  const frameCount = Math.max(1, Number.isFinite(visual && visual.frameCount) ? visual.frameCount : Math.floor(imageWidth / frameWidth) || 1);
+  const fps = Number.isFinite(visual && visual.fps) && visual.fps > 0
+    ? visual.fps
+    : 5;
+  const frameDurationMs = Math.max(1, Math.round(1000 / fps));
+  const loop = !(visual && visual.loop === false);
+  const elapsed = Math.max(0, frameNow + hashString(agentId) * 17);
+  const frameNumber = frameCount <= 1 ? 0 : Math.floor(elapsed / frameDurationMs);
+  const frameIndex = frameCount <= 1
+    ? 0
+    : (loop ? frameNumber % frameCount : Math.min(frameCount - 1, frameNumber));
+
+  return {
+    sourceX: frameIndex * frameWidth,
+    sourceY: 0,
+    sourceWidth: frameWidth,
+    sourceHeight: frameHeight,
+    frameIndex,
+    frameCount,
+  };
+}
+
+/**
+ * Scale a sprite frame to the configured agent target height.
+ *
+ * @param {{ sourceWidth: number, sourceHeight: number }} frame  From resolveSpriteFrame()
+ * @returns {{ width: number, height: number, scale: number }}
+ */
+export function resolveSpriteDrawSize(frame) {
+  const targetHeight = spriteConfigs && spriteConfigs.agent && Number.isFinite(spriteConfigs.agent.height)
+    ? spriteConfigs.agent.height
+    : 48;
+  const scale = frame && Number.isFinite(frame.sourceHeight) && frame.sourceHeight > 0
+    ? targetHeight / frame.sourceHeight
+    : 1;
+
+  return {
+    width: (frame && Number.isFinite(frame.sourceWidth) ? frame.sourceWidth : targetHeight) * scale,
+    height: targetHeight,
+    scale,
+  };
+}
+
+/**
+ * Draw a debug bounding box and optional hover label over a sprite.
+ * Only draws when ?renderDebug is active.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} x
+ * @param {number} y
+ * @param {{ width: number, height: number }} drawSize
+ * @param {{ sourceWidth: number, sourceHeight: number, frameIndex: number, frameCount: number }} frame
+ * @param {boolean} hovered
+ */
+export function drawSpriteDebugOverlay(ctx, x, y, drawSize, frame, hovered) {
+  if (!isRenderDebugEnabled()) {
+    return;
+  }
+
+  ctx.save();
+  ctx.strokeStyle = hovered ? 'rgba(251, 191, 36, 0.95)' : 'rgba(56, 189, 248, 0.85)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x - drawSize.width / 2, y - drawSize.height, drawSize.width, drawSize.height);
+
+  ctx.fillStyle = 'rgba(239, 68, 68, 0.95)';
+  ctx.beginPath();
+  ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (hovered) {
+    const label = `${frame.sourceWidth}x${frame.sourceHeight} f${frame.frameIndex + 1}/${frame.frameCount}`;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    ctx.fillRect(x - 36, y - drawSize.height - 16, 72, 12);
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x, y - drawSize.height - 7);
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
 // Renderer
 // ---------------------------------------------------------------------------
 
@@ -135,8 +272,9 @@ function spriteForComponent(component) {
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} component  agent-sprite descriptor from toRenderableComponents()
+ * @param {number} [frameNow]  Current timestamp in ms for sprite animation (optional)
  */
-export function renderAgentEntity(ctx, component) {
+export function renderAgentEntity(ctx, component, frameNow) {
   if (!ctx || !component) return;
 
   const x     = typeof component.x === 'number' ? component.x : 0;
@@ -147,16 +285,58 @@ export function renderAgentEntity(ctx, component) {
 
   const sizes   = (component.deskId && DESK_SPRITE_SIZES[component.deskId])
     ? DESK_SPRITE_SIZES[component.deskId]
-    : { w: AGENT_W, h: AGENT_H };
+    : null;
   const offsets = (component.deskId && DESK_SPRITE_OFFSETS[component.deskId])
     ? DESK_SPRITE_OFFSETS[component.deskId]
     : { dx: 0, dy: 0 };
 
   if (spriteImage) {
-    ctx.drawImage(spriteImage,
-      x - sizes.w / 2 + offsets.dx,
-      y - sizes.h / 2 + offsets.dy,
-      sizes.w, sizes.h);
+    if (sizes) {
+      // Desk sprite — fixed dimensions, no frame animation.
+      ctx.drawImage(spriteImage,
+        x - sizes.w / 2 + offsets.dx,
+        y - sizes.h / 2 + offsets.dy,
+        sizes.w, sizes.h);
+
+      if (isRenderDebugEnabled()) {
+        const label = spriteFilename.replace('.png', '');
+        ctx.font      = '8px monospace';
+        ctx.fillStyle = style.stroke;
+        ctx.textAlign = 'center';
+        ctx.fillText(label, x, y + style.radius + 10);
+      }
+    } else {
+      // Non-desk sprite path — use frame calculation so sprite sheets animate correctly.
+      // Passing null as the visual descriptor causes resolveSpriteFrame to use the full
+      // image dimensions as a single-frame fallback (frameCount=1, fps=5).
+      // Future: pass resolveAgentVisual(component.visualState) here once visual configs
+      // are propagated through the component descriptor.
+      const now   = typeof frameNow === 'number' ? frameNow : Date.now();
+      const frame = resolveSpriteFrame(null, spriteImage, now, component.id);
+      const drawSize = resolveSpriteDrawSize(frame);
+
+      const isHovered = debugPointer.inside
+        && Number.isFinite(debugPointer.x)
+        && Number.isFinite(debugPointer.y)
+        && debugPointer.x >= x - drawSize.width / 2
+        && debugPointer.x <= x + drawSize.width / 2
+        && debugPointer.y >= y - drawSize.height
+        && debugPointer.y <= y;
+
+      ctx.drawImage(
+        spriteImage,
+        frame.sourceX,
+        frame.sourceY,
+        frame.sourceWidth,
+        frame.sourceHeight,
+        x - drawSize.width / 2,
+        y - drawSize.height,
+        drawSize.width,
+        drawSize.height
+      );
+
+      drawSpriteDebugOverlay(ctx, x, y, drawSize, frame, isHovered);
+    }
   } else {
     // Keep geometry fallback while images are still loading.
     ctx.beginPath();
@@ -177,11 +357,13 @@ export function renderAgentEntity(ctx, component) {
     ctx.stroke();
   }
 
-  // Name tag — always shown above the sprite (follows composition offset so it
-  // centres over the actual sprite rather than the raw anchor point)
+  // Name tag — always shown above the sprite.
   if (component.id) {
-    const tagX = x + offsets.dx;
-    const tagY = y - sizes.h / 2 + offsets.dy - 4;
+    const tagOffsetDx = offsets.dx;
+    const tagOffsetDy = offsets.dy;
+    const tagH  = sizes ? sizes.h : AGENT_H;
+    const tagX  = x + tagOffsetDx;
+    const tagY  = y - tagH / 2 + tagOffsetDy - 4;
     ctx.font         = 'bold 9px monospace';
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'bottom';
@@ -192,18 +374,6 @@ export function renderAgentEntity(ctx, component) {
     ctx.fillStyle = '#e8d8b0';
     ctx.fillText(component.id, tagX, tagY);
   }
-
-  // Debug-only filename label for seat calibration.
-  const isRenderDebug = typeof window !== 'undefined' &&
-    (window.__SLOTHWORLD_RENDER_DEBUG__ === true ||
-      (() => { try { return new URLSearchParams(window.location.search).has('renderDebug'); } catch (_) { return false; } })());
-  if (isRenderDebug) {
-    const label = spriteFilename.replace('.png', '');
-    ctx.font      = '8px monospace';
-    ctx.fillStyle = style.stroke;
-    ctx.textAlign = 'center';
-    ctx.fillText(label, x, y + style.radius + 10);
-  }
 }
 
 /**
@@ -211,13 +381,14 @@ export function renderAgentEntity(ctx, component) {
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {Array<object>} components  Output of toRenderableComponents()
+ * @param {number} [frameNow]  Current timestamp in ms for sprite animation (optional)
  */
-export function renderAllAgentEntities(ctx, components, entityPositions) {
+export function renderAllAgentEntities(ctx, components, entityPositions, frameNow) {
   if (!ctx || !Array.isArray(components)) return;
   for (const c of components) {
     if (c && c.componentType === 'agent-sprite') {
       const p = entityPositions && entityPositions.get(c.id);
-      renderAgentEntity(ctx, p ? { ...c, x: p.x, y: p.y } : c);
+      renderAgentEntity(ctx, p ? { ...c, x: p.x, y: p.y } : c, frameNow);
     }
   }
 }

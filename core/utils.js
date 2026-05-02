@@ -1,3 +1,12 @@
+export function hashString(text) {
+  const value = String(text || '');
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
 export function randomInRange(min, max) {
   return Math.random() * (max - min) + min;
 }

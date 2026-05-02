@@ -87,7 +87,7 @@ export function renderAllLayers(ctx, components, frame) {
   // ── Layers 5–8: agents, props, effects, UI overlay ─────────────────────
   // Layer 5 agent rendering always runs and resolves positions through
   // entityPositions. Geometry fallback still applies while sprite assets load.
-  renderAllAgentEntities(ctx, components, entityPositions);
+  renderAllAgentEntities(ctx, components, entityPositions, Date.now());
   // renderPropLayer, renderEffectLayer, renderUIOverlayLayer
   // are still suppressed in image mode. renderEffectLayer is already a hard no-op.
 }
