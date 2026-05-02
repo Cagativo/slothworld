@@ -53,8 +53,6 @@ export const AGENT_VISUAL_STYLES = Object.freeze({
 /** Fallback style used when visualState is not in AGENT_VISUAL_STYLES. */
 const FALLBACK_STYLE = AGENT_VISUAL_STYLES.unknown;
 
-const AGENT_W = 62;
-const AGENT_H = 54;
 
 /**
  * Per-desk render dimensions — sized to match each sprite's natural aspect ratio
@@ -191,7 +189,7 @@ export function resolveSpriteFrame(visual, spriteImage, frameNow, agentId) {
 export function resolveSpriteDrawSize(frame) {
   const targetHeight = spriteConfigs && spriteConfigs.agent && Number.isFinite(spriteConfigs.agent.height)
     ? spriteConfigs.agent.height
-    : 48;
+    : 54;
   const scale = frame && Number.isFinite(frame.sourceHeight) && frame.sourceHeight > 0
     ? targetHeight / frame.sourceHeight
     : 1;
@@ -342,7 +340,7 @@ export function renderAgentEntity(ctx, component, frameNow) {
   if (component.id) {
     const tagOffsetDx = offsets.dx;
     const tagOffsetDy = offsets.dy;
-    const tagH  = sizes ? sizes.h : AGENT_H;
+    const tagH  = sizes ? sizes.h : (spriteConfigs?.agent?.height ?? 54);
     const tagX  = x + tagOffsetDx;
     const tagY  = y - tagH / 2 + tagOffsetDy - 4;
     ctx.font         = 'bold 9px monospace';

@@ -70,5 +70,5 @@ export const SITTING_OFFSET = {
 export const spriteConfigs = {
   desk: { width: 96, height: 64 },
   computer: { width: 28, height: 24 },
-  agent: { width: 48, height: 48 }
+  agent: { width: 62, height: 54 }
 };
