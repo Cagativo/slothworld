@@ -24,8 +24,8 @@ function src(relPath) {
 }
 
 const RENDERER_FILES = [
-  'rendering/canvas-renderer.js',
   'rendering/renderer-loop.js',
+  'rendering/render-guards.js',
   'rendering/overlays.js',
   'rendering/assets.js'
 ];
@@ -159,22 +159,15 @@ const SAFE_RENDER_VIEW = {
 };
 
 test('renderer boundary: render() does not access any raw-event or selector-domain keys at runtime', async () => {
-  // Dynamically import renderer-loop so canvas-renderer.js module-level code
-  // (which requires a DOM) is bypassed via the mock canvas in app-state.
-  // We cannot call render() in Node.js (no real canvas), but we CAN verify
-  // which keys are touched during the renderView destructuring at the top of
-  // render() by intercepting the import through a mock.
-  //
-  // Strategy: read canvas-renderer.js source and locate the safeView
-  // destructuring block; assert none of the destructured field names are
-  // in the forbidden set.
-  const rendererSrc = sources['rendering/canvas-renderer.js'];
+  // Strategy: read render-guards.js source and assert no safeView field accesses
+  // reference forbidden event/selector-domain keys.
+  const guardsSrc = sources['rendering/render-guards.js'];
 
   // Extract every safeView.<field> access with a simple regex over the source.
   const accessedKeys = new Set();
   const safeViewRe = /safeView\.([a-zA-Z_$][a-zA-Z0-9_$]*)/g;
   let m;
-  while ((m = safeViewRe.exec(rendererSrc)) !== null) {
+  while ((m = safeViewRe.exec(guardsSrc)) !== null) {
     accessedKeys.add(m[1]);
   }
 
@@ -185,19 +178,19 @@ test('renderer boundary: render() does not access any raw-event or selector-doma
 });
 
 test('renderer boundary: render() does not destructure eventsByTaskId from renderView', () => {
-  const rendererSrc = sources['rendering/canvas-renderer.js'];
+  const rendererSrc = sources['rendering/render-guards.js'];
   assert.ok(!/safeView\.eventsByTaskId\b/.test(rendererSrc),
     'render() must not destructure eventsByTaskId from its argument');
 });
 
 test('renderer boundary: render() does not destructure eventsByWorkerId from renderView', () => {
-  const rendererSrc = sources['rendering/canvas-renderer.js'];
+  const rendererSrc = sources['rendering/render-guards.js'];
   assert.ok(!/safeView\.eventsByWorkerId\b/.test(rendererSrc),
     'render() must not destructure eventsByWorkerId from its argument');
 });
 
 test('renderer boundary: render() does not destructure a raw events array from renderView', () => {
-  const rendererSrc = sources['rendering/canvas-renderer.js'];
+  const rendererSrc = sources['rendering/render-guards.js'];
   // match "safeView.events" but not "safeView.entities" etc.
   assert.ok(!/safeView\.events\b/.test(rendererSrc),
     'render() must not destructure a raw .events array from its argument');
@@ -235,14 +228,14 @@ test('renderer boundary: no rendering file imports from ui/selectors/', () => {
 
 // ─── 7. render() enforces the VisualWorldGraph contract at runtime ────────────
 
-test('renderer boundary: canvas-renderer.js declares ALLOWED_RENDER_VIEW_KEYS', () => {
-  const src = sources['rendering/canvas-renderer.js'];
+test('renderer boundary: render-guards.js declares ALLOWED_RENDER_VIEW_KEYS', () => {
+  const src = sources['rendering/render-guards.js'];
   assert.ok(/ALLOWED_RENDER_VIEW_KEYS/.test(src),
-    'canvas-renderer.js must declare ALLOWED_RENDER_VIEW_KEYS to define the accepted graph shape');
+    'render-guards.js must declare ALLOWED_RENDER_VIEW_KEYS to define the accepted graph shape');
 });
 
 test('renderer boundary: ALLOWED_RENDER_VIEW_KEYS contains exactly nodes, edges, metadata', () => {
-  const src = sources['rendering/canvas-renderer.js'];
+  const src = sources['rendering/render-guards.js'];
   // Find the Set literal for ALLOWED_RENDER_VIEW_KEYS and extract its entries.
   const match = src.match(/ALLOWED_RENDER_VIEW_KEYS\s*=\s*new Set\(\[([^\]]*)\]\)/);
   assert.ok(match, 'ALLOWED_RENDER_VIEW_KEYS must be declared as new Set([...])');
@@ -254,14 +247,14 @@ test('renderer boundary: ALLOWED_RENDER_VIEW_KEYS contains exactly nodes, edges,
   );
 });
 
-test('renderer boundary: canvas-renderer.js declares FORBIDDEN_RENDER_VIEW_KEYS', () => {
-  const src = sources['rendering/canvas-renderer.js'];
+test('renderer boundary: render-guards.js declares FORBIDDEN_RENDER_VIEW_KEYS', () => {
+  const src = sources['rendering/render-guards.js'];
   assert.ok(/FORBIDDEN_RENDER_VIEW_KEYS/.test(src),
-    'canvas-renderer.js must declare FORBIDDEN_RENDER_VIEW_KEYS listing selector and event-domain keys');
+    'render-guards.js must declare FORBIDDEN_RENDER_VIEW_KEYS listing selector and event-domain keys');
 });
 
 test('renderer boundary: FORBIDDEN_RENDER_VIEW_KEYS contains selector-domain keys', () => {
-  const src = sources['rendering/canvas-renderer.js'];
+  const src = sources['rendering/render-guards.js'];
   const match = src.match(/FORBIDDEN_RENDER_VIEW_KEYS\s*=\s*new Set\(\[([^\]]*)\]\)/s);
   assert.ok(match, 'FORBIDDEN_RENDER_VIEW_KEYS must be declared as new Set([...])');
   const entries = new Set(match[1].match(/'([^']+)'/g).map((s) => s.replace(/'/g, '')));
@@ -271,30 +264,30 @@ test('renderer boundary: FORBIDDEN_RENDER_VIEW_KEYS contains selector-domain key
   }
 });
 
-test('renderer boundary: canvas-renderer.js defines an assertGraphShape guard function', () => {
-  const src = sources['rendering/canvas-renderer.js'];
+test('renderer boundary: render-guards.js defines an assertGraphShape guard function', () => {
+  const src = sources['rendering/render-guards.js'];
   assert.ok(/function assertGraphShape\s*\(/.test(src),
-    'canvas-renderer.js must define an assertGraphShape() guard function');
+    'render-guards.js must define an assertGraphShape() guard function');
 });
 
 test('renderer boundary: assertGraphShape throws TypeError on forbidden keys', () => {
-  const src = sources['rendering/canvas-renderer.js'];
+  const src = sources['rendering/render-guards.js'];
   // assertGraphShape must reference TypeError and throw it.
   assert.ok(/throw new TypeError/.test(src),
     'assertGraphShape() must throw TypeError when the input shape is wrong');
 });
 
-test('renderer boundary: render() calls assertGraphShape before using its argument', () => {
-  const src = sources['rendering/canvas-renderer.js'];
-  // Locate the render() function body and verify assertGraphShape is the first call.
-  const renderMatch = src.match(/export function render\s*\([^)]*\)\s*\{([\s\S]*?)(?=\nexport function|\n\/\/ ─|$)/);
-  assert.ok(renderMatch, 'render() must be defined as an exported function');
+test('renderer boundary: renderer-loop.js calls assertGraphShape in renderFrame()', () => {
+  const src = sources['rendering/renderer-loop.js'];
+  // Locate the renderFrame() function body and verify assertGraphShape is called.
+  const renderMatch = src.match(/export function renderFrame\s*\([^)]*\)\s*\{([\s\S]*?)(?=\nexport function|\n\/\/ ─|$)/);
+  assert.ok(renderMatch, 'renderFrame() must be defined as an exported function');
   const body = renderMatch[1];
-  const guardIdx   = body.indexOf('assertGraphShape(');
-  const safeViewIdx = body.indexOf('const safeView');
+  const guardIdx    = body.indexOf('assertGraphShape(');
+  const sceneIdx    = body.indexOf('buildWorldScene(');
   assert.ok(guardIdx !== -1,
-    'render() must call assertGraphShape()');
-  assert.ok(guardIdx < safeViewIdx,
-    'render() must call assertGraphShape() before accessing its argument');
+    'renderFrame() must call assertGraphShape()');
+  assert.ok(guardIdx < sceneIdx,
+    'renderFrame() must call assertGraphShape() before calling buildWorldScene()');
 });
 

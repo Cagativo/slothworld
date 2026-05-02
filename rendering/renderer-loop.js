@@ -2,6 +2,7 @@ import { canvas, ctx } from '../core/app-state.js';
 import { buildWorldScene } from './world-scene.js';
 import { toRenderableComponents } from './world-scene-adapter.js';
 import { renderAllLayers } from './world-scene-layer-renderer.js';
+import { assertGraphShape } from './render-guards.js';
 
 let _frame = 0;
 
@@ -17,6 +18,7 @@ export function renderErrorState() {
 }
 
 export function renderFrame(renderView) {
+  assertGraphShape(renderView);
   const scene      = buildWorldScene(renderView);
   const components = toRenderableComponents(scene);
 
