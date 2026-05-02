@@ -11,6 +11,7 @@ import { initUI } from './ui/ui-bootstrap.js';
 import { exposeWindowAPI } from './ui/window-api.js';
 import { buildVisualWorldGraph } from './core/world/buildVisualWorldGraph.js';
 import { getAllAgents }          from './ui/selectors/agentSelectors.js';
+import { getAllTasks, getTaskIds, getTaskTransitionTimestamps } from './ui/selectors/taskSelectors.js';
 
 function start() {
   // DEV_MODE flag — set before runtime modules use window.DEV_MODE.
@@ -27,9 +28,13 @@ function start() {
 
   function loop() {
     try {
-      const worldState = deriveWorldState(getRawEvents());
-      const agents     = getAllAgents(worldState);
-      const graph      = buildVisualWorldGraph({ ...worldState, agents }, { now: Date.now() });
+      const worldState  = deriveWorldState(getRawEvents());
+      const tasks       = getAllTasks(worldState);
+      const agents      = getAllAgents(worldState);
+      const transitions = Object.fromEntries(
+        getTaskIds(worldState).map((id) => [id, getTaskTransitionTimestamps(worldState, id)])
+      );
+      const graph       = buildVisualWorldGraph({ tasks, agents, transitions }, { now: Date.now() });
       if (window.controlAPI && typeof window.controlAPI.setGraph === 'function') {
         window.controlAPI.setGraph(graph);
       }
