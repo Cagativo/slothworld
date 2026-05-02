@@ -25,6 +25,7 @@
 
 import { ASSET_MAPPING, loadedAssets } from './assets.js';
 import { CENTRAL_STRUCTURE, DECORATIONS } from './world-scene.js';
+import { spriteConfigs } from '../core/constants.js';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -67,13 +68,6 @@ function drawIfLoaded(ctx, filename, x, y, w, h) {
 // Sprite size constants
 // ---------------------------------------------------------------------------
 
-// Agent sprite — base asset: sloth_worker_desk_facing_right_back_01.png (435×381 RGBA).
-// Rendered at 62×54 to maintain the source aspect ratio (~1.14:1).
-const AGENT_W = 62;  // px width
-const AGENT_H = 54;  // px height
-
-// AGENT_SIZE: used for glow orb and prop offset calculations (reference square).
-const AGENT_SIZE = AGENT_W;
 
 const PROP_SIZE = 20;   // px — task prop sprite (square)
 const GLOW_SIZE = 40;   // px — glow orb overlay (square halo, not dominant bubble)
@@ -766,9 +760,9 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
     if (!c.currentTaskId) continue;
 
     const { x, y } = posOf(c, entityPositions);
-    // Position panel above the sprite top edge (y - AGENT_H/2) with a small gap
+    // Position panel above the sprite top edge (y - spriteConfigs.agent.height/2) with a small gap
     const panelX = x - UI_SIZE.w / 2;
-    const panelY = y - AGENT_H / 2 - UI_SIZE.h - 5;
+    const panelY = y - (spriteConfigs?.agent?.height ?? 54) / 2 - UI_SIZE.h - 5;
 
     // Sprite backdrop
     drawIfLoaded(ctx, ASSET_MAPPING.effects.ui[0], panelX, panelY, UI_SIZE.w, UI_SIZE.h);
