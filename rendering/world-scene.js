@@ -195,8 +195,8 @@ export const STATUS_ZONE_MAP = Object.freeze({
 export const VISUAL_STATE_MAP = Object.freeze({
   created:          'idle',
   enqueued:         'waiting',
-  claimed:          'moving',
-  executing:        'moving',
+  claimed:          'working',
+  executing:        'working',
   execute_finished: 'processing',
   acked:            'completed',
   completed:        'completed',
