@@ -5,7 +5,6 @@ import {
   TASK_TYPE_SHOPIFY,
   TASK_STATUS_FAILED,
   TASK_STATUS_AWAITING_ACK,
-  TASK_STATUS_DONE,
   WORKFLOW_STATUS_RUNNING,
   TASK_PROGRESS_ACK_THRESHOLD,
   AGENT_STATE_MOVING,
@@ -458,7 +457,7 @@ export function drawWorkflowOverlay(ctx, workflowList) {
       const x = baseX + 10 + stepIndex * 44;
       const status = workflow.stepStatuses[stepIndex] || 'pending';
       let fill = 'rgba(112, 132, 158, 0.6)';
-      if (status === TASK_STATUS_DONE) {
+      if (status === 'done') {
         fill = 'rgba(126, 247, 179, 0.95)';
       } else if (status === WORKFLOW_STATUS_RUNNING) {
         fill = 'rgba(127, 207, 255, 0.95)';

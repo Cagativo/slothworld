@@ -20,9 +20,7 @@
  *   logTaskStatus: function,
  *   saveStore: function,
  *   TASK_STATUS_AWAITING_ACK: string,
- *   TASK_STATUS_DONE: string,
  *   TASK_STATUS_FAILED: string,
- *   TASK_STATUS_PROCESSING: string,
  *   writeJson: function,
  *   readJsonBody: function,
  * }} ctx
@@ -39,9 +37,7 @@ export function createSimulationRoutes(ctx) {
     logTaskStatus,
     saveStore,
     TASK_STATUS_AWAITING_ACK,
-    TASK_STATUS_DONE,
     TASK_STATUS_FAILED,
-    TASK_STATUS_PROCESSING,
     writeJson,
     readJsonBody
   } = ctx;
@@ -73,7 +69,7 @@ export function createSimulationRoutes(ctx) {
         existing.startedAt = existing.startedAt || Date.now();
 
         saveStore();
-        logTaskStatus(taskId, TASK_STATUS_PROCESSING);
+        logTaskStatus(taskId, 'processing');
         writeJson(res, 200, { ok: true, task: projectTaskForRead(existing) });
       } catch (error) {
         writeJson(res, 400, { error: error.message || 'Request failed' });
@@ -140,9 +136,9 @@ export function createSimulationRoutes(ctx) {
         const engineExecutionResult = mapTaskResultToExecution(engineTask.executionRecord.result);
 
         const now = Date.now();
-        const completedAt = resolvedStatus === TASK_STATUS_DONE ? now : existing.completedAt;
+        const completedAt = resolvedStatus === 'done' ? now : existing.completedAt;
         const failedAt = resolvedStatus === TASK_STATUS_FAILED ? now : existing.failedAt;
-        const finishedAt = resolvedStatus === TASK_STATUS_DONE ? completedAt : failedAt;
+        const finishedAt = resolvedStatus === 'done' ? completedAt : failedAt;
         const durationMs = existing.startedAt && finishedAt ? Math.max(0, finishedAt - existing.startedAt) : existing.durationMs;
         const task = existing;
         task.executionResult = engineExecutionResult;

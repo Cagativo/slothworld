@@ -20,18 +20,12 @@ export const ACTION_SEND_CHANNEL_MESSAGE = 'send_channel_message';
 export const ACTION_RENDER_PRODUCT_IMAGE = 'render_product_image';
 
 // Task statuses
-export const TASK_STATUS_PENDING = 'pending';
-export const TASK_STATUS_DONE = 'done';
 export const TASK_STATUS_FAILED = 'failed';
 export const TASK_STATUS_AWAITING_ACK = 'awaiting_ack';
-export const TASK_STATUS_PROCESSING = 'processing';
 
 // Workflow statuses
 export const WORKFLOW_STATUS_PENDING_APPROVAL = 'pending_approval';
 export const WORKFLOW_STATUS_RUNNING = 'running';
-
-// Event types
-export const EVENT_TASK_COMPLETED = 'TASK_COMPLETED';
 
 // Agent visual states
 export const AGENT_STATE_IDLE = 'idle';
