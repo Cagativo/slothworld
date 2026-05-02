@@ -110,24 +110,6 @@ function spriteForComponent(component) {
     return DESK_SPRITE_BY_ID[component.deskId];
   }
 
-  const match = component && typeof component.id === 'string'
-    ? /^sloth-(\d+)$/.exec(component.id)
-    : null;
-  if (match) {
-    const idx = Number(match[1]) - 1;
-    const spriteByIndex = [
-      'sloth_worker_desk_facing_right_front_01.png',
-      'sloth_worker_desk_facing_left_front_01.png',
-      'sloth_worker_desk_facing_left_front_01.png',
-      'sloth_worker_desk_facing_right_back_01.png',
-      'sloth_worker_desk_facing_left_back_01.png',
-      'sloth_worker_desk_facing_left_back_01.png',
-    ];
-    if (idx >= 0 && idx < spriteByIndex.length) {
-      return spriteByIndex[idx];
-    }
-  }
-
   return ASSET_MAPPING.agents.base;
 }
 
