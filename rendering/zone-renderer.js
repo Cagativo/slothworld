@@ -8,6 +8,7 @@
  *  - Input:  component descriptors from world-scene-adapter.js
  *            zone-background: { componentType, id, x, y, width, height }
  *            agent-sprite:    { componentType, id, x, y, zoneId, visualState }
+ *            task-chip:       { componentType, id, x, y, zoneId, visualState }
  *  - Output: canvas draw calls only — no return value, no state mutation
  *
  * RULES:
@@ -170,12 +171,12 @@ export function buildEntityPositionMap(components) {
     }
   }
 
-  // Collect agent-sprites per zoneId to determine slot index
+  // Collect entity components (agent-sprite and task-chip) per zoneId to determine slot index
   const slotCounters = new Map();
   const positions    = new Map();
 
   for (const c of components) {
-    if (!c || c.componentType !== 'agent-sprite') continue;
+    if (!c || (c.componentType !== 'agent-sprite' && c.componentType !== 'task-chip')) continue;
 
     // Prefer desk-specific position when deskId is known — gives accurate
     // per-desk placement without any layout computation.

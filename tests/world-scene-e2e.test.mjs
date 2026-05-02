@@ -265,10 +265,12 @@ describe('E2E — no semantic leakage', () => {
     }
   });
 
-  it('entity type is always "agent"', () => {
+  it('entity type matches the original node type from the graph', () => {
     const { scene } = runFullPipeline(clone(GRAPH));
+    const nodeTypeById = new Map(GRAPH.nodes.map(n => [n.id, n.type]));
     for (const e of scene.entities) {
-      assert.equal(e.type, 'agent', `entity "${e.id}" type must be "agent"`);
+      assert.equal(e.type, nodeTypeById.get(e.id),
+        `entity "${e.id}" type must match original node type`);
     }
   });
 
@@ -279,12 +281,14 @@ describe('E2E — no semantic leakage', () => {
     }
   });
 
-  it('agent-sprite componentType is the only entity component produced', () => {
+  it('entity components are either agent-sprite (workers) or task-chip (tasks)', () => {
     const { components } = runFullPipeline(clone(GRAPH));
     const entityComponents = components.filter(c => c.componentType !== 'zone-background' && c.componentType !== 'flow-line');
     for (const c of entityComponents) {
-      assert.equal(c.componentType, 'agent-sprite',
-        `unexpected entity componentType: "${c.componentType}"`);
+      assert.ok(
+        c.componentType === 'agent-sprite' || c.componentType === 'task-chip',
+        `unexpected entity componentType: "${c.componentType}"`
+      );
     }
   });
 
@@ -294,6 +298,15 @@ describe('E2E — no semantic leakage', () => {
     for (const c of components.filter(c => c.componentType === 'agent-sprite')) {
       const keys = Object.keys(c).sort().join(',');
       assert.equal(keys, expected, `unexpected keys on agent-sprite "${c.id}": ${keys}`);
+    }
+  });
+
+  it('task-chip components have only the expected structural keys', () => {
+    const { components } = runFullPipeline(clone(GRAPH));
+    const expected = 'anomaly,componentType,id,metrics,visualState,x,y,zoneId';
+    for (const c of components.filter(c => c.componentType === 'task-chip')) {
+      const keys = Object.keys(c).sort().join(',');
+      assert.equal(keys, expected, `unexpected keys on task-chip "${c.id}": ${keys}`);
     }
   });
 
