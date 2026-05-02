@@ -42,9 +42,6 @@ export const TASK_REQUIRED_DISCORD_MAX = 200;
 export const TASK_REQUIRED_SHOPIFY_MIN = 120;
 export const TASK_REQUIRED_SHOPIFY_MAX = 260;
 
-// Agent speech duration (ms)
-export const AGENT_SPEECH_DURATION_MS = 7000;
-
 export const ACTION_TOOL_MAP = {
   reply_to_message: 'discord.reply',
   fetch_order: 'shopify.process_order',

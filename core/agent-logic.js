@@ -11,11 +11,12 @@ import {
   AGENT_STATE_MOVING,
   AGENT_STATE_SITTING,
   AGENT_STATE_WORKING,
-  TASK_PROGRESS_ACK_THRESHOLD,
-  AGENT_SPEECH_DURATION_MS
+  TASK_PROGRESS_ACK_THRESHOLD
 } from './constants.js';
 import { canvas, agents, desks, agentStateTracker, emitEvent, eventStream, isDeskAvailableForAgent, getDeskSlotPosition } from './app-state.js';
 import { syncTaskStart, handleTaskExecutionResult } from './task-handling.js';
+
+const SPEECH_DURATION_MS = 7000;
 
 /**
  * @typedef {Object} IdleCycle
@@ -229,7 +230,7 @@ function ensureIdleStateFields(agent) {
   }
 }
 
-function setAgentSpeech(agent, text, duration = AGENT_SPEECH_DURATION_MS, { force = false } = {}) {
+function setAgentSpeech(agent, text, duration = SPEECH_DURATION_MS, { force = false } = {}) {
   if (!agent) {
     return;
   }
@@ -253,7 +254,7 @@ function canSpeak(agent, now = Date.now()) {
     return false;
   }
 
-  return (now - (agent.lastSpeechTime || 0)) > AGENT_SPEECH_DURATION_MS;
+  return (now - (agent.lastSpeechTime || 0)) > SPEECH_DURATION_MS;
 }
 
 function pickSpeechLine(lines, fallback) {
@@ -307,7 +308,7 @@ function beginCompletionReaction(agent, text = 'Done!') {
   agent.stateTimer = 0;
   agent.animationFrame = 0;
   agent.animationTimer = 0;
-  setAgentSpeech(agent, text, AGENT_SPEECH_DURATION_MS, { force: true });
+  setAgentSpeech(agent, text, SPEECH_DURATION_MS, { force: true });
 }
 
 function syncCompletionStatuses() {
@@ -452,7 +453,7 @@ function syncAgentTaskSpeech(agent, task) {
   const phase = ratio < 0.3 ? 'starting' : 'working';
   if (phase !== agent.lastProgressPhase) {
     agent.lastProgressPhase = phase;
-    setAgentSpeech(agent, getPhaseSpeech(phase), AGENT_SPEECH_DURATION_MS);
+    setAgentSpeech(agent, getPhaseSpeech(phase), SPEECH_DURATION_MS);
   }
 }
 
@@ -911,7 +912,7 @@ export function update() {
           'Sending it off...',
           'Almost done...',
           'Waiting for confirmation...'
-        ], 'Waiting for confirmation...'), AGENT_SPEECH_DURATION_MS);
+        ], 'Waiting for confirmation...'), SPEECH_DURATION_MS);
       }
 
       syncAgentTaskSpeech(agent, trackedTask);
@@ -1008,7 +1009,7 @@ export function update() {
           'Waiting for work...',
           'Nothing to do right now.',
           'Just relaxing.'
-        ], 'Waiting for work...'), AGENT_SPEECH_DURATION_MS);
+        ], 'Waiting for work...'), SPEECH_DURATION_MS);
       }
 
       updateCoffeeAnimation(agent);
