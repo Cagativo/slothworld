@@ -306,7 +306,11 @@ export function renderAgentEntity(ctx, component, frameNow) {
         ctx.fillText(label, x, y + style.radius + 10);
       }
     } else {
-      // Animated sprite — use frame calculation so sprite sheets animate correctly.
+      // Non-desk sprite path — use frame calculation so sprite sheets animate correctly.
+      // Passing null as the visual descriptor causes resolveSpriteFrame to use the full
+      // image dimensions as a single-frame fallback (frameCount=1, fps=5).
+      // Future: pass resolveAgentVisual(component.visualState) here once visual configs
+      // are propagated through the component descriptor.
       const now   = typeof frameNow === 'number' ? frameNow : Date.now();
       const frame = resolveSpriteFrame(null, spriteImage, now, component.id);
       const drawSize = resolveSpriteDrawSize(frame);

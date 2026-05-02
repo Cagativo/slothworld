@@ -119,7 +119,7 @@ test('renderer purity: render-guards.js has no module-level cache keyed by taskI
   );
 
   assert.deepStrictEqual(hits, [],
-    `canvas-renderer.js must not declare module-level caches keyed by semantic data:\n${hits.map((l) => '  ' + l.trim()).join('\n')}`);
+    `render-guards.js must not declare module-level caches keyed by semantic data:\n${hits.map((l) => '  ' + l.trim()).join('\n')}`);
 });
 
 test('renderer purity: render-guards.js does not write graph data back to module-level state', () => {
