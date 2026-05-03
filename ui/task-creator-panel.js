@@ -26,6 +26,7 @@ export function initTaskCreatorPanel() {
               <select id="tcp-type" name="type">
                 <option value="discord">Discord</option>
                 <option value="shopify">Shopify</option>
+                <option value="trendresearch">TrendResearch</option>
               </select>
               <span class="tcp-chevron" aria-hidden="true">&#9662;</span>
             </div>
@@ -59,13 +60,24 @@ export function initTaskCreatorPanel() {
 
   function bindTypeSelectUI(panel, typeSelect, contentGroup, channelGroup) {
     const selectWrap = typeSelect.closest('.tcp-select-wrap');
+    const contentLabel = contentGroup.querySelector('label');
+    const contentTextarea = contentGroup.querySelector('textarea');
 
     function applyType(type) {
+      const isTrendResearch = type === 'trendresearch';
       const isDiscord = type === 'discord';
-      contentGroup.style.display = isDiscord ? '' : 'none';
+      contentGroup.style.display = (isDiscord || isTrendResearch) ? '' : 'none';
       channelGroup.style.display = isDiscord ? '' : 'none';
       if (selectWrap) {
         selectWrap.dataset.type = type;
+      }
+      if (contentLabel) {
+        contentLabel.textContent = isTrendResearch ? 'Keyword' : 'Message';
+      }
+      if (contentTextarea) {
+        contentTextarea.placeholder = isTrendResearch
+          ? 'enter keyword e.g. fitness supplements\u2026'
+          : 'write message content\u2026';
       }
     }
 
@@ -151,7 +163,7 @@ export function initTaskCreatorPanel() {
       const content = contentInput.value.trim();
       const channelId = FIXED_DISCORD_CHANNEL_ID;
 
-      if (!title) {
+      if (!title && type !== 'trendresearch') {
         statusDiv.textContent = 'Error: Title is required';
         statusDiv.className = 'tcp-status tcp-error';
         return;
@@ -160,6 +172,31 @@ export function initTaskCreatorPanel() {
       if (type === 'discord' && !channelId) {
         statusDiv.textContent = 'Error: Channel ID is required for Discord tasks';
         statusDiv.className = 'tcp-status tcp-error';
+        return;
+      }
+
+      if (type === 'trendresearch') {
+        const keyword = content;
+        if (!keyword) {
+          statusDiv.textContent = 'Error: Keyword is required';
+          statusDiv.className = 'tcp-status tcp-error';
+          return;
+        }
+        window.dispatchEvent(new CustomEvent('slothworld:event', {
+          detail: {
+            type: 'TREND_RESEARCH_REQUESTED',
+            payload: {
+              requestId: crypto.randomUUID(),
+              keyword
+            }
+          }
+        }));
+        statusDiv.textContent = 'Research requested\u2026';
+        statusDiv.className = 'tcp-status';
+        form.reset();
+        typeSelect.value = 'discord';
+        typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        channelIdInput.value = FIXED_DISCORD_CHANNEL_ID;
         return;
       }
 
