@@ -483,6 +483,66 @@ export function drawWorkflowOverlay(ctx, workflowList) {
   }
 }
 
+// --- TrendResearch overlays ---
+// agent must have: state, trendResult (string[]|null), keyword (string|null), x, y
+export function drawTrendResultCard(ctx, agent) {
+  if (!agent) return;
+
+  // Working state indicator — small amber pulsing dot above agent when research is in progress
+  if (agent.state === 'working') {
+    const pulse = 0.5 + 0.5 * Math.sin(uiFxState.frame * 0.18);
+    ctx.save();
+    ctx.fillStyle = `rgba(232, 168, 56, ${0.6 + pulse * 0.3})`;
+    ctx.beginPath();
+    ctx.arc(agent.x, agent.y - 44, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  // Result card — only when done with a valid, non-empty trendResult
+  if (agent.state !== 'done' || !Array.isArray(agent.trendResult) || agent.trendResult.length === 0) {
+    return;
+  }
+
+  const items = agent.trendResult.slice(0, 3);
+  const cardWidth = 120;
+  const lineHeight = 13;
+  const paddingX = 8;
+  const paddingY = 6;
+  const cardHeight = paddingY + lineHeight + items.length * lineHeight + paddingY;
+
+  const cardX = agent.x - cardWidth / 2;
+  const cardY = agent.y - 60 - cardHeight;
+
+  ctx.save();
+
+  // Background
+  ctx.fillStyle = 'rgba(12, 16, 30, 0.88)';
+  ctx.fillRect(cardX, cardY, cardWidth, cardHeight);
+
+  // Border — amber, matching TrendResearch colour
+  ctx.strokeStyle = 'rgba(232, 168, 56, 0.6)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(cardX, cardY, cardWidth, cardHeight);
+
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'left';
+
+  // Keyword header
+  ctx.fillStyle = '#e8a838';
+  const headerBaselineY = cardY + paddingY + lineHeight;
+  ctx.fillText(`\uD83D\uDD0D ${agent.keyword || ''}`, cardX + paddingX, headerBaselineY);
+
+  // Ranked items
+  ctx.fillStyle = '#f7f4df';
+  for (let i = 0; i < items.length; i += 1) {
+    ctx.fillText(`${i + 1}. ${items[i]}`, cardX + paddingX, headerBaselineY + (i + 1) * lineHeight);
+  }
+
+  ctx.restore();
+}
+
 export function drawPendingWorkflowsOverlay(ctx, pendingList) {
   const pendingWorkflowList = Array.isArray(pendingList) ? pendingList : [];
   if (pendingWorkflowList.length === 0) {
