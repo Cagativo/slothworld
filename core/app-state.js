@@ -104,7 +104,10 @@ function createRandomAgent() {
       shopify: 1
     },
     state: 'idle',
-    speed: randomInRange(0.8, 2.2)
+    speed: randomInRange(0.8, 2.2),
+    requestId: null,
+    keyword: null,
+    trendResult: null
   };
 }
 
