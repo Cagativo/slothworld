@@ -1,79 +1,239 @@
-// M0.5 — Sloth state machine for TrendResearch events (issue #94)
-// Agents react to events only — no workflow calls permitted here.
+// Sloth state mapping for TrendResearch server lifecycle events.
+// Frontend consumes server events only and never executes TrendResearch locally.
 
-import { eventBus } from './engine/trendResearchBridge.js';
+import { subscribeEventStream } from './world/eventStore.js';
 
-/** Delay before an agent in 'done' state resets back to 'idle' (ms). */
-const AGENT_RESET_DELAY_MS = 5000;
+const DEBUG_AGENT = false;
 
 /**
  * Wire the agent array to TrendResearch lifecycle events.
  *
- * Reacts to:
- *  - `slothworld:event` window CustomEvent with type TREND_RESEARCH_REQUESTED
- *  - TREND_RESEARCH_COMPLETED / TREND_RESEARCH_FAILED on the internal eventBus
+ * Reacts to server TaskEngine events only:
+ *  - TASK_CREATED(type=TREND_RESEARCH)
+ *  - TASK_CLAIMED(taskId)
+ *  - TASK_ACKED(taskId)
  *
  * @param {Array} agents - The shared mutable agents array from core/app-state.js
  */
 export function initTrendResearchAgentReactions(agents) {
-  // Module-level map to track pending reset timers per agent, so we can
-  // clear a stale timer if a new COMPLETED event arrives for the same agent.
-  const resetTimers = new Map();
+  const trendTasks = new Map();
 
-  // React to TREND_RESEARCH_REQUESTED dispatched by the UI
-  window.addEventListener('slothworld:event', (e) => {
-    if (e.detail?.type !== 'TREND_RESEARCH_REQUESTED') return;
+  function normalizeTaskId(value) {
+    return String(value ?? '').trim();
+  }
 
-    const { requestId, keyword } = e.detail.payload || {};
-    if (!requestId || !keyword) return;
-
-    const sloth = agents.find(a => a.state === 'idle');
-    if (!sloth) return; // no idle sloth available — silently ignore (no queueing in M0.5)
-
-    sloth.state = 'working';
-    sloth.requestId = requestId;
-    sloth.keyword = keyword;
-  });
-
-  // React to TREND_RESEARCH_COMPLETED / TREND_RESEARCH_FAILED on the internal bus
-  eventBus.subscribe((event) => {
-    if (event.type === 'TREND_RESEARCH_COMPLETED') {
-      const sloth = agents.find(a => a.requestId === event.payload.requestId);
-      if (!sloth) return;
-
-      // Clear any existing reset timer for this agent before setting a new one
-      if (resetTimers.has(sloth)) {
-        clearTimeout(resetTimers.get(sloth));
+  function hasValidTrendResults(trendResult) {
+    return Array.isArray(trendResult) && trendResult.some((entry) => {
+      if (typeof entry === 'string') {
+        return entry.trim().length > 0;
       }
 
-      sloth.state = 'done';
-      sloth.trendResult = event.payload.result?.ranked ?? [];
+      if (entry && typeof entry === 'object' && typeof entry.item === 'string') {
+        return entry.item.trim().length > 0;
+      }
 
-      // Reset after AGENT_RESET_DELAY_MS so future tasks can be assigned
-      const timerId = setTimeout(() => {
-        resetTimers.delete(sloth);
-        sloth.state = 'idle';
-        sloth.trendResult = null;
-        sloth.requestId = null;
-        sloth.keyword = null;
-      }, AGENT_RESET_DELAY_MS);
+      return false;
+    });
+  }
 
-      resetTimers.set(sloth, timerId);
+  function applyWorkingToSloth(sloth, taskId, keyword) {
+    if (!sloth) {
+      return;
     }
 
-    if (event.type === 'TREND_RESEARCH_FAILED') {
-      const sloth = agents.find(a => a.requestId === event.payload.requestId);
-      if (!sloth) return;
+    sloth.state = 'working';
+    sloth.requestId = taskId;
+    sloth.keyword = keyword || null;
+    sloth.trendResult = null;
+  }
 
-      // Cancel any pending reset timer (shouldn't normally exist here, but defensive)
-      if (resetTimers.has(sloth)) {
-        clearTimeout(resetTimers.get(sloth));
-        resetTimers.delete(sloth);
+  function applyCompletedToSloth(sloth, taskId, keyword, trendResult) {
+    if (!sloth || !hasValidTrendResults(trendResult)) {
+      return;
+    }
+
+    sloth.state = 'done';
+    sloth.requestId = taskId;
+    sloth.keyword = keyword || null;
+    sloth.trendResult = trendResult;
+  }
+
+  function applyFailedToSloth(sloth) {
+    sloth.state = 'idle';
+    sloth.requestId = null;
+    sloth.keyword = null;
+    sloth.trendResult = null;
+  }
+
+  function handleTaskCreated(event) {
+    const taskType = event && event.payload && typeof event.payload.type === 'string'
+      ? event.payload.type
+      : null;
+
+    if (taskType !== 'TREND_RESEARCH') {
+      return;
+    }
+
+    const taskId = normalizeTaskId(event.taskId);
+    if (!taskId) {
+      return;
+    }
+
+    const keyword = event && event.payload && typeof event.payload.keyword === 'string'
+      ? event.payload.keyword
+      : null;
+
+    trendTasks.set(taskId, {
+      keyword,
+      trendResult: null
+    });
+  }
+
+  function handleTaskClaimed(event) {
+    const taskId = normalizeTaskId(event.taskId);
+    if (!taskId || !trendTasks.has(taskId)) {
+      return;
+    }
+
+    const existing = agents.find((agent) => agent.state === 'working' && normalizeTaskId(agent.requestId) === taskId);
+    if (existing) {
+      return;
+    }
+
+    const sloth = agents.find((agent) => agent.state === 'idle');
+    if (!sloth) {
+      return;
+    }
+
+    const trendMeta = trendTasks.get(taskId);
+    applyWorkingToSloth(sloth, taskId, trendMeta && trendMeta.keyword ? trendMeta.keyword : null);
+  }
+
+  function resolveTrendResultItems(resultPayload) {
+    const directRanked = resultPayload
+      && Array.isArray(resultPayload.ranked)
+      ? resultPayload.ranked
+      : null;
+    if (directRanked) {
+      return directRanked;
+    }
+
+    const nestedRanked = resultPayload
+      && resultPayload.result
+      && Array.isArray(resultPayload.result.ranked)
+      ? resultPayload.result.ranked
+      : null;
+    if (nestedRanked) {
+      return nestedRanked;
+    }
+
+    const directScored = resultPayload
+      && Array.isArray(resultPayload.scored)
+      ? resultPayload.scored
+      : null;
+    if (directScored) {
+      return directScored;
+    }
+
+    const nestedScored = resultPayload
+      && resultPayload.result
+      && Array.isArray(resultPayload.result.scored)
+      ? resultPayload.result.scored
+      : null;
+    if (nestedScored) {
+      return nestedScored;
+    }
+
+    return [];
+  }
+
+  function handleTaskAcked(event) {
+    const taskId = normalizeTaskId(event.taskId);
+    if (!taskId || !trendTasks.has(taskId)) {
+      return;
+    }
+
+    const status = event && event.payload && typeof event.payload.status === 'string'
+      ? event.payload.status
+      : null;
+
+    const sloth = agents.find((agent) => agent.state === 'working' && normalizeTaskId(agent.requestId) === taskId);
+
+    if (status === 'failed') {
+      if (sloth) {
+        applyFailedToSloth(sloth);
       }
+      trendTasks.delete(taskId);
+      return;
+    }
+  }
 
-      sloth.state = 'idle';
-      sloth.requestId = null;
-      sloth.keyword = null;
+  function handleTrendResearchCompleted(event) {
+    const payload = event && event.payload && typeof event.payload === 'object' ? event.payload : {};
+    const requestId = normalizeTaskId(payload.requestId || payload.taskId || event.taskId);
+    if (!requestId) {
+      return;
+    }
+
+    const tracked = trendTasks.has(requestId);
+    const trendMeta = tracked ? trendTasks.get(requestId) : null;
+    const resultSource = (payload.result && typeof payload.result === 'object')
+      ? payload.result
+      : Array.isArray(payload.trendResult)
+        ? { ranked: payload.trendResult }
+        : (payload.trendResult && typeof payload.trendResult === 'object' ? payload.trendResult : null);
+    const trendResult = resolveTrendResultItems(resultSource);
+    if (!hasValidTrendResults(trendResult)) {
+      return;
+    }
+
+    const keyword = typeof payload.keyword === 'string' && payload.keyword.trim()
+      ? payload.keyword.trim()
+      : (trendMeta && trendMeta.keyword ? trendMeta.keyword : null);
+
+    console.log('[TrendResearchUI] TREND_RESEARCH_COMPLETED received', {
+      requestId,
+      tracked,
+      keyword,
+      resultCount: Array.isArray(trendResult) ? trendResult.length : 0,
+      visible: hasValidTrendResults(trendResult)
+    });
+
+    trendTasks.set(requestId, {
+      keyword,
+      trendResult
+    });
+
+    const sloth = agents.find((agent) => normalizeTaskId(agent.requestId) === requestId)
+      || agents.find((agent) => agent.state === 'idle')
+      || agents[0];
+    if (!sloth) {
+      return;
+    }
+
+    applyCompletedToSloth(sloth, requestId, keyword, trendResult);
+    trendTasks.delete(requestId);
+  }
+
+  subscribeEventStream((events) => {
+    const stream = Array.isArray(events) ? events : [];
+    for (const event of stream) {
+      if (!event || typeof event.type !== 'string') {
+        continue;
+      }
+      if (event.type === 'TASK_CREATED') {
+        handleTaskCreated(event);
+      } else if (event.type === 'TASK_CLAIMED') {
+        handleTaskClaimed(event);
+      } else if (event.type === 'TASK_ACKED') {
+        handleTaskAcked(event);
+      } else if (event.type === 'TREND_RESEARCH_COMPLETED') {
+        handleTrendResearchCompleted(event);
+      }
+    }
+
+    if (DEBUG_AGENT) {
+      console.log('[agent] trend tasks tracked', trendTasks.size);
     }
   });
 }

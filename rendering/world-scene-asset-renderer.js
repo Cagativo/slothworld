@@ -64,6 +64,34 @@ function drawIfLoaded(ctx, filename, x, y, w, h) {
   }
 }
 
+function normalizeTrendResultItems(resultPayload) {
+  const directRanked = resultPayload && Array.isArray(resultPayload.ranked) ? resultPayload.ranked : null;
+  if (directRanked) {
+    return directRanked;
+  }
+
+  const nestedRanked = resultPayload && resultPayload.result && Array.isArray(resultPayload.result.ranked)
+    ? resultPayload.result.ranked
+    : null;
+  if (nestedRanked) {
+    return nestedRanked;
+  }
+
+  const directScored = resultPayload && Array.isArray(resultPayload.scored) ? resultPayload.scored : null;
+  if (directScored) {
+    return directScored;
+  }
+
+  const nestedScored = resultPayload && resultPayload.result && Array.isArray(resultPayload.result.scored)
+    ? resultPayload.result.scored
+    : null;
+  if (nestedScored) {
+    return nestedScored;
+  }
+
+  return [];
+}
+
 // ---------------------------------------------------------------------------
 // Sprite size constants
 // ---------------------------------------------------------------------------
@@ -73,6 +101,11 @@ const PROP_SIZE = 20;   // px — task prop sprite (square)
 const GLOW_SIZE = 40;   // px — glow orb overlay (square halo, not dominant bubble)
 const FLOW_SIZE = { w: 16, h: 8 };  // px — flow stream sprite
 const UI_SIZE   = { w: 52, h: 22 }; // px — floating display panel
+const loggedTrendUiRenders = new Set();
+const TREND_PANEL_ASSET_ID = 'ui_floating_display_01.png';
+const TREND_PANEL_MAX_VISIBLE = 4;
+const TREND_PANEL_HIDE_AFTER_MS = 30_000;
+const TREND_PANEL_FADE_MS = 2_500;
 
 /**
  * Resolve the canvas position of an entity component.
@@ -125,12 +158,6 @@ export function renderCompositeSceneLayers(ctx) {
  *
  * Control points come from DECORATION entries with kind === 'path'.
  * Their centres define the stream centerline in declaration order.
- *
- * When a sceneBackground image is loaded, this draws only the animated
- * shimmer (lower opacity) on top of the static stream already in the image.
- * When running procedurally, it draws the full stream body.
- *
- * @param {CanvasRenderingContext2D} ctx
  * @param {number} frame
  * @param {boolean} overlayMode  true = shimmer-only over an existing static stream
  */
@@ -163,13 +190,6 @@ function drawStream(ctx, frame, overlayMode) {
     ctx.beginPath(); tracePath();
     ctx.strokeStyle = 'rgba(0, 80, 72, 0.50)';
     ctx.lineWidth   = 46;
-    ctx.stroke();
-
-    ctx.beginPath(); tracePath();
-    ctx.strokeStyle = 'rgba(0, 120, 105, 0.62)';
-    ctx.lineWidth   = 40;
-    ctx.stroke();
-
     ctx.beginPath(); tracePath();
     ctx.strokeStyle = 'rgba(0, 175, 152, 0.72)';
     ctx.lineWidth   = 32;
@@ -754,33 +774,107 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
   for (const c of components) {
     if (c.componentType !== 'agent-sprite') continue;
 
-    // Only render when agentSelectors has confirmed an active task assignment.
-    // currentTaskId is forwarded from buildWorldScene → entityToComponent and is
-    // never derived from raw events inside this renderer.
-    if (!c.currentTaskId) continue;
-
     const { x, y } = posOf(c, entityPositions);
-    // Position panel above the sprite top edge (y - spriteConfigs.agent.height/2) with a small gap
-    const panelX = x - UI_SIZE.w / 2;
-    const panelY = y - (spriteConfigs?.agent?.height ?? 54) / 2 - UI_SIZE.h - 5;
+    const panel = c.trendPanelState && typeof c.trendPanelState === 'object'
+      ? c.trendPanelState
+      : null;
+    if (!panel) {
+      continue;
+    }
 
-    // Sprite backdrop
-    drawIfLoaded(ctx, ASSET_MAPPING.effects.ui[0], panelX, panelY, UI_SIZE.w, UI_SIZE.h);
+    const panelResults = Array.isArray(panel.results) ? panel.results : [];
+    const normalizedItems = panelResults
+      .map((entry) => {
+        if (entry && typeof entry === 'object') {
+          return {
+            item: typeof entry.item === 'string' ? entry.item : '',
+            score: Number.isFinite(entry.score) ? Number(entry.score) : null
+          };
+        }
 
-    // Text: task id (last 6 chars) on line 1, visual state on line 2
-    const shortId = String(c.currentTaskId).slice(-6);
+        return {
+          item: typeof entry === 'string' ? entry : '',
+          score: null
+        };
+      })
+      .filter((entry) => typeof entry.item === 'string' && entry.item.length > 0);
+    if (normalizedItems.length === 0) {
+      continue;
+    }
+
+    const now = Date.now();
+    const lastUpdated = Number.isFinite(panel.lastUpdated) ? Number(panel.lastUpdated) : 0;
+    const staleMs = Math.max(0, now - lastUpdated);
+    if (staleMs > TREND_PANEL_HIDE_AFTER_MS + TREND_PANEL_FADE_MS) {
+      continue;
+    }
+
+    const fadeAlpha = staleMs <= TREND_PANEL_HIDE_AFTER_MS
+      ? 1
+      : Math.max(0, 1 - ((staleMs - TREND_PANEL_HIDE_AFTER_MS) / TREND_PANEL_FADE_MS));
+    if (fadeAlpha <= 0) {
+      continue;
+    }
+
+    const visibleResults = normalizedItems.slice(-TREND_PANEL_MAX_VISIBLE);
+    const needsScroll = normalizedItems.length > TREND_PANEL_MAX_VISIBLE;
+
+    const lineHeight = 12;
+    const paddingX = 10;
+    const paddingY = 10;
+    const panelWidth = 170;
+    const panelHeight = paddingY + lineHeight + visibleResults.length * lineHeight + (needsScroll ? lineHeight : 0) + paddingY + 4;
+    const panelX = x - panelWidth / 2;
+    const panelY = y - (spriteConfigs?.agent?.height ?? 54) / 2 - panelHeight - 6;
+    const title = `Top Trends: ${panel.keyword || ''}`;
+
     ctx.save();
-    ctx.textAlign    = 'center';
+    ctx.globalAlpha = fadeAlpha;
+
+    drawIfLoaded(ctx, TREND_PANEL_ASSET_ID, panelX, panelY, panelWidth, panelHeight);
+
+    if (!loadedAssets[TREND_PANEL_ASSET_ID]) {
+      ctx.fillStyle = 'rgba(12, 16, 30, 0.88)';
+      ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+      ctx.strokeStyle = 'rgba(232, 168, 56, 0.6)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(panelX, panelY, panelWidth, panelHeight);
+    }
+
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#e8a838';
+    ctx.font = '9px monospace';
 
-    ctx.font      = '8px monospace';
-    ctx.fillStyle = 'rgba(232, 244, 240, 0.88)';
-    ctx.fillText(`#${shortId}`, x, panelY + 8);
+    const headerBaselineY = panelY + paddingY + (lineHeight / 2);
+    ctx.fillText(title, panelX + paddingX, headerBaselineY);
 
-    ctx.font      = '7px monospace';
-    ctx.fillStyle = 'rgba(159, 212, 200, 0.78)';
-    ctx.fillText(c.visualState ?? '', x, panelY + 16);
+    ctx.fillStyle = '#f7f4df';
+    for (let i = 0; i < visibleResults.length; i += 1) {
+      const item = visibleResults[i];
+      const scoreLabel = item.score === null ? '' : ` ${item.score.toFixed(2)}`;
+      ctx.fillText(`${item.item}${scoreLabel}`, panelX + paddingX, headerBaselineY + ((i + 1) * lineHeight));
+    }
+
+    if (needsScroll) {
+      ctx.fillStyle = '#cfd7f4';
+      ctx.fillText('... more', panelX + paddingX, headerBaselineY + ((visibleResults.length + 1) * lineHeight));
+    }
 
     ctx.restore();
+
+    const renderLogId = `${panel.agentId || c.id}:${panel.taskId || 'unknown'}:${panel.lastUpdated || 0}`;
+    if (!loggedTrendUiRenders.has(renderLogId)) {
+      loggedTrendUiRenders.add(renderLogId);
+      if (loggedTrendUiRenders.size > 2048) {
+        loggedTrendUiRenders.clear();
+      }
+      console.log('[TrendResearchUI][renderer] rendering asset', {
+        componentId: c.id,
+        instanceId: `${panel.agentId || c.id}:${panel.taskId || 'unknown'}`,
+        assetId: TREND_PANEL_ASSET_ID,
+        itemCount: normalizedItems.length
+      });
+    }
   }
 }

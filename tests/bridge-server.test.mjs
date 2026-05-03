@@ -361,6 +361,126 @@ test('POST /task — happy paths', async (t) => {
     const validPublic = new Set(['pending', 'processing', 'done', 'failed']);
     assert.ok(validPublic.has(task.status), `task.status '${task.status}' must be a valid public status`);
   });
+
+  await t.test('TrendResearch emits TREND_RESEARCH_COMPLETED only after TASK_ACKED', async () => {
+    const requestId = `trend-order-${Date.now()}`;
+    const workerId = 'worker-trend-1';
+    const response = await postJson(`${baseUrl}/task`, {
+      id: requestId,
+      type: 'TREND_RESEARCH',
+      title: 'Trend ordering test',
+      payload: {
+        keyword: 'hoodie',
+        requestId,
+        workerId
+      }
+    });
+
+    assert.equal(response.status, 201);
+
+    let taskEvents = [];
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const eventsResponse = await fetch(`${baseUrl}/events`);
+      assert.equal(eventsResponse.status, 200);
+      const { events } = await eventsResponse.json();
+      taskEvents = events.filter((event) => event && event.taskId === requestId);
+
+      const hasAck = taskEvents.some((event) => event.type === 'TASK_ACKED');
+      const hasCompleted = taskEvents.some((event) => event.type === 'TREND_RESEARCH_COMPLETED');
+      if (hasAck && hasCompleted) {
+        break;
+      }
+
+      await delay(100);
+    }
+
+    const ackedEvent = taskEvents.find((event) => event.type === 'TASK_ACKED');
+    const completedEvent = taskEvents.find((event) => event.type === 'TREND_RESEARCH_COMPLETED');
+
+    assert.ok(ackedEvent, 'TASK_ACKED event must exist for TrendResearch');
+    assert.ok(completedEvent, 'TREND_RESEARCH_COMPLETED event must exist for TrendResearch');
+    assert.ok(
+      completedEvent.id > ackedEvent.id,
+      `TREND_RESEARCH_COMPLETED must be emitted after TASK_ACKED (got ack=${ackedEvent.id}, completed=${completedEvent.id})`
+    );
+    assert.equal(completedEvent.payload.requestId, requestId, 'TREND_RESEARCH_COMPLETED must carry requestId');
+    assert.equal(completedEvent.payload.taskId, requestId, 'TREND_RESEARCH_COMPLETED must carry taskId');
+    assert.equal(completedEvent.payload.keyword, 'hoodie', 'TREND_RESEARCH_COMPLETED must carry keyword');
+    assert.equal(completedEvent.payload.assignedAgentId, workerId, 'TREND_RESEARCH_COMPLETED must carry assignedAgentId');
+    assert.equal(completedEvent.payload.workerId, workerId, 'TREND_RESEARCH_COMPLETED must carry workerId for indexedWorld');
+    assert.ok(completedEvent.payload.result && Array.isArray(completedEvent.payload.result.ranked), 'TREND_RESEARCH_COMPLETED must carry ranked result payload');
+  });
+
+  await t.test('TrendResearch intake auto-populates default channelId when missing', async () => {
+    const requestId = `trend-channel-${Date.now()}`;
+    const response = await postJson(`${baseUrl}/task`, {
+      id: requestId,
+      type: 'TREND_RESEARCH',
+      title: 'Trend channel wiring test',
+      payload: {
+        keyword: 'hoodie',
+        requestId
+      }
+    });
+
+    assert.equal(response.status, 201);
+    const json = await response.json();
+    assert.ok(json.task, 'task must be returned');
+    assert.ok(json.task.payload, 'task payload must be present');
+    assert.equal(
+      json.task.payload.channelId,
+      TEST_CHANNEL_ID,
+      'TrendResearch task payload.channelId must default to fixed channel id'
+    );
+  });
+
+  await t.test('TrendResearch without explicit workerId uses channelId as default owner', async () => {
+    const requestId = `trend-default-owner-${Date.now()}`;
+    const response = await postJson(`${baseUrl}/task`, {
+      id: requestId,
+      type: 'TREND_RESEARCH',
+      title: 'Trend default owner test',
+      payload: {
+        keyword: 'hoodie',
+        requestId
+      }
+    });
+
+    assert.equal(response.status, 201);
+    const json = await response.json();
+    assert.ok(json.task && json.task.payload, 'task payload must be present');
+    assert.ok(
+      json.task.payload.workerId || json.task.payload.agentId || json.task.payload.assignedAgentId,
+      'intake must assign a default workerId for TREND_RESEARCH tasks without explicit owner'
+    );
+
+    let taskEvents = [];
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const eventsResponse = await fetch(`${baseUrl}/events`);
+      assert.equal(eventsResponse.status, 200);
+      const { events } = await eventsResponse.json();
+      taskEvents = events.filter((event) => event && event.taskId === requestId);
+
+      const hasAck = taskEvents.some((event) => event.type === 'TASK_ACKED');
+      const hasCompleted = taskEvents.some((event) => event.type === 'TREND_RESEARCH_COMPLETED');
+      if (hasAck && hasCompleted) {
+        break;
+      }
+
+      await delay(100);
+    }
+
+    const ackedEvent = taskEvents.find((event) => event.type === 'TASK_ACKED');
+    const completedEvent = taskEvents.find((event) => event.type === 'TREND_RESEARCH_COMPLETED');
+
+    assert.ok(ackedEvent, 'TASK_ACKED must be emitted');
+    assert.equal(ackedEvent.payload.status, 'acknowledged', 'task with default workerId must succeed');
+    assert.ok(completedEvent, 'TREND_RESEARCH_COMPLETED must be emitted when intake provides default owner');
+    assert.ok(
+      completedEvent.payload.assignedAgentId,
+      'TREND_RESEARCH_COMPLETED must carry assignedAgentId derived from channelId'
+    );
+  });
 });
 
 // ─── POST /task — error paths ─────────────────────────────────────────────────

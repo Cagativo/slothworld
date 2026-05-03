@@ -19,6 +19,10 @@ import {
   getTaskSnapshot,
   getTaskTransitionTimestamps
 } from '../ui/selectors/taskSelectors.js';
+import {
+  getAgentTasks,
+  getAllAgents
+} from '../ui/selectors/agentSelectors.js';
 import { getTaskCounts } from '../ui/selectors/metricsSelectors.js';
 
 function ev(type, taskId, timestamp, payload = {}) {
@@ -257,6 +261,51 @@ test('getTaskTransitionTimestamps returns null for missing lifecycle events', ()
   assert.equal(timestamps.claimedAt, null, 'claimedAt should be null when TASK_CLAIMED is absent');
   assert.equal(timestamps.executingAt, null, 'executingAt should be null when TASK_EXECUTE_STARTED is absent');
   assert.equal(timestamps.awaitingAckAt, null, 'awaitingAckAt should be null when TASK_EXECUTE_FINISHED is absent');
+});
+
+test('agent selectors discover TrendResearch tasks from worker-linked completion events', () => {
+  const indexed = world(
+    ev('AGENT_ASSIGNED_IDLE', 'system', 900, { agentId: 'worker-1', deskId: 'desk-1' }),
+    ev('TASK_CREATED', 'trend-1', 1000, { type: 'TREND_RESEARCH', title: 'Trend Task' }),
+    ev('TASK_ACKED', 'trend-1', 2000, { status: 'acknowledged' }),
+    ev('TREND_RESEARCH_COMPLETED', 'trend-1', 2100, {
+      taskId: 'trend-1',
+      requestId: 'trend-1',
+      keyword: 'hoodie',
+      workerId: 'worker-1',
+      assignedAgentId: 'worker-1',
+      result: {
+        ranked: [
+          { item: 'hoodie trend', score: 0.91 }
+        ]
+      }
+    }),
+    ev('TREND_RESEARCH_COMPLETED', 'trend-1', 2200, {
+      taskId: 'trend-1',
+      requestId: 'trend-1',
+      keyword: 'hoodie',
+      workerId: 'worker-1',
+      assignedAgentId: 'worker-1',
+      result: {
+        ranked: [
+          { item: 'hoodie long-tail trend', score: 0.86 }
+        ]
+      }
+    })
+  );
+
+  const taskIds = getAgentTasks(indexed, 'worker-1');
+  assert.ok(taskIds.includes('trend-1'), 'worker-linked completion event should make the task discoverable');
+
+  const agents = getAllAgents(indexed);
+  const worker = agents.find((agent) => agent.id === 'worker-1');
+  assert.ok(worker, 'worker should be present in selector output');
+  assert.ok(worker.trendPanelState && typeof worker.trendPanelState === 'object', 'worker should receive persistent trendPanelState');
+  assert.equal(worker.trendPanelState.taskId, 'trend-1');
+  assert.equal(worker.trendPanelState.agentId, 'worker-1');
+  assert.equal(worker.trendPanelState.lastUpdated, 2200);
+  assert.ok(Array.isArray(worker.trendPanelState.results), 'trendPanelState.results must be an array');
+  assert.equal(worker.trendPanelState.results.length, 2, 'trendPanelState should aggregate results across completion events');
 });
 
 test('getTaskTransitionTimestamps returns all null fields for unknown task', () => {

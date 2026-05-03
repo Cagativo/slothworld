@@ -28,6 +28,7 @@ import {
   TASK_TYPE_DISCORD,
   TASK_TYPE_SHOPIFY,
   TASK_TYPE_IMAGE_RENDER,
+  TASK_TYPE_TREND_RESEARCH,
   ACTION_REPLY_TO_MESSAGE,
   ACTION_PROCESS_ORDER,
   ACTION_START_PRODUCT_WORKFLOW,
@@ -58,6 +59,7 @@ const PUBLIC_DIR = ROOT_DIR;
 const MAX_EVENTS = 1000;
 const STORE_PATH = path.join(ROOT_DIR, 'bridge-store.json');
 const DISCORD_COMMAND_PREFIX = '!';
+const TREND_RESEARCH_DEFAULT_CHANNEL_ID = '1491500223288184964';
 const TASK_CREATION_WINDOW_MS = 10_000;
 const TASK_CREATION_LIMIT = Number(process.env.TASK_CREATION_LIMIT || 40);
 const TASK_MAX_DEPTH = Number(process.env.TASK_MAX_DEPTH || 3);
@@ -121,11 +123,19 @@ function appendEventToLog(event) {
 function emitBridgeEvent(event) {
   const timestamp = Number.isFinite(event && event.timestamp) ? event.timestamp : Date.now();
   const payload = event && event.payload && typeof event.payload === 'object' ? event.payload : {};
+  const eventType = event && typeof event.event === 'string'
+    ? event.event
+    : (event && typeof event.type === 'string' ? event.type : null);
+  const taskId = event && event.taskId ? String(event.taskId) : String(payload.taskId || 'system');
+
+  if (!eventType) {
+    return;
+  }
 
   appendEventToLog({
     id: nextEventId++,
-    type: event.event,
-    taskId: String(event.taskId),
+    type: eventType,
+    taskId,
     timestamp,
     payload
   });
@@ -366,6 +376,78 @@ function mapEngineStatusToPublic(engineStatus) {
   }
 
   return 'pending';
+}
+
+function getTrendResearchRequestId(task) {
+  const payloadRequestId = task
+    && task.payload
+    && typeof task.payload.requestId === 'string'
+    ? task.payload.requestId.trim()
+    : '';
+
+  if (payloadRequestId) {
+    return payloadRequestId;
+  }
+
+  return typeof task.id === 'string' ? task.id : '';
+}
+
+function getTrendResearchCompletedPayload(task) {
+  const output = task && task.lastResult && task.lastResult.output;
+
+  if (output && typeof output === 'object' && output.result && typeof output.result === 'object') {
+    return output.result;
+  }
+
+  if (output && typeof output === 'object') {
+    return output;
+  }
+
+  return null;
+}
+
+function getTrendResearchKeyword(task, resultPayload) {
+  const payloadKeyword = task
+    && task.payload
+    && typeof task.payload.keyword === 'string'
+    ? task.payload.keyword.trim()
+    : '';
+  if (payloadKeyword) {
+    return payloadKeyword;
+  }
+
+  const resultKeyword = resultPayload
+    && typeof resultPayload.keyword === 'string'
+    ? resultPayload.keyword.trim()
+    : '';
+  if (resultKeyword) {
+    return resultKeyword;
+  }
+
+  return null;
+}
+
+function getTrendResearchAssignedAgentId(task, resultPayload) {
+  const candidates = [
+    task && task.assignedAgentId,
+    task && task.payload && task.payload.assignedAgentId,
+    task && task.payload && task.payload.agentId,
+    task && task.payload && task.payload.workerId,
+    resultPayload && resultPayload.assignedAgentId,
+    resultPayload && resultPayload.agentId,
+    resultPayload && resultPayload.workerId,
+    resultPayload && resultPayload.result && resultPayload.result.assignedAgentId,
+    resultPayload && resultPayload.result && resultPayload.result.agentId,
+    resultPayload && resultPayload.result && resultPayload.result.workerId
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
 }
 
 function projectTaskForRead(task) {
@@ -756,6 +838,32 @@ function normalizeTask(input) {
     }
   }
 
+  if (input.type === TASK_TYPE_TREND_RESEARCH) {
+    const payloadChannelId =
+      typeof normalizedPayload.channelId === 'string' && normalizedPayload.channelId.trim()
+        ? normalizedPayload.channelId.trim()
+        : null;
+    const rootChannelId =
+      typeof input.channelId === 'string' && input.channelId.trim()
+        ? input.channelId.trim()
+        : null;
+
+    normalizedPayload.channelId = payloadChannelId || rootChannelId || TREND_RESEARCH_DEFAULT_CHANNEL_ID;
+
+    // Ensure workerId is always set for TREND_RESEARCH tasks so the engine
+    // can establish ownership at TASK_CLAIMED. If the caller did not explicitly
+    // provide a worker identity, default to the resolved channelId — the agent
+    // responsible for a channel is the authoritative worker for that channel's
+    // research tasks.
+    if (
+      !normalizedPayload.workerId
+      && !normalizedPayload.agentId
+      && !normalizedPayload.assignedAgentId
+    ) {
+      normalizedPayload.workerId = normalizedPayload.channelId;
+    }
+  }
+
   return {
     id: input.id || generateId(),
     type: input.type,
@@ -820,8 +928,13 @@ function validateTaskInput(body) {
     return 'Body must be a JSON object';
   }
 
-  if (body.type !== TASK_TYPE_DISCORD && body.type !== TASK_TYPE_SHOPIFY && body.type !== TASK_TYPE_IMAGE_RENDER) {
-    return "type must be 'discord', 'shopify', or 'image_render'";
+  if (
+    body.type !== TASK_TYPE_DISCORD
+    && body.type !== TASK_TYPE_SHOPIFY
+    && body.type !== TASK_TYPE_IMAGE_RENDER
+    && body.type !== TASK_TYPE_TREND_RESEARCH
+  ) {
+    return "type must be 'discord', 'shopify', 'image_render', or 'TREND_RESEARCH'";
   }
 
   if (body.title !== undefined && typeof body.title !== 'string') {
@@ -1114,6 +1227,48 @@ const taskEngine = createTaskEngine({
     };
   },
   onTaskAcked: async (task) => {
+    if (task && task.type === TASK_TYPE_TREND_RESEARCH) {
+      const requestId = getTrendResearchRequestId(task);
+      const resultPayload = getTrendResearchCompletedPayload(task);
+      const assignedAgentId = getTrendResearchAssignedAgentId(task, resultPayload);
+      const keyword = getTrendResearchKeyword(task, resultPayload);
+
+      if (task.status === 'acknowledged') {
+        if (!assignedAgentId) {
+          throw new Error('ENGINE_VIOLATION: missing assignedAgentId at completion');
+        }
+
+        console.log('[TREND_RESEARCH_COMPLETED_EMITTED]', {
+          taskId: task.id,
+          requestId,
+          assignedAgentId,
+          hasResult: !!resultPayload
+        });
+
+        emitBridgeEvent({
+          type: 'TREND_RESEARCH_COMPLETED',
+          taskId: task.id,
+          payload: {
+            taskId: task.id,
+            requestId,
+            keyword,
+            assignedAgentId,
+            workerId: assignedAgentId,
+            result: resultPayload
+          }
+        });
+      } else if (task.status === 'failed') {
+        emitBridgeEvent({
+          type: 'TREND_RESEARCH_FAILED',
+          taskId: task.id,
+          payload: {
+            requestId,
+            error: task.lastResult && task.lastResult.error ? task.lastResult.error : 'trend_research_failed'
+          }
+        });
+      }
+    }
+
     await discordNotificationWorker.notifyTaskCompletion(task);
   },
   emitEvent: emitBridgeEvent
@@ -1146,7 +1301,8 @@ async function autoExecuteAndAck(taskId) {
       source: taskSource,
       engineStatusAfterEnsure: ensuredTask ? ensuredTask.status : null
     });
-    const taskResult = await taskEngine.executeTask(taskId);
+    const claimingWorkerId = getTrendResearchAssignedAgentId(existing, null);
+    const taskResult = await taskEngine.executeTask(taskId, { workerId: claimingWorkerId || undefined });
     const execution = mapTaskResultToExecution(taskResult);
     const executionCompletedAt = Date.now();
     existing.executionResult = execution;

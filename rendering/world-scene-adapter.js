@@ -54,6 +54,10 @@ function entityToAgentSpriteComponent(entity) {
     deskId:        entity.deskId        ?? null,
     // Forwarded from agentSelectors output via buildWorldScene — null when agent is idle.
     currentTaskId: entity.currentTaskId ?? null,
+    trendPanelState: entity.trendPanelState && typeof entity.trendPanelState === 'object'
+      ? entity.trendPanelState
+      : null,
+    uiAssets:      Array.isArray(entity.uiAssets) ? entity.uiAssets : [],
     metrics:       entity.metrics       ?? { duration: null, queueTime: null, latency: null },
     anomaly:       entity.anomaly       ?? null,
   };

@@ -8,6 +8,7 @@
 // step workers for direct invocation and testing.
 
 import { runCollectSignalsWorker } from '../workers/collectSignalsWorker.js';
+import { runSignalNormalizationWorker } from '../workers/signalNormalizationWorker.js';
 import { runScoreTrendsWorker } from '../workers/scoreTrendsWorker.js';
 import { runSelectCandidatesWorker } from '../workers/selectCandidatesWorker.js';
 import { runProduceFinalOutputWorker } from '../workers/produceFinalOutputWorker.js';
@@ -28,10 +29,10 @@ import { runProduceFinalOutputWorker } from '../workers/produceFinalOutputWorker
  * returns { success: false, error, failedStep }.
  *
  * @param {{ keyword: string }} input
- * @returns {{ success: true, result: { ranked: string[] } }
- *          |{ success: false, error: string, failedStep: number }}
+ * @returns {Promise<{ success: true, result: { ranked: string[] } }
+ *          |{ success: false, error: string, failedStep: number }>}
  */
-export function runTrendResearchWorkflow(input) {
+export async function runTrendResearchWorkflow(input) {
   const keyword =
     input && typeof input.keyword === 'string' ? input.keyword.trim() : '';
 
@@ -39,12 +40,21 @@ export function runTrendResearchWorkflow(input) {
     return { success: false, error: 'missing_keyword', failedStep: 1 };
   }
 
-  const step1 = runCollectSignalsWorker({ keyword });
+  const step1 = await runCollectSignalsWorker({ keyword });
   if (!step1.success) {
     return { success: false, error: step1.error, failedStep: 1 };
   }
 
-  const step2 = runScoreTrendsWorker({ signals: step1.result.signals });
+  const normalizedStep = runSignalNormalizationWorker({
+    keyword,
+    signals: step1.result.signals,
+    rawSignals: step1.result.rawSignals
+  });
+  if (!normalizedStep.success) {
+    return { success: false, error: normalizedStep.error, failedStep: 2 };
+  }
+
+  const step2 = runScoreTrendsWorker({ normalizedSignals: normalizedStep.result.normalizedSignals });
   if (!step2.success) {
     return { success: false, error: step2.error, failedStep: 2 };
   }

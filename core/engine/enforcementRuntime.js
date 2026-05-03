@@ -1,6 +1,17 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
+// Node.js uses AsyncLocalStorage for true async context; browser uses a synchronous stack.
+let runtimeContext;
 
-const runtimeContext = new AsyncLocalStorage();
+if (typeof process !== 'undefined' && process.versions && process.versions.node) {
+  const { AsyncLocalStorage } = await import('node:async_hooks');
+  runtimeContext = new AsyncLocalStorage();
+} else {
+  let _store = null;
+  runtimeContext = {
+    run(value, fn) { const prev = _store; _store = value; try { return fn(); } finally { _store = prev; } },
+    getStore() { return _store; }
+  };
+}
+
 let taskEngineCallerKey = null;
 
 function violation() {

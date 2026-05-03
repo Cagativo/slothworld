@@ -2,14 +2,17 @@ import {
   ACTION_SEND_CHANNEL_MESSAGE,
   ACTION_REPLY_TO_MESSAGE,
   TASK_TYPE_IMAGE_RENDER,
-  ACTION_RENDER_PRODUCT_IMAGE
+  ACTION_RENDER_PRODUCT_IMAGE,
+  TASK_TYPE_TREND_RESEARCH
 } from '../constants.js';
 import { normalizeDesignIntent, buildProviderPrompt } from '../../integrations/rendering/prompt-builder.js';
 import { runImageRenderWorker } from './imageRenderWorker.js';
 import { runCollectSignalsWorker } from './collectSignalsWorker.js';
+import { runSignalNormalizationWorker } from './signalNormalizationWorker.js';
 import { runScoreTrendsWorker } from './scoreTrendsWorker.js';
 import { runSelectCandidatesWorker } from './selectCandidatesWorker.js';
 import { runProduceFinalOutputWorker } from './produceFinalOutputWorker.js';
+import { runTrendResearchWorkflow } from '../engine/runTrendResearchWorkflow.js';
 
 import { assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
 
@@ -150,7 +153,7 @@ async function executeTrendResearchStepTask(task) {
 
   if (action === 'collectsignals') {
     const keyword = context.keyword || '';
-    return runCollectSignalsWorker({ keyword });
+    return await runCollectSignalsWorker({ keyword });
   }
 
   if (action === 'scoretrends') {
@@ -158,7 +161,21 @@ async function executeTrendResearchStepTask(task) {
     const signals = collectSignalsOutput && collectSignalsOutput.result && Array.isArray(collectSignalsOutput.result.signals)
       ? collectSignalsOutput.result.signals
       : [];
-    return runScoreTrendsWorker({ signals });
+    const rawSignals = collectSignalsOutput && collectSignalsOutput.result && Array.isArray(collectSignalsOutput.result.rawSignals)
+      ? collectSignalsOutput.result.rawSignals
+      : [];
+
+    const normalizedResult = runSignalNormalizationWorker({
+      keyword: context.keyword || '',
+      signals,
+      rawSignals
+    });
+
+    if (!normalizedResult.success) {
+      return normalizedResult;
+    }
+
+    return runScoreTrendsWorker({ normalizedSignals: normalizedResult.result.normalizedSignals });
   }
 
   if (action === 'selectcandidates') {
@@ -275,6 +292,12 @@ export function createTaskExecutionWorker({ getDiscordClient, taskTriggeredMessa
 
         if (task.type === TASK_TYPE_IMAGE_RENDER || action === ACTION_RENDER_PRODUCT_IMAGE || action === 'render.route') {
           return executeImageRenderTask(task);
+        }
+
+        if (task.type === TASK_TYPE_TREND_RESEARCH) {
+          const result = await runTrendResearchWorkflow(task.payload);
+
+          return ok(result);
         }
 
         if (action === 'research_product' || action === 'research.query') {

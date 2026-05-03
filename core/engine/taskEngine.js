@@ -22,6 +22,32 @@ const DEFAULT_NOW = () => Date.now();
 const TASK_ENGINE_CALLER_KEY = Symbol('TASK_ENGINE_CALLER_KEY');
 registerTaskEngineCallerKey(TASK_ENGINE_CALLER_KEY);
 
+const TREND_RESEARCH_TASK_TYPE = 'TREND_RESEARCH';
+
+function resolveAssignedAgentId(task) {
+  if (!task || typeof task !== 'object') {
+    return null;
+  }
+
+  const payload = task.payload && typeof task.payload === 'object' ? task.payload : {};
+  const candidates = [
+    task.assignedAgentId,
+    task.agentId,
+    task.workerId,
+    payload.assignedAgentId,
+    payload.agentId,
+    payload.workerId
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
+}
+
 export function createTaskEngine(options = {}) {
   const tasks = new Map();
   const queue = [];
@@ -116,6 +142,7 @@ export function createTaskEngine(options = {}) {
 
     const stored = {
       ...task,
+      assignedAgentId: resolveAssignedAgentId(task),
       status: 'created',
       attempts: 0,
       maxRetries: typeof task.maxRetries === 'number' ? Math.max(0, task.maxRetries) : 3,
@@ -153,7 +180,7 @@ export function createTaskEngine(options = {}) {
     return task;
   }
 
-  function claimTask(taskId) {
+  function claimTask(taskId, workerId) {
     let claimed = null;
 
     if (typeof taskId === 'string') {
@@ -182,17 +209,26 @@ export function createTaskEngine(options = {}) {
       return null;
     }
 
+      // Ownership is set at TASK_CLAIMED. The explicit workerId from the claimer
+      // is authoritative. Fall back to resolveAssignedAgentId only when no
+      // claimer workerId was provided (e.g. direct claimTask calls in tests).
+      claimed.assignedAgentId =
+        (typeof workerId === 'string' && workerId.trim() ? workerId.trim() : null)
+        || resolveAssignedAgentId(claimed);
+
     claimed.status = 'claimed';
     claimed.claimedAt = now();
     emit('TASK_CLAIMED', claimed.id, {
       queueSize: queue.length,
-      attempts: claimed.attempts
+      attempts: claimed.attempts,
+      assignedAgentId: claimed.assignedAgentId,
+      workerId: claimed.assignedAgentId
     });
 
     return claimed;
   }
 
-  async function executeTask(taskOrId) {
+  async function executeTask(taskOrId, options = {}) {
     const task = typeof taskOrId === 'string'
       ? resolveTask(taskOrId)
       : createTask(taskOrId);
@@ -232,15 +268,20 @@ export function createTaskEngine(options = {}) {
     }
 
     if (task.status === 'queued') {
-      claimTask(task.id);
+      claimTask(task.id, options.workerId);
     }
 
     task.status = 'executing';
     task.attempts += 1;
     task.executedAt = now();
+      // Preserve ownership set at TASK_CLAIMED; only re-resolve if still unset.
+      task.assignedAgentId = task.assignedAgentId || resolveAssignedAgentId(task);
+
     emit('TASK_EXECUTE_STARTED', task.id, {
       attempts: task.attempts,
-      maxRetries: task.maxRetries
+      maxRetries: task.maxRetries,
+      assignedAgentId: task.assignedAgentId,
+      workerId: task.assignedAgentId
     });
 
     const executionPromise = runInTaskEngineExecutionContext(task.id, TASK_ENGINE_CALLER_KEY, () => Promise.resolve(executor(task)))
@@ -278,7 +319,9 @@ export function createTaskEngine(options = {}) {
         emit('TASK_EXECUTE_FINISHED', task.id, {
           success: result.success,
           retryable: result.retryable === true,
-          status: task.status
+          status: task.status,
+          assignedAgentId: task.assignedAgentId,
+          workerId: task.assignedAgentId
         });
 
         return result;
@@ -301,7 +344,9 @@ export function createTaskEngine(options = {}) {
         emit('TASK_EXECUTE_FINISHED', task.id, {
           success: false,
           error: failure.error,
-          status: task.status
+          status: task.status,
+          assignedAgentId: task.assignedAgentId,
+          workerId: task.assignedAgentId
         });
 
         return failure;
@@ -325,13 +370,23 @@ export function createTaskEngine(options = {}) {
       throw new Error('ENGINE_ENFORCEMENT_VIOLATION');
     }
 
+    task.assignedAgentId = resolveAssignedAgentId(task);
+
     task.lastResult = task.executionRecord.result;
+
+    if (task.type === TREND_RESEARCH_TASK_TYPE && !task.assignedAgentId) {
+      throw new Error('ENGINE_VIOLATION: missing assignedAgentId at completion');
+    }
+
     task.status = task.lastResult.success ? 'acknowledged' : 'failed';
     task.acknowledgedAt = now();
     emit('TASK_ACKED', task.id, {
       status: task.status,
       attempts: task.attempts,
-      success: task.lastResult.success
+      success: task.lastResult.success,
+      error: task.lastResult.success ? undefined : task.lastResult.error,
+      assignedAgentId: task.assignedAgentId,
+      workerId: task.assignedAgentId
     });
 
     if (typeof options.onTaskAcked === 'function') {

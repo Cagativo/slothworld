@@ -253,8 +253,12 @@ export function buildWorldScene(graph) {
       // currentTaskId is set by agentSelectors when a task assignment is confirmed.
       // It is null for idle agents and must never be derived from raw events here.
       const currentTaskId = meta.currentTaskId ?? null;
+      const trendPanelState = meta.trendPanelState && typeof meta.trendPanelState === 'object'
+        ? meta.trendPanelState
+        : null;
+      const uiAssets = Array.isArray(meta.uiAssets) ? meta.uiAssets : [];
 
-      return { id: n.id, type: n.type, zoneId, visualState, position, metrics, anomaly, deskId, currentTaskId };
+      return { id: n.id, type: n.type, zoneId, visualState, position, metrics, anomaly, deskId, currentTaskId, trendPanelState, uiAssets };
     });
 
   const connections = edges.map((e) => ({ from: e.from, to: e.to, type: 'flow' }));

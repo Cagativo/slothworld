@@ -11,6 +11,7 @@ export const DEFAULT_WORKFLOW_STEP_MAX_RETRIES = 2;
 export const TASK_TYPE_DISCORD = 'discord';
 export const TASK_TYPE_SHOPIFY = 'shopify';
 export const TASK_TYPE_IMAGE_RENDER = 'image_render';
+export const TASK_TYPE_TREND_RESEARCH = 'TREND_RESEARCH';
 
 // Task actions
 export const ACTION_REPLY_TO_MESSAGE = 'reply_to_message';

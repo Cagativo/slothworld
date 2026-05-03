@@ -22,7 +22,6 @@ export const AGENT_EVENTS = Object.freeze([
 ]);
 
 export const WORKFLOW_EVENTS = Object.freeze([
-  'TREND_RESEARCH_REQUESTED',
   'TREND_RESEARCH_COMPLETED',
   'TREND_RESEARCH_FAILED'
 ]);

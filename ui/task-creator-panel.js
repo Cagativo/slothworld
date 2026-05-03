@@ -182,21 +182,38 @@ export function initTaskCreatorPanel() {
           statusDiv.className = 'tcp-status tcp-error';
           return;
         }
-        window.dispatchEvent(new CustomEvent('slothworld:event', {
-          detail: {
-            type: 'TREND_RESEARCH_REQUESTED',
-            payload: {
-              requestId: crypto.randomUUID(),
-              keyword
-            }
-          }
-        }));
-        statusDiv.textContent = 'Research requested\u2026';
+        const requestId = crypto.randomUUID();
+        statusDiv.textContent = 'sending...';
         statusDiv.className = 'tcp-status';
-        form.reset();
-        typeSelect.value = 'discord';
-        typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-        channelIdInput.value = FIXED_DISCORD_CHANNEL_ID;
+
+        const trendTaskPayload = {
+          id: requestId,
+          type: 'TREND_RESEARCH',
+          title: title || `Trend research: ${keyword}`,
+          payload: {
+            source: 'task_creator_panel',
+            requestId,
+            keyword,
+            channelId
+          }
+        };
+
+        const trendResult = await window.controlAPI.injectTask(trendTaskPayload);
+        if (trendResult && trendResult.success) {
+          panelRuntime.pendingTaskId = requestId;
+
+          statusDiv.textContent = `waiting for engine... task ${requestId}`;
+          statusDiv.className = 'tcp-status';
+          form.reset();
+          typeSelect.value = 'discord';
+          typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+          channelIdInput.value = FIXED_DISCORD_CHANNEL_ID;
+          panel.classList.remove('is-dropdown-open');
+          return;
+        }
+
+        statusDiv.textContent = `Error: ${trendResult && trendResult.error ? trendResult.error : 'Task creation failed'}`;
+        statusDiv.className = 'tcp-status tcp-error';
         return;
       }
 
