@@ -21,9 +21,16 @@ export const AGENT_EVENTS = Object.freeze([
   'AGENT_ASSIGNED_IDLE'
 ]);
 
+export const WORKFLOW_EVENTS = Object.freeze([
+  'TREND_RESEARCH_REQUESTED',
+  'TREND_RESEARCH_COMPLETED',
+  'TREND_RESEARCH_FAILED'
+]);
+
 const lifecycleSet = new Set(LIFECYCLE_EVENTS);
 const systemSet = new Set(SYSTEM_EVENTS);
 const agentSet = new Set(AGENT_EVENTS);
+const workflowSet = new Set(WORKFLOW_EVENTS);
 const warnedUnknownTypes = new Set();
 
 const strictUnknownEventTypes = typeof process !== 'undefined'
@@ -46,13 +53,14 @@ function isDevMode() {
 export const LIFECYCLE_EVENT_TYPES = LIFECYCLE_EVENTS;
 export const SYSTEM_EVENT_TYPES = SYSTEM_EVENTS;
 export const AGENT_EVENT_TYPES = AGENT_EVENTS;
+export const WORKFLOW_EVENT_TYPES = WORKFLOW_EVENTS;
 
 function guardUnknownEventType(type) {
   if (!isDevMode() || typeof type !== 'string') {
     return;
   }
 
-  if (lifecycleSet.has(type) || systemSet.has(type) || agentSet.has(type) || warnedUnknownTypes.has(type)) {
+  if (lifecycleSet.has(type) || systemSet.has(type) || agentSet.has(type) || workflowSet.has(type) || warnedUnknownTypes.has(type)) {
     return;
   }
 
@@ -74,4 +82,9 @@ export function isLifecycleEvent(type) {
 export function isSystemEvent(type) {
   guardUnknownEventType(type);
   return typeof type === 'string' && systemSet.has(type);
+}
+
+export function isWorkflowEvent(type) {
+  guardUnknownEventType(type);
+  return typeof type === 'string' && workflowSet.has(type);
 }
