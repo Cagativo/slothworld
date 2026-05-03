@@ -466,6 +466,11 @@ canvas {
   box-shadow: 0 0 4px rgba(150, 191, 72, 0.5);
 }
 
+#task-creator-panel .tcp-select-wrap[data-type="trendresearch"]::before {
+  background: #e8a838; /* amber */
+  box-shadow: 0 0 4px rgba(232, 168, 56, 0.5);
+}
+
 #task-creator-panel .tcp-select-wrap select {
   padding-left: 24px;
 }
