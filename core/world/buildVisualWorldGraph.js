@@ -92,7 +92,11 @@ export function buildVisualWorldGraph(input, options) {
       metadata: {
         role: agent.role,
         currentTaskId: agent.currentTaskId,
-        deskId: agent.deskId
+        deskId: agent.deskId,
+        trendPanelState: agent.trendPanelState && typeof agent.trendPanelState === 'object'
+          ? agent.trendPanelState
+          : null,
+        uiAssets: Array.isArray(agent.uiAssets) ? agent.uiAssets : []
       }
     });
   }

@@ -11,9 +11,9 @@ import assert from 'node:assert/strict';
 
 import { runTrendResearchWorkflow } from '../core/engine/runTrendResearchWorkflow.js';
 
-test('TrendResearchWorkflow E2E: full execution with keyword "protein"', () => {
+test('TrendResearchWorkflow E2E: full execution with keyword "protein"', async () => {
   const keyword = 'protein';
-  const result = runTrendResearchWorkflow({ keyword });
+  const result = await runTrendResearchWorkflow({ keyword });
 
   // Workflow completes successfully
   assert.strictEqual(result.success, true, 'workflow must succeed');
@@ -40,10 +40,10 @@ test('TrendResearchWorkflow E2E: full execution with keyword "protein"', () => {
   assert.strictEqual('failedStep' in result, false, 'success result must not contain failedStep');
 });
 
-test('TrendResearchWorkflow E2E: execution is deterministic', () => {
+test('TrendResearchWorkflow E2E: execution is deterministic', async () => {
   const keyword = 'protein';
-  const first  = runTrendResearchWorkflow({ keyword });
-  const second = runTrendResearchWorkflow({ keyword });
+  const first  = await runTrendResearchWorkflow({ keyword });
+  const second = await runTrendResearchWorkflow({ keyword });
 
   assert.strictEqual(first.success,  true, 'first run must succeed');
   assert.strictEqual(second.success, true, 'second run must succeed');
@@ -56,8 +56,8 @@ test('TrendResearchWorkflow E2E: execution is deterministic', () => {
   );
 });
 
-test('TrendResearchWorkflow E2E: failure result has no result field', () => {
-  const result = runTrendResearchWorkflow({ keyword: '' });
+test('TrendResearchWorkflow E2E: failure result has no result field', async () => {
+  const result = await runTrendResearchWorkflow({ keyword: '' });
 
   assert.strictEqual(result.success, false, 'empty keyword must fail');
   assert.strictEqual('result' in result, false, 'failure result must not contain result');

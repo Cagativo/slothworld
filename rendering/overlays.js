@@ -11,6 +11,7 @@ import {
   AGENT_STATE_SITTING,
   AGENT_STATE_WORKING
 } from '../core/constants.js';
+import { ASSET_MAPPING, loadedAssets } from './assets.js';
 
 // --- Shared rendering state ---
 export const uiFxState = {
@@ -488,6 +489,25 @@ export function drawWorkflowOverlay(ctx, workflowList) {
 export function drawTrendResultCard(ctx, agent) {
   if (!agent) return;
 
+  const normalizedItems = Array.isArray(agent.trendResult)
+    ? agent.trendResult
+      .slice(0, 5)
+      .map((entry) => {
+        if (entry && typeof entry === 'object') {
+          return {
+            item: typeof entry.item === 'string' ? entry.item : '',
+            score: Number.isFinite(entry.score) ? Number(entry.score) : null
+          };
+        }
+
+        return {
+          item: typeof entry === 'string' ? entry : '',
+          score: null
+        };
+      })
+      .filter((entry) => entry.item)
+    : [];
+
   // Working state indicator — small amber pulsing dot above agent when research is in progress
   if (agent.state === 'working') {
     const pulse = 0.5 + 0.5 * Math.sin(uiFxState.frame * 0.18);
@@ -500,44 +520,46 @@ export function drawTrendResultCard(ctx, agent) {
     return;
   }
 
-  // Result card — only when done with a valid, non-empty trendResult
-  if (agent.state !== 'done' || !Array.isArray(agent.trendResult) || agent.trendResult.length === 0) {
+  // Visibility is driven only by valid trend results, never by transient agent state.
+  if (normalizedItems.length === 0) {
     return;
   }
 
-  const items = agent.trendResult.slice(0, 3);
-  const cardWidth = 120;
-  const lineHeight = 13;
-  const paddingX = 8;
-  const paddingY = 6;
-  const cardHeight = paddingY + lineHeight + items.length * lineHeight + paddingY;
+  const cardWidth = 170;
+  const lineHeight = 12;
+  const paddingX = 10;
+  const paddingY = 10;
+  const title = `Top Trends: ${agent.keyword || ''}`;
+  const cardHeight = paddingY + lineHeight + normalizedItems.length * lineHeight + paddingY + 4;
 
   const cardX = agent.x - cardWidth / 2;
   const cardY = agent.y - 60 - cardHeight;
+  const panelAsset = loadedAssets[ASSET_MAPPING.effects.ui[0]];
 
   ctx.save();
-
-  // Background
-  ctx.fillStyle = 'rgba(12, 16, 30, 0.88)';
-  ctx.fillRect(cardX, cardY, cardWidth, cardHeight);
-
-  // Border — amber, matching TrendResearch colour
-  ctx.strokeStyle = 'rgba(232, 168, 56, 0.6)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(cardX, cardY, cardWidth, cardHeight);
-
-  ctx.font = '10px monospace';
   ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
 
-  // Keyword header
+  if (panelAsset) {
+    ctx.drawImage(panelAsset, cardX, cardY, cardWidth, cardHeight);
+  } else {
+    ctx.fillStyle = 'rgba(12, 16, 30, 0.88)';
+    ctx.fillRect(cardX, cardY, cardWidth, cardHeight);
+    ctx.strokeStyle = 'rgba(232, 168, 56, 0.6)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cardX, cardY, cardWidth, cardHeight);
+  }
+
   ctx.fillStyle = '#e8a838';
-  const headerBaselineY = cardY + paddingY + lineHeight;
-  ctx.fillText(`\uD83D\uDD0D ${agent.keyword || ''}`, cardX + paddingX, headerBaselineY);
+  ctx.font = '9px monospace';
+  const headerBaselineY = cardY + paddingY + (lineHeight / 2);
+  ctx.fillText(title, cardX + paddingX, headerBaselineY);
 
-  // Ranked items
   ctx.fillStyle = '#f7f4df';
-  for (let i = 0; i < items.length; i += 1) {
-    ctx.fillText(`${i + 1}. ${items[i]}`, cardX + paddingX, headerBaselineY + (i + 1) * lineHeight);
+  for (let i = 0; i < normalizedItems.length; i += 1) {
+    const item = normalizedItems[i];
+    const scoreLabel = item.score === null ? '' : ` ${item.score.toFixed(2)}`;
+    ctx.fillText(`${item.item}${scoreLabel}`, cardX + paddingX, headerBaselineY + ((i + 1) * lineHeight));
   }
 
   ctx.restore();
@@ -549,32 +571,29 @@ export function drawPendingWorkflowsOverlay(ctx, pendingList) {
     return;
   }
 
-  // Draw a centered modal for each pending workflow (max 1 visible at a time)
   const workflow = pendingWorkflowList[0];
+  const workflowSteps = Array.isArray(workflow.steps) ? workflow.steps : [];
+  const stepsToShow = Math.min(workflowSteps.length, 4);
   const windowWidth = canvas.width;
   const windowHeight = canvas.height;
   const cardWidth = 500;
   const headerHeight = 40;
   const stepHeight = 50;
   const footerHeight = 50;
-  const cardHeight = headerHeight + Math.min(workflow.steps.length, 4) * stepHeight + footerHeight;
+  const cardHeight = headerHeight + stepsToShow * stepHeight + footerHeight;
   const cardX = (windowWidth - cardWidth) / 2;
   const cardY = (windowHeight - cardHeight) / 2;
 
-  // Semi-transparent backdrop
   ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
   ctx.fillRect(0, 0, windowWidth, windowHeight);
 
-  // Card background
   ctx.fillStyle = 'rgba(20, 25, 40, 0.95)';
   ctx.fillRect(cardX, cardY, cardWidth, cardHeight);
 
-  // Card border - glowing cyan
   ctx.strokeStyle = 'rgba(100, 200, 255, 0.6)';
   ctx.lineWidth = 2;
   ctx.strokeRect(cardX, cardY, cardWidth, cardHeight);
 
-  // Header
   ctx.fillStyle = 'rgba(50, 80, 120, 0.8)';
   ctx.fillRect(cardX, cardY, cardWidth, headerHeight);
   ctx.fillStyle = '#d7f0ff';
@@ -582,69 +601,51 @@ export function drawPendingWorkflowsOverlay(ctx, pendingList) {
   ctx.textAlign = 'left';
   ctx.fillText('⧗ WORKFLOW PENDING APPROVAL', cardX + 12, cardY + 26);
 
-  // Workflow ID
   ctx.fillStyle = '#a0d0ff';
   ctx.font = '10px monospace';
-  ctx.fillText(`ID: ${workflow.id}`, cardX + 12, cardY + headerHeight + 16);
+  ctx.fillText(`Workflow: ${workflow.id.slice(0, 24)}`, cardX + 12, cardY + 38);
 
-  // Steps list
-  const stepsToShow = Math.min(workflow.steps.length, 4);
   for (let i = 0; i < stepsToShow; i += 1) {
-    const step = workflow.steps[i];
+    const step = workflowSteps[i];
     const plan = workflow.plan && workflow.plan[i] ? workflow.plan[i] : {};
     const stepY = cardY + headerHeight + 20 + i * stepHeight;
+    const title = step.title || step.description || `Step ${i + 1}`;
+    const desc = plan.description || step.description || '';
+    const descShort = desc.length > 56 ? `${desc.slice(0, 53)}...` : desc;
 
-    // Step number and title
     ctx.fillStyle = '#7ff0ff';
     ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${i + 1}. ${step.title || `Step ${i + 1}`}`, cardX + 20, stepY + 12);
+    ctx.fillText(`${i + 1}. ${title}`, cardX + 20, stepY + 14);
 
-    // Complexity badge
-    const complexityColor = plan.complexity === 'high' ? '#ff8888' : plan.complexity === 'low' ? '#88ff88' : '#ffaa66';
-    ctx.fillStyle = complexityColor;
+    ctx.fillStyle = '#b9d7ff';
     ctx.font = '9px monospace';
-    ctx.fillText(`[${plan.complexity || 'med'}]`, cardX + 20, stepY + 26);
+    ctx.fillText(`Role: ${plan.rolePreference || 'any'}`, cardX + 20, stepY + 28);
 
-    // Role preference
-    ctx.fillStyle = '#b0c8ff';
-    ctx.font = '9px monospace';
-    ctx.fillText(`Role: ${plan.rolePreference || 'any'}`, cardX + 120, stepY + 26);
-
-    // Description
-    ctx.fillStyle = '#80a8ff';
-    ctx.font = '9px monospace';
-    const desc = plan.description || step.description || '';
-    const descShort = desc.length > 45 ? desc.slice(0, 42) + '...' : desc;
+    ctx.fillStyle = '#d7f0ff';
     ctx.fillText(descShort, cardX + 20, stepY + 40);
   }
 
-  if (workflow.steps.length > stepsToShow) {
+  if (workflowSteps.length > stepsToShow) {
     ctx.fillStyle = '#8080a0';
     ctx.font = '9px monospace';
-    ctx.fillText(`... and ${workflow.steps.length - stepsToShow} more steps`, cardX + 20, cardY + headerHeight + 20 + stepsToShow * stepHeight);
+    ctx.fillText(`... and ${workflowSteps.length - stepsToShow} more steps`, cardX + 20, cardY + headerHeight + 20 + stepsToShow * stepHeight);
   }
 
-  // Footer with approve/reject buttons
   const footerY = cardY + cardHeight - footerHeight;
   ctx.fillStyle = 'rgba(40, 50, 70, 0.8)';
   ctx.fillRect(cardX, footerY, cardWidth, footerHeight);
 
-  // Draw as text instructions (buttons would need mouse tracking which is complex in canvas)
   ctx.fillStyle = '#90ff90';
   ctx.font = 'bold 12px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('[APPROVE: approve workflow ' + workflow.id.slice(0, 12) + ']', cardX + cardWidth / 2, footerY + 18);
+  ctx.fillText(`[APPROVE: approve workflow ${workflow.id.slice(0, 12)}]`, cardX + cardWidth / 2, footerY + 18);
 
   ctx.fillStyle = '#ff9090';
-  ctx.font = 'bold 12px monospace';
-  ctx.fillText('[REJECT: reject workflow ' + workflow.id.slice(0, 12) + ']', cardX + cardWidth / 2, footerY + 36);
+  ctx.fillText(`[REJECT: reject workflow ${workflow.id.slice(0, 12)}]`, cardX + cardWidth / 2, footerY + 36);
 
-  // Show count of pending workflows if multiple
   if (pendingWorkflowList.length > 1) {
     ctx.fillStyle = '#ffaa66';
     ctx.font = '10px monospace';
-    ctx.textAlign = 'center';
     ctx.fillText(`(${pendingWorkflowList.length - 1} more pending)`, cardX + cardWidth / 2, footerY - 8);
   }
 }

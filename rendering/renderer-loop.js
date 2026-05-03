@@ -3,7 +3,6 @@ import { buildWorldScene } from './world-scene.js';
 import { toRenderableComponents } from './world-scene-adapter.js';
 import { renderAllLayers } from './world-scene-layer-renderer.js';
 import { assertGraphShape, assertEventDriven } from './render-guards.js';
-import { drawTrendResultCard } from './overlays.js';
 
 let _frame = 0;
 
@@ -37,8 +36,5 @@ export function renderFrame(renderView) {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   renderAllLayers(ctx, components, _frame);
-  for (const agent of agents) {
-    drawTrendResultCard(ctx, agent);
-  }
   _frame += 1;
 }

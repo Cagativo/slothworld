@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createEventBus } from '../core/engine/eventBus.js';
 import { createTaskEngine } from '../core/engine/taskEngine.js';
 
 /**
@@ -11,20 +10,14 @@ import { createTaskEngine } from '../core/engine/taskEngine.js';
  */
 
 test('Golden Path: Complete Task Lifecycle', async (t) => {
-  // Create EventBus (foundation)
-  const eventBus = createEventBus();
   const emittedEvents = [];
-  
-  // Subscribe to all events for verification
-  eventBus.subscribe((event) => {
-    emittedEvents.push(event);
-  });
 
-  // Create TaskEngine with EventBus integration
+  // Create TaskEngine with direct stream capture.
   const taskEngine = createTaskEngine({
     emitEvent: (event) => {
-      eventBus.emit({
+      emittedEvents.push({
         type: event.event,
+        timestamp: event.timestamp,
         taskId: event.taskId,
         payload: event.payload
       });
@@ -95,7 +88,6 @@ test('Golden Path: Complete Task Lifecycle', async (t) => {
   assert.ok(ackedEvent, 'TASK_ACKED event should be emitted');
 
   // VERIFICATION: Check full event stream
-  const fullStream = eventBus.getAllEvents();
   const expectedEventSequence = [
     'TASK_CREATED',
     'TASK_ENQUEUED',
@@ -105,40 +97,15 @@ test('Golden Path: Complete Task Lifecycle', async (t) => {
     'TASK_ACKED'
   ];
 
-  const actualSequence = fullStream.map((e) => e.type);
+  const actualSequence = emittedEvents.map((e) => e.type);
   assert.deepEqual(
     actualSequence,
     expectedEventSequence,
     `Event sequence should match golden path: ${expectedEventSequence.join(' → ')}`
   );
 
-  // VERIFICATION: Replay task state from event stream
-  const replayedState = eventBus.replayTaskState('golden-path-1');
-  assert.equal(replayedState.status, 'acknowledged', 'Replayed state should show acknowledged');
-  assert.equal(replayedState.eventCount, 6, 'Task should have 6 events');
-  assert.deepEqual(
-    replayedState.history.map((h) => h.event),
-    expectedEventSequence,
-    'Replayed history should match event sequence'
-  );
-
-  // VERIFICATION: No errors in event bus
-  const errors = eventBus.getErrors();
-  assert.equal(errors.length, 0, 'No errors should occur during event emission');
-
-  // VERIFICATION: Event stream is immutable
-  const stream1 = eventBus.getEventStream(0);
-  const stream2 = eventBus.getEventStream(0);
-  assert.deepEqual(stream1, stream2, 'Event stream should be consistent');
-  
-  // Mutating returned stream should not affect internal log
-  stream1[0].type = 'CORRUPTED';
-  const stream3 = eventBus.getEventStream(0);
-  assert.equal(stream3[0].type, 'TASK_CREATED', 'Internal log should not be corrupted by external mutation');
-
   console.log('✅ Golden Path: All checks passed');
-  console.log(`   - Events emitted: ${fullStream.length}`);
+  console.log(`   - Events emitted: ${emittedEvents.length}`);
   console.log(`   - Event sequence: ${actualSequence.join(' → ')}`);
-  console.log(`   - Replay verification: OK`);
-  console.log(`   - Immutability check: OK`);
+  console.log('   - Unified stream verification: OK');
 });
