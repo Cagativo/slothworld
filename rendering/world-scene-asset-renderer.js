@@ -101,11 +101,11 @@ const PROP_SIZE = 20;   // px — task prop sprite (square)
 const GLOW_SIZE = 40;   // px — glow orb overlay (square halo, not dominant bubble)
 const FLOW_SIZE = { w: 16, h: 8 };  // px — flow stream sprite
 const UI_SIZE   = { w: 52, h: 22 }; // px — floating display panel
-const loggedTrendUiRenders = new Set();
 const TREND_PANEL_ASSET_ID = 'ui_floating_display_01.png';
 const TREND_PANEL_MAX_VISIBLE = 4;
 const TREND_PANEL_HIDE_AFTER_MS = 30_000;
-const TREND_PANEL_FADE_MS = 2_500;
+const TREND_PANEL_FADE_START_MS = 20_000;
+const trendPanelUIState = new Map();
 
 /**
  * Resolve the canvas position of an entity component.
@@ -771,6 +771,17 @@ export function renderEffectLayer(ctx, components, entityPositions) {
  * @param {Map<string, {x:number, y:number}>} entityPositions
  */
 export function renderUIOverlayLayer(ctx, components, entityPositions) {
+  const now = Date.now();
+
+  for (const [taskId, panelState] of trendPanelUIState.entries()) {
+    const lastSeenAt = Number.isFinite(panelState && panelState.lastSeenAt)
+      ? Number(panelState.lastSeenAt)
+      : 0;
+    if ((now - lastSeenAt) > TREND_PANEL_HIDE_AFTER_MS) {
+      trendPanelUIState.delete(taskId);
+    }
+  }
+
   for (const c of components) {
     if (c.componentType !== 'agent-sprite') continue;
 
@@ -802,19 +813,38 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
       continue;
     }
 
-    const now = Date.now();
-    const lastUpdated = Number.isFinite(panel.lastUpdated) ? Number(panel.lastUpdated) : 0;
-    const staleMs = Math.max(0, now - lastUpdated);
-    if (staleMs > TREND_PANEL_HIDE_AFTER_MS + TREND_PANEL_FADE_MS) {
+    const panelTaskId = typeof panel.taskId === 'string' && panel.taskId.trim().length > 0
+      ? panel.taskId
+      : null;
+    if (!panelTaskId) {
       continue;
     }
 
-    const fadeAlpha = staleMs <= TREND_PANEL_HIDE_AFTER_MS
-      ? 1
-      : Math.max(0, 1 - ((staleMs - TREND_PANEL_HIDE_AFTER_MS) / TREND_PANEL_FADE_MS));
-    if (fadeAlpha <= 0) {
+    if (!trendPanelUIState.has(panelTaskId)) {
+      trendPanelUIState.set(panelTaskId, {
+        firstSeenAt: now,
+        lastSeenAt: now
+      });
+    } else {
+      const panelUIState = trendPanelUIState.get(panelTaskId);
+      panelUIState.lastSeenAt = now;
+    }
+
+    const panelUIState = trendPanelUIState.get(panelTaskId);
+    const lastSeenAt = Number.isFinite(panelUIState && panelUIState.lastSeenAt)
+      ? Number(panelUIState.lastSeenAt)
+      : 0;
+    const ageMs = Math.max(0, now - lastSeenAt);
+
+    if (ageMs >= TREND_PANEL_HIDE_AFTER_MS) {
       continue;
     }
+
+    const fadeWindowMs = TREND_PANEL_HIDE_AFTER_MS - TREND_PANEL_FADE_START_MS;
+    const fadeProgress = ageMs <= TREND_PANEL_FADE_START_MS
+      ? 0
+      : Math.min(1, (ageMs - TREND_PANEL_FADE_START_MS) / fadeWindowMs);
+    const fadeAlpha = 1 - fadeProgress;
 
     const visibleResults = normalizedItems.slice(-TREND_PANEL_MAX_VISIBLE);
     const needsScroll = normalizedItems.length > TREND_PANEL_MAX_VISIBLE;
@@ -862,19 +892,5 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
     }
 
     ctx.restore();
-
-    const renderLogId = `${panel.agentId || c.id}:${panel.taskId || 'unknown'}:${panel.lastUpdated || 0}`;
-    if (!loggedTrendUiRenders.has(renderLogId)) {
-      loggedTrendUiRenders.add(renderLogId);
-      if (loggedTrendUiRenders.size > 2048) {
-        loggedTrendUiRenders.clear();
-      }
-      console.log('[TrendResearchUI][renderer] rendering asset', {
-        componentId: c.id,
-        instanceId: `${panel.agentId || c.id}:${panel.taskId || 'unknown'}`,
-        assetId: TREND_PANEL_ASSET_ID,
-        itemCount: normalizedItems.length
-      });
-    }
   }
 }
