@@ -9,10 +9,11 @@
  *  - Output: scene description — { zones, entities, connections }
  *
  * RULES (enforced by architecture):
- *  - No mapping logic
  *  - No event usage
  *  - No lifecycle logic
+ *  - No selector imports
  *  - Pure structural projection only
+ *  - Entity positions are resolved via worldZoneMapper (selector-derived descriptors only)
  */
 
 /**
@@ -21,6 +22,8 @@
  * @typedef {{ id: string, position: { x: number, y: number }, size: { width: number, height: number } }} LifecycleZone
  * @typedef {{ id: string, kind: string, position: { x: number, y: number }, size: { width: number, height: number } }} EnvironmentElement
  */
+
+import { placeEntityInWorldZone } from '../ui/config/worldZoneMapper.js';
 
 // ---------------------------------------------------------------------------
 // Static environment — purely visual, data-independent
@@ -244,15 +247,21 @@ export function buildWorldScene(graph) {
   const entities = nodes
     .filter((n) => n && n.type !== 'zone')
     .map((n) => {
-      const zoneId   = STATUS_ZONE_MAP[n.status] ?? null;
-      const zone     = zoneId ? _zoneById.get(zoneId) : null;
-      const position = zone
-        ? { x: zone.position.x, y: zone.position.y }
-        : { x: 0, y: 0 };
+      const meta = n.metadata && typeof n.metadata === 'object' ? n.metadata : {};
+
+      // Lifecycle zone — retained for backwards compatibility with existing consumers.
+      const zoneId = STATUS_ZONE_MAP[n.status] ?? null;
+
+      // World zone — named, semantically-meaningful placement via pure mapper.
+      // The descriptor contains only pre-computed selector fields; no raw events.
+      const placed = placeEntityInWorldZone({
+        type:     n.type,
+        status:   n.status,
+        taskType: meta.taskType ?? null,
+      });
 
       const visualState = VISUAL_STATE_MAP[n.status] ?? 'unknown';
 
-      const meta = n.metadata && typeof n.metadata === 'object' ? n.metadata : {};
       const metrics = {
         duration:  meta.duration  ?? null,
         queueTime: meta.queueTime ?? null,
@@ -275,7 +284,20 @@ export function buildWorldScene(graph) {
         : null;
       const uiAssets = Array.isArray(meta.uiAssets) ? meta.uiAssets : [];
 
-      return { id: n.id, type: n.type, zoneId, visualState, position, metrics, anomaly, deskId, currentTaskId, trendPanelState, uiAssets };
+      return {
+        id: n.id,
+        type: n.type,
+        zoneId,
+        worldZoneId: placed.zoneId,
+        visualState,
+        position: placed.position,
+        metrics,
+        anomaly,
+        deskId,
+        currentTaskId,
+        trendPanelState,
+        uiAssets,
+      };
     });
 
   const connections = edges.map((e) => ({ from: e.from, to: e.to, type: 'flow' }));
