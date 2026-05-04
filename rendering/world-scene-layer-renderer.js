@@ -29,6 +29,8 @@ import { renderAllZones }          from './zone-renderer.js';
 import { renderAllConnections }     from './connection-renderer.js';
 import { renderAllAgentEntities }   from './agent-entity-renderer.js';
 import { buildEntityPositionMap }   from './zone-renderer.js';
+import { renderZoneLabels }         from './zone-label-renderer.js';
+import { renderAllTaskChips }       from './task-chip-renderer.js';
 import {
   renderBackgroundLayer,
   renderCoreLayer,
@@ -80,6 +82,12 @@ export function renderAllLayers(ctx, components, frame) {
   }
   renderZoneLayer(ctx, components);
 
+  // ── Layer 3.5: zone labels ──────────────────────────────────────────────
+  // Themed zone name badges (Intake Nook, Task Engine, …) drawn over the
+  // background image or procedural scene. Suppressed in debug mode since
+  // renderAllZones already shows raw zone IDs.
+  renderZoneLabels(ctx, components, isRenderDebug);
+
   // ── Layer 4: connection ─────────────────────────────────────────────────
   renderAllConnections(ctx, components, entityPositions, frame);
   renderConnectionLayer(ctx, components, entityPositions);
@@ -88,6 +96,12 @@ export function renderAllLayers(ctx, components, frame) {
   // Layer 5 agent rendering always runs and resolves positions through
   // entityPositions. Geometry fallback still applies while sprite assets load.
   renderAllAgentEntities(ctx, components, entityPositions, Date.now());
+
+  // ── Layer 5.5: task chips ───────────────────────────────────────────────
+  // Parchment work-cards for task entities: card body + ack-pulse + anomaly badge.
+  // Rendered after agents so cards appear in front of desk sprites.
+  renderAllTaskChips(ctx, components, entityPositions);
+
   // renderPropLayer remains suppressed in image mode. renderEffectLayer is a hard no-op.
   renderUIOverlayLayer(ctx, components, entityPositions);
 }

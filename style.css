@@ -681,6 +681,84 @@ canvas {
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   Themed World Projection — sidebar visual enhancements
+   These classes augment existing .ocp-item and .rfp-item elements
+   with parchment card, zone label, anomaly badge, and ack-pulse styles.
+   All styles are purely cosmetic; no layout or behaviour changes.
+───────────────────────────────────────────────────────────────── */
+
+/* Zone label badge — small plaque shown next to section headers */
+.world-zone-label {
+  display: inline-block;
+  font: 700 8px/1 monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #e8d8b0;
+  background: rgba(24, 14, 4, 0.78);
+  border: 1px solid #8a6230;
+  border-radius: 3px;
+  padding: 2px 5px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* Parchment work-card — enhanced task item display */
+.ocp-item {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Left state-bar accent on task items (mirrors canvas card bar) */
+.ocp-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--status-idle-neutral);
+  border-radius: 1px 0 0 1px;
+}
+
+.ocp-item.ocp-task-queued::before   { background: var(--status-idle-neutral); }
+.ocp-item.ocp-task-active::before,
+.ocp-item.ocp-task-pending::before  { background: var(--status-awaiting-ack-amber); }
+.ocp-item.ocp-task-done::before     { background: var(--status-delivering-green); }
+.ocp-item.ocp-task-failed::before   { background: var(--status-error-red); }
+
+/* Anomaly badge — small warning indicator on task/agent items */
+.anomaly-badge {
+  display: inline-block;
+  width: 14px;
+  height: 12px;
+  line-height: 12px;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--status-error-red);
+  border-radius: 2px;
+  margin-left: 4px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.anomaly-badge.anomaly-warn {
+  background: #f57c00;
+}
+
+/* Ack-pulse animation — for items in awaiting_ack / processing state */
+@keyframes ackPulse {
+  0%   { box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.20), 0 0 0 0 rgba(255, 179, 0, 0.00); }
+  40%  { box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.55), 0 0 4px 2px rgba(255, 179, 0, 0.14); }
+  100% { box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.20), 0 0 0 0 rgba(255, 179, 0, 0.00); }
+}
+
+.ocp-item.ocp-task-pending {
+  animation: ackPulse 1.8s ease-in-out infinite;
+}
+
+/* ─────────────────────────────────────────────────────────────────
    Responsive overrides — narrow viewport only
    Layout changes only; all color/type rules live in global scope above
 ───────────────────────────────────────────────────────────────── */

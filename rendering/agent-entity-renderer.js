@@ -336,22 +336,66 @@ export function renderAgentEntity(ctx, component, frameNow) {
     ctx.stroke();
   }
 
-  // Name tag — always shown above the sprite.
+  // Nameplate badge — warm parchment plaque above the sprite.
+  // Visual convention (Themed World Projection): rounded badge with amber border
+  // and warm cream text, replacing the plain debug-style dark rectangle.
   if (component.id) {
     const tagOffsetDx = offsets.dx;
     const tagOffsetDy = offsets.dy;
     const tagH  = sizes ? sizes.h : (spriteConfigs?.agent?.height ?? 54);
     const tagX  = x + tagOffsetDx;
-    const tagY  = y - tagH / 2 + tagOffsetDy - 4;
-    ctx.font         = 'bold 9px monospace';
+    const tagY  = y - tagH / 2 + tagOffsetDy - 6;
+
+    ctx.save();
+    ctx.font = 'bold 9px monospace';
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillStyle    = 'rgba(0,0,0,0.55)';
-    const metrics    = ctx.measureText(component.id);
-    const pad        = 3;
-    ctx.fillRect(tagX - metrics.width / 2 - pad, tagY - 11, metrics.width + pad * 2, 13);
+
+    const textW = ctx.measureText(component.id).width;
+    const padX  = 4;
+    const padY  = 2;
+    const bw    = textW + padX * 2;
+    const bh    = 11 + padY * 2;
+    const bx    = tagX - bw / 2;
+    const by    = tagY - bh;
+    const cr    = 3;
+
+    // Badge background — warm dark parchment
+    ctx.beginPath();
+    ctx.moveTo(bx + cr, by);
+    ctx.lineTo(bx + bw - cr, by);
+    ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + cr);
+    ctx.lineTo(bx + bw, by + bh - cr);
+    ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - cr, by + bh);
+    ctx.lineTo(bx + cr, by + bh);
+    ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - cr);
+    ctx.lineTo(bx, by + cr);
+    ctx.quadraticCurveTo(bx, by, bx + cr, by);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(26, 14, 4, 0.82)';
+    ctx.fill();
+
+    // Badge border — amber-brown accent
+    ctx.beginPath();
+    ctx.moveTo(bx + cr, by);
+    ctx.lineTo(bx + bw - cr, by);
+    ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + cr);
+    ctx.lineTo(bx + bw, by + bh - cr);
+    ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - cr, by + bh);
+    ctx.lineTo(bx + cr, by + bh);
+    ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - cr);
+    ctx.lineTo(bx, by + cr);
+    ctx.quadraticCurveTo(bx, by, bx + cr, by);
+    ctx.closePath();
+    ctx.strokeStyle = component.anomaly ? '#d07030' : '#8a6030';
+    ctx.lineWidth   = 0.8;
+    ctx.stroke();
+
+    // Agent ID text — warm cream
     ctx.fillStyle = '#e8d8b0';
     ctx.fillText(component.id, tagX, tagY);
+
+    ctx.restore();
   }
 }
 
