@@ -1,0 +1,129 @@
+┌──────────────────────────────────────────────┐
+│                  UI LAYER                    │
+│  (stateless intent + interaction surfaces)   │
+└──────────────────────────────────────────────┘
+            │
+            │ user intent (no semantics)
+            ▼
+┌──────────────────────────────────────────────┐
+│     Intent Surfaces (UI only)                │
+│  - Operator Panel                            │
+│  - Command Palette (/)                       │
+│  - Optional: Diegetic Click (sloth tap)      │
+│                                              │
+│  OUTPUT: POST /task                          │
+│  (pure intent, no assignment logic)          │
+└──────────────────────────────────────────────┘
+            │
+            ▼
+┌──────────────────────────────────────────────┐
+│                BRIDGE LAYER                  │
+│          (transport + intake only)           │
+│  - validates payload shape                   │
+│  - forwards to engine                        │
+└──────────────────────────────────────────────┘
+            │
+            ▼
+┌──────────────────────────────────────────────┐
+│               TASK ENGINE                    │
+│      (lifecycle authority / truth layer)     │
+│                                              │
+│  TASK_CREATED                                │
+│  TASK_ENQUEUED                               │
+│  TASK_CLAIMED                                │
+│  TASK_EXECUTE_STARTED                        │
+│  TASK_EXECUTE_FINISHED                       │
+│  TASK_ACKED  ←── ONLY completion gate        │
+│                                              │
+│  assigns: workerId / agentId                 │
+└──────────────────────────────────────────────┘
+            │
+            ▼
+┌──────────────────────────────────────────────┐
+│              WORKER LAYER                    │
+│   (execution only — no lifecycle mutation)   │
+│                                              │
+│  - runs adapters (Reddit, Trends, etc.)      │
+│  - produces structured results               │
+│  - returns executionRecord                   │
+└──────────────────────────────────────────────┘
+            │
+            ▼
+┌──────────────────────────────────────────────┐
+│             PROVIDER LAYER                   │
+│     (pure inference / no side effects)       │
+└──────────────────────────────────────────────┘
+            │
+            ▼
+┌──────────────────────────────────────────────┐
+│              EVENT STORE                     │
+│  immutable log of everything                 │
+│  indexed by deriveWorldState                 │
+└──────────────────────────────────────────────┘
+            │
+            ▼
+┌──────────────────────────────────────────────┐
+│          deriveWorldState (INDEXER)          │
+│                                              │
+│  INPUT: raw events                           │
+│  OUTPUT:                                     │
+│   - eventsByTaskId                           │
+│   - eventsByWorkerId                         │
+│   - indexedWorld snapshot                    │
+│                                              │
+│  ❌ no lifecycle logic                      |
+│  ❌ no UI semantics                         │
+└──────────────────────────────────────────────┘
+            │
+            ▼
+┌──────────────────────────────────────────────┐
+│               SELECTOR LAYER                 │
+│        (ONLY semantic interpretation)        │
+│                                              │
+│  taskSelectors                               │
+│  agentSelectors                              │
+│  metricsSelectors                            │
+│  anomalySelectors                            │
+│                                              │
+│  OUTPUT EXAMPLES:                            │
+│   - getAgentState                            │
+│   - getAgentTasks                            │
+│   - trendPanelState (DERIVED ONLY)           │
+│                                              │
+│  ❌ no rendering rules                      │
+│  ❌ no timing / fade / scroll logic         │
+└──────────────────────────────────────────────┘
+            │
+            ▼
+┌──────────────────────────────────────────────┐
+│                 UI RENDERER                  │
+│        (PURE VISUAL PROJECTION ONLY)         │
+│                                              │
+│  INPUT: selector outputs only                │
+│                                              │
+│  Responsible for:                            │
+│   - layout                                   │
+│   - scroll                                   │
+│   - fade timing                              │
+│   - max visible items                        │
+│   - animation                                │
+│                                              │
+│  Renders:                                    │
+│   - sloth sprites                            │
+│   - trend panels                             │
+│   - floating UI assets                       │
+└──────────────────────────────────────────────┘
+            │
+            ▼
+┌──────────────────────────────────────────────┐
+│              VISUAL WORLD                    │
+│  (fully reactive simulation surface)         │
+│                                              │
+│  - sloths animate based on events            │
+│  - panels appear/disappear                   │
+│  - world reflects engine truth               │
+└──────────────────────────────────────────────┘
+            ▲
+            │
+            └────────────── FEEDBACK LOOP ──────
+                     (events continue flowing)
