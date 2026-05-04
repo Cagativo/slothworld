@@ -111,6 +111,12 @@ const PANEL_EXIT_DURATION_MS = 250;
 const RESULT_FADE_DURATION_MS = 180;
 const RESULT_STAGGER_MS = 50;       // ms delay between successive result fade-ins
 const RESULT_HIGHLIGHT_DURATION_MS = 800;
+const SCROLL_HINT_HEIGHT = 16;      // px — gradient overlay height at bottom when overflow
+const SKELETON_ROWS = 2;            // placeholder rows during loading
+const SHIMMER_DURATION_MS = 1200;   // full shimmer cycle duration
+const STATUS_DOT_RADIUS = 4;        // px
+const STATUS_WORKING_COLOR = '#e8a838';
+const STATUS_DONE_COLOR = '#6daa45';
 const trendPanelUIState = new Map();
 
 /**
@@ -125,6 +131,55 @@ const trendPanelUIState = new Map();
 function posOf(c, map) {
   const p = map && map.get(c.id);
   return p || { x: c.x, y: c.y };
+}
+
+/**
+ * Truncate text to fit within maxWidth using slice-based reduction.
+ * Returns text with ellipsis if truncation occurred.
+ */
+function truncateText(ctx, text, maxWidth) {
+  const ellipsis = '…';
+  const ellipsisWidth = ctx.measureText(ellipsis).width;
+  const availWidth = maxWidth - ellipsisWidth;
+
+  if (ctx.measureText(text).width <= maxWidth) {
+    return text;
+  }
+
+  let truncated = text;
+  let step = Math.max(1, Math.floor(truncated.length / 4));
+
+  while (truncated.length > 0 && ctx.measureText(truncated).width > availWidth) {
+    truncated = truncated.slice(0, -step);
+  }
+
+  return truncated + ellipsis;
+}
+
+/**
+ * Render a skeleton placeholder row with shimmer effect.
+ * Shimmer is time-based, stateless.
+ */
+function renderSkeletonRow(ctx, rowY, panelX, panelY, panelWidth, paddingX, lineHeight, now) {
+  const baseColor = 'rgba(100, 120, 140, 0.25)';
+  const shimmerColor = 'rgba(180, 200, 220, 0.40)';
+
+  ctx.save();
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(panelX + paddingX, rowY - lineHeight / 2, panelWidth - paddingX * 2, lineHeight);
+
+  const shimmerWidth = 30;
+  const progress = (now % SHIMMER_DURATION_MS) / SHIMMER_DURATION_MS;
+  const shimmerX = panelX + paddingX + (panelWidth - paddingX * 2 - shimmerWidth) * progress;
+
+  const grad = ctx.createLinearGradient(shimmerX - shimmerWidth / 2, 0, shimmerX + shimmerWidth / 2, 0);
+  grad.addColorStop(0, 'rgba(180, 200, 220, 0)');
+  grad.addColorStop(0.5, shimmerColor);
+  grad.addColorStop(1, 'rgba(180, 200, 220, 0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(shimmerX - shimmerWidth / 2, rowY - lineHeight / 2, shimmerWidth, lineHeight);
+
+  ctx.restore();
 }
 
 
@@ -780,7 +835,7 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
   const now = Date.now();
 
   // ── Pass 1: collect panels currently reported by selectors ───────────────
-  // taskId → { results, keyword, agentX, agentY }
+  // taskId → { results, keyword, agentX, agentY, status }
   const activePanels = new Map();
 
   for (const c of components) {
@@ -809,12 +864,13 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
       })
       .filter((entry) => entry.item.length > 0);
 
-    if (normalizedItems.length === 0) continue;
+    if (normalizedItems.length === 0 && panel.status !== 'working') continue;
 
     const { x, y } = posOf(c, entityPositions);
     activePanels.set(panelTaskId, {
       results: normalizedItems,
       keyword: typeof panel.keyword === 'string' ? panel.keyword : '',
+      status: typeof panel.status === 'string' ? panel.status : 'working',
       agentX: x,
       agentY: y,
     });
@@ -844,6 +900,7 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
         anchorY: panelData.agentY,
         cachedResults: panelData.results,
         cachedKeyword: panelData.keyword,
+        cachedStatus: panelData.status || 'working',
         resultFirstSeenAt,
         highlightItem: topItem,
         highlightStartAt: topItem ? now : null,
@@ -853,6 +910,7 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
       state.exitingAt = null; // cancel pending exit if selector returned again
       state.cachedResults = panelData.results;
       state.cachedKeyword = panelData.keyword;
+      state.cachedStatus = panelData.status || 'working';
 
       // Register newly arrived results with staggered timestamps
       let newIdx = 0;
@@ -898,15 +956,19 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
     const panelAlpha = enterProgress * exitAlpha;
     if (panelAlpha <= 0) continue;
 
+    const isLoading = state.cachedStatus === 'working' && state.cachedResults.length === 0;
+    const visibleResults = isLoading ? [] : state.cachedResults.slice(-TREND_PANEL_MAX_VISIBLE);
+    const needsScroll = !isLoading && state.cachedResults.length > TREND_PANEL_MAX_VISIBLE;
+    const renderRowCount = isLoading ? SKELETON_ROWS : visibleResults.length;
+
     // Layout (computed from cached data, anchored to initial position)
-    const visibleResults = state.cachedResults.slice(-TREND_PANEL_MAX_VISIBLE);
-    const needsScroll = state.cachedResults.length > TREND_PANEL_MAX_VISIBLE;
     const lineHeight = 12;
     const paddingX = 10;
     const paddingY = 10;
     const panelWidth = 170;
-    const panelHeight = paddingY + lineHeight + visibleResults.length * lineHeight
-      + (needsScroll ? lineHeight : 0) + paddingY + 4;
+    const scrollHintRows = needsScroll ? 1 : 0;
+    const panelHeight = paddingY + lineHeight + renderRowCount * lineHeight
+      + scrollHintRows * lineHeight + paddingY + 4;
 
     const panelX = state.anchorX - panelWidth / 2;
     const panelY = state.anchorY - agentHalfH - PANEL_OFFSET_Y - panelHeight + slideY;
@@ -934,45 +996,91 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
     ctx.fillStyle = '#e8a838';
     ctx.fillText(`Top Trends: ${state.cachedKeyword}`, panelX + paddingX, headerBaselineY);
 
-    // Result rows — each fades in independently with stagger
-    for (let i = 0; i < visibleResults.length; i++) {
-      const r = visibleResults[i];
-      const itemFirstSeen = state.resultFirstSeenAt.get(r.item) ?? state.firstSeenAt;
-      const itemFadeIn = Math.min(1, Math.max(0, (now - itemFirstSeen) / RESULT_FADE_DURATION_MS));
-      if (itemFadeIn <= 0) continue;
+    // Skeleton loading rows
+    if (isLoading) {
+      for (let i = 0; i < SKELETON_ROWS; i++) {
+        const itemBaselineY = headerBaselineY + (i + 1) * lineHeight;
+        renderSkeletonRow(ctx, itemBaselineY, panelX, panelY, panelWidth, paddingX, lineHeight, now);
+      }
+    } else {
+      // Result rows — each fades in independently with stagger
+      for (let i = 0; i < visibleResults.length; i++) {
+        const r = visibleResults[i];
+        const itemFirstSeen = state.resultFirstSeenAt.get(r.item) ?? state.firstSeenAt;
+        const itemFadeIn = Math.min(1, Math.max(0, (now - itemFirstSeen) / RESULT_FADE_DURATION_MS));
+        if (itemFadeIn <= 0) continue;
 
-      const itemBaselineY = headerBaselineY + (i + 1) * lineHeight;
-      const isHighlighted = r.item === state.highlightItem && state.highlightStartAt !== null;
+        const itemBaselineY = headerBaselineY + (i + 1) * lineHeight;
+        const isHighlighted = r.item === state.highlightItem && state.highlightStartAt !== null;
 
-      // Highlight pulse — subtle background glow on the top result at arrival
-      if (isHighlighted) {
-        const pulseAge = now - state.highlightStartAt;
-        if (pulseAge < RESULT_HIGHLIGHT_DURATION_MS) {
-          const pulse = Math.sin((pulseAge / RESULT_HIGHLIGHT_DURATION_MS) * Math.PI);
-          ctx.save();
-          ctx.globalAlpha = panelAlpha * itemFadeIn * pulse * 0.30;
-          ctx.fillStyle = '#ffdd88';
-          ctx.fillRect(
-            panelX + paddingX - 2,
-            itemBaselineY - lineHeight / 2,
-            panelWidth - paddingX * 2 + 4,
-            lineHeight,
-          );
-          ctx.restore();
+        // Highlight pulse — subtle background glow on the top result at arrival
+        if (isHighlighted) {
+          const pulseAge = now - state.highlightStartAt;
+          if (pulseAge < RESULT_HIGHLIGHT_DURATION_MS) {
+            const pulse = Math.sin((pulseAge / RESULT_HIGHLIGHT_DURATION_MS) * Math.PI);
+            ctx.save();
+            ctx.globalAlpha = panelAlpha * itemFadeIn * pulse * 0.30;
+            ctx.fillStyle = '#ffdd88';
+            ctx.fillRect(
+              panelX + paddingX - 2,
+              itemBaselineY - lineHeight / 2,
+              panelWidth - paddingX * 2 + 4,
+              lineHeight,
+            );
+            ctx.restore();
+          }
         }
+
+        // Truncate text to fit available width
+        const scoreLabel = r.score === null ? '' : ` ${r.score.toFixed(2)}`;
+        const scoreWidth = r.score === null ? 0 : ctx.measureText(scoreLabel).width;
+        const maxItemWidth = panelWidth - paddingX * 2 - scoreWidth;
+        const truncatedItem = truncateText(ctx, r.item, maxItemWidth);
+
+        ctx.save();
+        ctx.globalAlpha = panelAlpha * itemFadeIn;
+        ctx.fillStyle = isHighlighted ? '#ffe97a' : '#f7f4df';
+        ctx.fillText(`${truncatedItem}${scoreLabel}`, panelX + paddingX, itemBaselineY);
+        ctx.restore();
       }
 
-      const scoreLabel = r.score === null ? '' : ` ${r.score.toFixed(2)}`;
-      ctx.save();
-      ctx.globalAlpha = panelAlpha * itemFadeIn;
-      ctx.fillStyle = isHighlighted ? '#ffe97a' : '#f7f4df';
-      ctx.fillText(`${r.item}${scoreLabel}`, panelX + paddingX, itemBaselineY);
-      ctx.restore();
+      // Scroll hint gradient
+      if (needsScroll) {
+        const scrollRowY = headerBaselineY + (visibleResults.length + 1) * lineHeight;
+        const scrollGradY = scrollRowY - SCROLL_HINT_HEIGHT;
+
+        ctx.save();
+        const grad = ctx.createLinearGradient(0, scrollGradY, 0, scrollRowY);
+        grad.addColorStop(0, 'rgba(12, 16, 30, 0)');
+        grad.addColorStop(1, 'rgba(12, 16, 30, 0.88)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(panelX + paddingX, scrollGradY, panelWidth - paddingX * 2, SCROLL_HINT_HEIGHT);
+        ctx.restore();
+
+        // "... more" text on top of gradient
+        ctx.fillStyle = '#cfd7f4';
+        ctx.fillText('... more', panelX + paddingX, scrollRowY);
+      }
     }
 
-    if (needsScroll) {
-      ctx.fillStyle = '#cfd7f4';
-      ctx.fillText('... more', panelX + paddingX, headerBaselineY + (visibleResults.length + 1) * lineHeight);
+    // Status indicator dot (top-right corner)
+    const statusX = panelX + panelWidth - paddingX - STATUS_DOT_RADIUS * 1.5;
+    const statusY = panelY + paddingY + STATUS_DOT_RADIUS;
+
+    if (state.cachedStatus === 'working') {
+      const pulse = 0.5 + 0.5 * Math.sin((now * Math.PI * 2) / 1000);
+      ctx.save();
+      ctx.globalAlpha = panelAlpha * (0.5 + 0.5 * pulse);
+      ctx.fillStyle = STATUS_WORKING_COLOR;
+      ctx.beginPath();
+      ctx.arc(statusX, statusY, STATUS_DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    } else if (state.cachedStatus === 'done') {
+      ctx.fillStyle = STATUS_DONE_COLOR;
+      ctx.beginPath();
+      ctx.arc(statusX, statusY, STATUS_DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     ctx.restore();
