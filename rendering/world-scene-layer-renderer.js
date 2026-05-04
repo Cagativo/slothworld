@@ -98,7 +98,7 @@ export function renderAllLayers(ctx, components, frame) {
   renderAllAgentEntities(ctx, components, entityPositions, Date.now());
 
   // ── Layer 5.5: task chips ───────────────────────────────────────────────
-  // Parchment work-cards for task entities: card body + ack-pulse + anomaly badge.
+  // Parchment work-cards for task entities: card body + processing pulse + anomaly badge.
   // Rendered after agents so cards appear in front of desk sprites.
   renderAllTaskChips(ctx, components, entityPositions);
 

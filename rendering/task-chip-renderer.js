@@ -7,7 +7,7 @@
  * Visual conventions (Themed World Projection):
  *  - work-card:    warm parchment card with a left-side state-colour bar
  *  - anomaly badge: small warning triangle at the card's top-right corner
- *  - ack-pulse:    soft amber ellipse ring pulsing around cards in 'processing' state
+ *  - processingPulse: soft amber ellipse ring pulsing around cards in 'processing' state
  *
  * CONTRACT:
  *  - Input:  task-chip component descriptor from world-scene-adapter.js
@@ -77,8 +77,8 @@ export const ANOMALY_BADGE_COLORS = Object.freeze({
   default: '#f57c00',
 });
 
-/** Ack-pulse ring colour for cards in the 'processing' visual state. */
-export const ACK_PULSE_COLOR = '#ffb300';
+/** Processing pulse ring colour for cards in the 'processing' visual state. */
+export const PROCESSING_PULSE_COLOR = '#ffb300';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -173,7 +173,7 @@ function drawTaskCard(ctx, component, x, y) {
  * @param {number} x  Card centre X
  * @param {number} y  Card centre Y
  */
-function drawAckPulse(ctx, x, y) {
+function drawProcessingPulse(ctx, x, y) {
   const now   = Date.now();
   const phase = (now % 1600) / 1600;                         // 1.6 s cycle
   const scale = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
@@ -184,7 +184,7 @@ function drawAckPulse(ctx, x, y) {
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(x, y, rX, rY, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = ACK_PULSE_COLOR;
+  ctx.strokeStyle = PROCESSING_PULSE_COLOR;
   ctx.lineWidth   = 1.5;
   ctx.globalAlpha = alpha;
   ctx.stroke();
@@ -241,7 +241,7 @@ function drawAnomalyBadge(ctx, x, y, anomaly) {
  * Render all task-chip components as parchment work-cards.
  *
  * Draw order per entity (back → front):
- *  1. Ack-pulse ring   (behind card; only for 'processing' visualState)
+ *  1. Processing pulse ring (behind card; only for 'processing' visualState)
  *  2. Parchment card   (background + state bar + ID label)
  *  3. Anomaly badge    (top-right overlay; only when component.anomaly is set)
  *
@@ -259,9 +259,9 @@ export function renderAllTaskChips(ctx, components, entityPositions) {
     const x = p ? p.x : (typeof c.x === 'number' ? c.x : 0);
     const y = p ? p.y : (typeof c.y === 'number' ? c.y : 0);
 
-    // 1. Ack pulse — drawn first so it sits behind the card body
+    // 1. Processing pulse — drawn first so it sits behind the card body
     if (c.visualState === 'processing') {
-      drawAckPulse(ctx, x, y);
+      drawProcessingPulse(ctx, x, y);
     }
 
     // 2. Card body

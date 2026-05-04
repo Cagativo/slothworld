@@ -683,7 +683,7 @@ canvas {
 /* ─────────────────────────────────────────────────────────────────
    Themed World Projection — sidebar visual enhancements
    These classes augment existing .ocp-item and .rfp-item elements
-   with parchment card, zone label, anomaly badge, and ack-pulse styles.
+   with parchment card, zone label, anomaly badge, and processing pulse styles.
    All styles are purely cosmetic; no layout or behaviour changes.
 ───────────────────────────────────────────────────────────────── */
 
@@ -747,15 +747,15 @@ canvas {
   background: #f57c00;
 }
 
-/* Ack-pulse animation — for items in awaiting_ack / processing state */
-@keyframes ackPulse {
+/* Processing pulse animation — for items in processing visual state */
+@keyframes processingPulse {
   0%   { box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.20), 0 0 0 0 rgba(255, 179, 0, 0.00); }
   40%  { box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.55), 0 0 4px 2px rgba(255, 179, 0, 0.14); }
   100% { box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.20), 0 0 0 0 rgba(255, 179, 0, 0.00); }
 }
 
 .ocp-item.ocp-task-pending {
-  animation: ackPulse 1.8s ease-in-out infinite;
+  animation: processingPulse 1.8s ease-in-out infinite;
 }
 
 /* ─────────────────────────────────────────────────────────────────

@@ -207,15 +207,15 @@ export const VISUAL_STATE_MAP = Object.freeze({
 });
 
 /**
- * Themed zone labels for the Slothworld world projection.
+ * Lifecycle zone display themes for the Slothworld world projection.
  *
  * Maps each LIFECYCLE_ZONES id → themed display metadata used by
- * zone-label-renderer.js. Pure visual data — no lifecycle meaning or
- * event derivation.
+ * zone-label-renderer.js. These are visual themes for lifecycle zones,
+ * distinct from semantic world zones in ui/config/worldZones.js.
  *
  * @type {Readonly<Record<string, Readonly<{ label: string, theme: string }>>>}
  */
-export const WORLD_ZONES = Object.freeze({
+export const LIFECYCLE_ZONE_THEMES = Object.freeze({
   CREATED:          Object.freeze({ label: 'Intake Nook',   theme: 'nook'    }),
   ENQUEUED:         Object.freeze({ label: 'Task Engine',   theme: 'queue'   }),
   CLAIMED:          Object.freeze({ label: 'Workshop',      theme: 'work'    }),

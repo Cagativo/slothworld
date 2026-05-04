@@ -5,7 +5,7 @@
  *
  * Visual convention (Themed World Projection):
  *  - Each lifecycle zone gets a small plaque/scroll label near its top edge
- *  - Labels use WORLD_ZONES themed names instead of raw zone IDs
+ *  - Labels use LIFECYCLE_ZONE_THEMES names instead of raw zone IDs
  *  - Hidden when debug mode is active (debug mode already shows raw IDs via renderAllZones)
  *
  * CONTRACT:
@@ -14,13 +14,13 @@
  *  - Output: canvas draw calls only — no return value, no state mutation
  *
  * RULES:
- *  - Only WORLD_ZONES data drives label content — no raw events, no selectors
+ *  - Only LIFECYCLE_ZONE_THEMES data drives label content — no raw events, no selectors
  *  - No lifecycle inference
  *  - No DOM or asset dependencies — safe to import in headless test environments
  *  - Pure structural projection: zone position/size fields are used directly
  */
 
-import { WORLD_ZONES } from './world-scene.js';
+import { LIFECYCLE_ZONE_THEMES } from './world-scene.js';
 
 // ---------------------------------------------------------------------------
 // Label badge visual style — parchment/plaque aesthetic
@@ -79,9 +79,9 @@ function roundRect(ctx, x, y, w, h, r) {
 /**
  * Draw a single themed zone label centred near the top edge of a zone.
  *
- * Label text is sourced exclusively from WORLD_ZONES[component.id].label —
+ * Label text is sourced exclusively from LIFECYCLE_ZONE_THEMES[component.id].label —
  * no raw event reading, no lifecycle inference.
- * Silently skipped when component.id is absent from WORLD_ZONES.
+ * Silently skipped when component.id is absent from LIFECYCLE_ZONE_THEMES.
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} component  zone-background descriptor { id, x, y, width, height }
@@ -89,7 +89,7 @@ function roundRect(ctx, x, y, w, h, r) {
 function renderZoneLabel(ctx, component) {
   if (!ctx || !component) return;
 
-  const zoneData = WORLD_ZONES[component.id];
+  const zoneData = LIFECYCLE_ZONE_THEMES[component.id];
   if (!zoneData) return;
 
   const label = zoneData.label;

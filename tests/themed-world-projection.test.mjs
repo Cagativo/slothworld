@@ -3,9 +3,9 @@
  *
  * Contracts for the Themed World Projection pass:
  *
- *  1. WORLD_ZONES — structure and completeness
+ *  1. LIFECYCLE_ZONE_THEMES — structure and completeness
  *  2. task-chip components — fields, visualState, zoneId, anomaly derivation
- *  3. renderZoneLabels  — no raw event access; uses WORLD_ZONES only
+ *  3. renderZoneLabels  — no raw event access; uses LIFECYCLE_ZONE_THEMES only
  *  4. renderAllTaskChips — no raw event access; uses visualState + anomaly only
  *  5. Zone label / task chip renderers — safe on a mock canvas context
  */
@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import {
   LIFECYCLE_ZONES,
   VISUAL_STATE_MAP,
-  WORLD_ZONES,
+  LIFECYCLE_ZONE_THEMES,
   buildWorldScene,
 } from '../rendering/world-scene.js';
 import { toRenderableComponents } from '../rendering/world-scene-adapter.js';
@@ -26,7 +26,7 @@ import {
   renderAllTaskChips,
   CHIP_STYLES,
   ANOMALY_BADGE_COLORS,
-  ACK_PULSE_COLOR,
+  PROCESSING_PULSE_COLOR,
 } from '../rendering/task-chip-renderer.js';
 
 // ---------------------------------------------------------------------------
@@ -70,57 +70,57 @@ function makeMockCtx() {
 }
 
 // ---------------------------------------------------------------------------
-// 1. WORLD_ZONES structure
+// 1. LIFECYCLE_ZONE_THEMES structure
 // ---------------------------------------------------------------------------
 
-describe('WORLD_ZONES — structure and completeness', () => {
+describe('LIFECYCLE_ZONE_THEMES — structure and completeness', () => {
 
-  it('WORLD_ZONES exists and is frozen', () => {
-    assert.ok(WORLD_ZONES && typeof WORLD_ZONES === 'object', 'WORLD_ZONES must be an object');
-    assert.ok(Object.isFrozen(WORLD_ZONES), 'WORLD_ZONES must be frozen');
+  it('LIFECYCLE_ZONE_THEMES exists and is frozen', () => {
+    assert.ok(LIFECYCLE_ZONE_THEMES && typeof LIFECYCLE_ZONE_THEMES === 'object', 'LIFECYCLE_ZONE_THEMES must be an object');
+    assert.ok(Object.isFrozen(LIFECYCLE_ZONE_THEMES), 'LIFECYCLE_ZONE_THEMES must be frozen');
   });
 
-  it('WORLD_ZONES has an entry for every LIFECYCLE_ZONES id', () => {
+  it('LIFECYCLE_ZONE_THEMES has an entry for every LIFECYCLE_ZONES id', () => {
     for (const zone of LIFECYCLE_ZONES) {
       assert.ok(
-        Object.prototype.hasOwnProperty.call(WORLD_ZONES, zone.id),
-        `WORLD_ZONES must have an entry for lifecycle zone "${zone.id}"`
+        Object.prototype.hasOwnProperty.call(LIFECYCLE_ZONE_THEMES, zone.id),
+        `LIFECYCLE_ZONE_THEMES must have an entry for lifecycle zone "${zone.id}"`
       );
     }
   });
 
-  it('each WORLD_ZONES entry has a non-empty label string', () => {
-    for (const [id, entry] of Object.entries(WORLD_ZONES)) {
+  it('each LIFECYCLE_ZONE_THEMES entry has a non-empty label string', () => {
+    for (const [id, entry] of Object.entries(LIFECYCLE_ZONE_THEMES)) {
       assert.ok(
         typeof entry.label === 'string' && entry.label.length > 0,
-        `WORLD_ZONES["${id}"].label must be a non-empty string`
+        `LIFECYCLE_ZONE_THEMES["${id}"].label must be a non-empty string`
       );
     }
   });
 
-  it('each WORLD_ZONES entry has a non-empty theme string', () => {
-    for (const [id, entry] of Object.entries(WORLD_ZONES)) {
+  it('each LIFECYCLE_ZONE_THEMES entry has a non-empty theme string', () => {
+    for (const [id, entry] of Object.entries(LIFECYCLE_ZONE_THEMES)) {
       assert.ok(
         typeof entry.theme === 'string' && entry.theme.length > 0,
-        `WORLD_ZONES["${id}"].theme must be a non-empty string`
+        `LIFECYCLE_ZONE_THEMES["${id}"].theme must be a non-empty string`
       );
     }
   });
 
-  it('all WORLD_ZONES entries are frozen', () => {
-    for (const [id, entry] of Object.entries(WORLD_ZONES)) {
-      assert.ok(Object.isFrozen(entry), `WORLD_ZONES["${id}"] entry must be frozen`);
+  it('all LIFECYCLE_ZONE_THEMES entries are frozen', () => {
+    for (const [id, entry] of Object.entries(LIFECYCLE_ZONE_THEMES)) {
+      assert.ok(Object.isFrozen(entry), `LIFECYCLE_ZONE_THEMES["${id}"] entry must be frozen`);
     }
   });
 
-  it('WORLD_ZONES covers exactly the same zone ids as LIFECYCLE_ZONES', () => {
+  it('LIFECYCLE_ZONE_THEMES covers exactly the same zone ids as LIFECYCLE_ZONES', () => {
     const lifecycleIds = new Set(LIFECYCLE_ZONES.map((z) => z.id));
-    const worldIds     = new Set(Object.keys(WORLD_ZONES));
+    const worldIds     = new Set(Object.keys(LIFECYCLE_ZONE_THEMES));
     for (const id of lifecycleIds) {
-      assert.ok(worldIds.has(id), `WORLD_ZONES missing lifecycle zone id "${id}"`);
+      assert.ok(worldIds.has(id), `LIFECYCLE_ZONE_THEMES missing lifecycle zone id "${id}"`);
     }
     for (const id of worldIds) {
-      assert.ok(lifecycleIds.has(id), `WORLD_ZONES has unexpected zone id "${id}"`);
+      assert.ok(lifecycleIds.has(id), `LIFECYCLE_ZONE_THEMES has unexpected zone id "${id}"`);
     }
   });
 
@@ -241,9 +241,9 @@ describe('task-chip-renderer — visual style constants', () => {
     assert.ok(typeof ANOMALY_BADGE_COLORS.default === 'string', 'ANOMALY_BADGE_COLORS.default must be a string');
   });
 
-  it('ACK_PULSE_COLOR is a non-empty string', () => {
-    assert.ok(typeof ACK_PULSE_COLOR === 'string' && ACK_PULSE_COLOR.length > 0,
-      'ACK_PULSE_COLOR must be a non-empty string');
+  it('PROCESSING_PULSE_COLOR is a non-empty string', () => {
+    assert.ok(typeof PROCESSING_PULSE_COLOR === 'string' && PROCESSING_PULSE_COLOR.length > 0,
+      'PROCESSING_PULSE_COLOR must be a non-empty string');
   });
 
 });
@@ -324,10 +324,10 @@ describe('renderZoneLabels — mock-canvas execution', () => {
       set(t, p, v) { t[p] = v; return true; },
     });
     renderZoneLabels(ctx, components, false);
-    // Each zone that has a WORLD_ZONES entry should produce at least one draw call
-    const zonesWithLabels = zoneBgs.filter((c) => Object.prototype.hasOwnProperty.call(WORLD_ZONES, c.id));
+    // Each zone that has a LIFECYCLE_ZONE_THEMES entry should produce at least one draw call
+    const zonesWithLabels = zoneBgs.filter((c) => Object.prototype.hasOwnProperty.call(LIFECYCLE_ZONE_THEMES, c.id));
     assert.ok(log.length > 0 || zonesWithLabels.length === 0,
-      'zone labels must produce draw calls for each zone with a WORLD_ZONES entry');
+      'zone labels must produce draw calls for each zone with a LIFECYCLE_ZONE_THEMES entry');
   });
 
 });
@@ -378,7 +378,7 @@ describe('renderAllTaskChips — mock-canvas execution', () => {
     assert.ok(log.length > 0, 'rendering task chips must produce canvas draw calls');
   });
 
-  it('ack pulse is drawn for processing visualState chips only', () => {
+  it('processing pulse is drawn for processing visualState chips only', () => {
     // Build a minimal scene with one processing chip only
     const processingGraph = {
       nodes: [
@@ -391,7 +391,7 @@ describe('renderAllTaskChips — mock-canvas execution', () => {
     const components = runComponents(processingGraph);
     const entityPos  = buildEntityPositionMap(components);
 
-    // Count ellipse calls (used by drawAckPulse)
+    // Count ellipse calls (used by drawProcessingPulse)
     let ellipseCalls = 0;
     const ctx = new Proxy({ canvas: { width: 1060, height: 520 } }, {
       get(t, p) {
@@ -405,7 +405,7 @@ describe('renderAllTaskChips — mock-canvas execution', () => {
     });
 
     renderAllTaskChips(ctx, components, entityPos);
-    assert.ok(ellipseCalls > 0, 'processing task chip must invoke ellipse (ack pulse ring)');
+    assert.ok(ellipseCalls > 0, 'processing task chip must invoke ellipse (processing pulse ring)');
   });
 
   it('anomaly badge draw calls occur for chips with anomaly data', () => {
