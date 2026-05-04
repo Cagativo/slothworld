@@ -1,4 +1,4 @@
-import { getTaskIds, getTaskSnapshot, getTaskStatus } from './taskSelectors.js';
+import { getTaskSnapshot, getTaskStatus } from './taskSelectors.js';
 
 const TREND_UI_DEBUG = false;
 
@@ -17,6 +17,27 @@ function eventTaskId(event) {
     : (payload.taskId !== undefined && payload.taskId !== null)
       ? String(payload.taskId)
       : null;
+}
+
+function resolveCurrentTaskId(indexedWorld, workerId) {
+  if (!indexedWorld || !(indexedWorld.eventsByWorkerId instanceof Map)) {
+    return null;
+  }
+
+  const workerEvents = indexedWorld.eventsByWorkerId.get(workerId) || [];
+  for (let i = workerEvents.length - 1; i >= 0; i -= 1) {
+    const event = workerEvents[i];
+    if (!event || event.type !== 'TASK_CLAIMED') {
+      continue;
+    }
+
+    const taskId = eventTaskId(event);
+    if (taskId) {
+      return taskId;
+    }
+  }
+
+  return null;
 }
 
 function normalizeTrendResultItems(resultPayload) {
@@ -106,120 +127,110 @@ function resolveTrendResultPayload(payload) {
   return null;
 }
 
-function resolveTrendAgentId(payload, taskSnapshot) {
-  const payloadAgentId = normalizeWorkerId(payload && (payload.assignedAgentId || payload.workerId || payload.agentId));
-  if (payloadAgentId) {
-    return payloadAgentId;
-  }
+export function resolveTrendResultItems(events) {
+  const stream = Array.isArray(events) ? events : [];
+  const results = [];
 
-  const taskSnapshotAgentId = normalizeWorkerId(taskSnapshot && taskSnapshot.assignedAgentId);
-  if (taskSnapshotAgentId) {
-    return taskSnapshotAgentId;
-  }
-
-  return null;
-}
-
-function buildTrendPanelsByAgent(indexedWorld) {
-  if (!indexedWorld || !(indexedWorld.eventsByTaskId instanceof Map)) {
-    return new Map();
-  }
-
-  const panelByAgentAndTask = new Map();
-
-  for (const [taskId, events] of indexedWorld.eventsByTaskId.entries()) {
-    const snapshot = getTaskSnapshot(indexedWorld, taskId);
-    if (snapshot && snapshot.type !== 'TREND_RESEARCH' && snapshot.type !== 'unknown') {
+  for (const event of stream) {
+    if (!event || event.type !== 'TREND_RESEARCH_COMPLETED') {
       continue;
     }
 
-    for (let index = 0; index < events.length; index += 1) {
-      const event = events[index];
-      if (!event || event.type !== 'TREND_RESEARCH_COMPLETED') {
-        continue;
-      }
-
-      const payload = event && typeof event.payload === 'object' ? event.payload : {};
-      const resultPayload = resolveTrendResultPayload(payload);
-      const trendResult = normalizeTrendResultItems(resultPayload);
-      if (!hasValidTrendResultItems(trendResult)) {
-        continue;
-      }
-
-      const agentId = resolveTrendAgentId(payload, snapshot);
-      if (!agentId) {
-        continue;
-      }
-
-      const normalizedTaskId = normalizeWorkerId(taskId);
-      const panelKey = `${agentId}:${normalizedTaskId}`;
-      const timestamp = Number.isFinite(event && event.timestamp) ? Number(event.timestamp) : 0;
-      const normalizedResults = normalizeTrendPanelResults(trendResult);
-
-      if (!panelByAgentAndTask.has(panelKey)) {
-        panelByAgentAndTask.set(panelKey, {
-          taskId: normalizedTaskId,
-          agentId,
-          createdAt: timestamp,
-          lastUpdated: timestamp,
-          keyword: typeof payload.keyword === 'string' ? payload.keyword : null,
-          results: []
-        });
-      }
-
-      const panelState = panelByAgentAndTask.get(panelKey);
-      panelState.results.push(...normalizedResults);
-      panelState.lastUpdated = timestamp;
-      if (typeof payload.keyword === 'string' && payload.keyword) {
-        panelState.keyword = payload.keyword;
-      }
-    }
-  }
-
-  const latestPanelByAgent = new Map();
-  for (const panelState of panelByAgentAndTask.values()) {
-    if (!panelState || !panelState.agentId || panelState.results.length === 0) {
+    const payload = event && typeof event.payload === 'object' ? event.payload : {};
+    const resultPayload = resolveTrendResultPayload(payload);
+    const trendResult = normalizeTrendResultItems(resultPayload);
+    if (!hasValidTrendResultItems(trendResult)) {
       continue;
     }
 
-    const existing = latestPanelByAgent.get(panelState.agentId);
-    if (!existing || panelState.lastUpdated >= existing.lastUpdated) {
-      latestPanelByAgent.set(panelState.agentId, panelState);
+    results.push(...normalizeTrendPanelResults(trendResult));
+  }
+
+  return results;
+}
+
+export function getAgentTrendPanelState(indexedWorld, agentId) {
+  const id = normalizeWorkerId(agentId);
+  if (!id) {
+    return {
+      taskId: null,
+      keyword: null,
+      results: []
+    };
+  }
+
+  if (!indexedWorld || !(indexedWorld.eventsByTaskId instanceof Map) || !(indexedWorld.eventsByWorkerId instanceof Map)) {
+    return {
+      taskId: null,
+      keyword: null,
+      results: []
+    };
+  }
+
+  const workerEvents = indexedWorld.eventsByWorkerId.get(id) || [];
+  let taskId = null;
+
+  for (let i = workerEvents.length - 1; i >= 0; i -= 1) {
+    const event = workerEvents[i];
+    if (!event || event.type !== 'TREND_RESEARCH_COMPLETED') {
+      continue;
+    }
+
+    const completedTaskId = eventTaskId(event);
+    if (completedTaskId) {
+      taskId = completedTaskId;
+      break;
     }
   }
 
-  return latestPanelByAgent;
-}
-
-function buildTrendPanelState(indexedWorld, workerId, trendPanelsByAgent) {
-  const id = normalizeWorkerId(workerId);
-  if (!id || !(trendPanelsByAgent instanceof Map)) {
-    return null;
+  if (!taskId) {
+    taskId = resolveCurrentTaskId(indexedWorld, id);
   }
 
-  const panelState = trendPanelsByAgent.get(id);
-  if (!panelState) {
-    return null;
+  if (!taskId) {
+    return {
+      taskId: null,
+      keyword: null,
+      results: []
+    };
   }
 
-  const derivedPanel = {
-    taskId: panelState.taskId,
-    agentId: id,
-    createdAt: panelState.createdAt,
-    lastUpdated: panelState.lastUpdated,
-    keyword: panelState.keyword || null,
-    results: Array.isArray(panelState.results) ? panelState.results : []
-  };
+  const taskEvents = indexedWorld.eventsByTaskId.get(taskId) || [];
+  let keyword = null;
+
+  for (let i = taskEvents.length - 1; i >= 0; i -= 1) {
+    const event = taskEvents[i];
+    if (!event || event.type !== 'TREND_RESEARCH_COMPLETED') {
+      continue;
+    }
+
+    const payload = event && typeof event.payload === 'object' ? event.payload : {};
+    const payloadAgentId = normalizeWorkerId(payload.assignedAgentId || payload.workerId || payload.agentId);
+    if (payloadAgentId && payloadAgentId !== id) {
+      continue;
+    }
+
+    if (typeof payload.keyword === 'string' && payload.keyword.trim()) {
+      keyword = payload.keyword.trim();
+      break;
+    }
+  }
+
+  const results = resolveTrendResultItems(taskEvents);
 
   if (TREND_UI_DEBUG) {
     console.log('[TrendResearchUI][selector] trend panel state', {
       workerId: id,
-      taskId: derivedPanel.taskId,
-      resultCount: derivedPanel.results.length
+      taskId,
+      resultCount: results.length
     });
   }
 
-  return derivedPanel;
+  return {
+    taskId,
+    keyword,
+    results
+  };
 }
 
 export function getAgentTasks(indexedWorld, workerId) {
@@ -290,33 +301,9 @@ export function getAgentSnapshot(indexedWorld, workerId, options = {}) {
     return null;
   }
 
-  const tasks = getAgentTasks(indexedWorld, id);
+  void options;
   const state = getAgentState(indexedWorld, id);
-
-  // Walk the task list newest-first and find the most recent task that is still
-  // active (i.e. TASK_CLAIMED has fired but TASK_ACKED has not yet fired for it).
-  //
-  // Active statuses set by getTaskStatus via TASK_CLAIMED / TASK_EXECUTE_STARTED /
-  // TASK_EXECUTE_FINISHED:   'claimed' | 'executing' | 'awaiting_ack'
-  //
-  // Terminal statuses set by TASK_ACKED:   'completed' | 'failed'
-  //
-  // currentTaskId returns to null as soon as TASK_ACKED is observed by getTaskStatus.
-  // No raw event payload is inspected here — all status logic lives in taskSelectors.
-  let currentTaskId = null;
-  for (let i = tasks.length - 1; i >= 0; i--) {
-    const status = getTaskStatus(indexedWorld, tasks[i]);
-    if (status === 'claimed' || status === 'executing' || status === 'awaiting_ack') {
-      currentTaskId = tasks[i];
-      break;
-    }
-    // Terminal — this task is done; no point searching further back.
-    if (status === 'completed' || status === 'failed') {
-      break;
-    }
-    // 'created', 'queued', 'unknown' — task exists but is not yet assigned to this
-    // agent; keep searching in case an earlier claimed task is still in flight.
-  }
+  const currentTaskId = resolveCurrentTaskId(indexedWorld, id);
 
   const currentTask = currentTaskId ? getTaskSnapshot(indexedWorld, currentTaskId) : null;
   const taskDeskId = currentTask && currentTask.deskId ? currentTask.deskId : null;
@@ -341,10 +328,6 @@ export function getAgentSnapshot(indexedWorld, workerId, options = {}) {
 
   const deskId = taskDeskId || registeredDeskId;
 
-  const trendPanelsByAgent = options && options.trendPanelsByAgent instanceof Map
-    ? options.trendPanelsByAgent
-    : buildTrendPanelsByAgent(indexedWorld);
-
   return {
     id,
     role: 'operator',
@@ -352,16 +335,15 @@ export function getAgentSnapshot(indexedWorld, workerId, options = {}) {
     currentTaskId,
     deskId,
     targetDeskId: deskId,
-    trendPanelState: buildTrendPanelState(indexedWorld, id, trendPanelsByAgent),
+    trendPanelState: getAgentTrendPanelState(indexedWorld, id),
     uiAssets: []
   };
 }
 
 export function getAllAgents(indexedWorld) {
   const agentIds = getAllAgentIds(indexedWorld);
-  const trendPanelsByAgent = buildTrendPanelsByAgent(indexedWorld);
 
   return agentIds
-    .map((workerId) => getAgentSnapshot(indexedWorld, workerId, { trendPanelsByAgent }))
+    .map((workerId) => getAgentSnapshot(indexedWorld, workerId))
     .filter(Boolean);
 }

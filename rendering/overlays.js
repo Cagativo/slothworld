@@ -485,12 +485,16 @@ export function drawWorkflowOverlay(ctx, workflowList) {
 }
 
 // --- TrendResearch overlays ---
-// agent must have: state, trendResult (string[]|null), keyword (string|null), x, y
+// agent must have: trendPanelState { taskId, keyword, results }, x, y
 export function drawTrendResultCard(ctx, agent) {
   if (!agent) return;
 
-  const normalizedItems = Array.isArray(agent.trendResult)
-    ? agent.trendResult
+  const trendPanelState = agent.trendPanelState && typeof agent.trendPanelState === 'object'
+    ? agent.trendPanelState
+    : null;
+
+  const normalizedItems = Array.isArray(trendPanelState && trendPanelState.results)
+    ? trendPanelState.results
       .slice(0, 5)
       .map((entry) => {
         if (entry && typeof entry === 'object') {
@@ -508,18 +512,6 @@ export function drawTrendResultCard(ctx, agent) {
       .filter((entry) => entry.item)
     : [];
 
-  // Working state indicator — small amber pulsing dot above agent when research is in progress
-  if (agent.state === 'working') {
-    const pulse = 0.5 + 0.5 * Math.sin(uiFxState.frame * 0.18);
-    ctx.save();
-    ctx.fillStyle = `rgba(232, 168, 56, ${0.6 + pulse * 0.3})`;
-    ctx.beginPath();
-    ctx.arc(agent.x, agent.y - 44, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    return;
-  }
-
   // Visibility is driven only by valid trend results, never by transient agent state.
   if (normalizedItems.length === 0) {
     return;
@@ -529,7 +521,7 @@ export function drawTrendResultCard(ctx, agent) {
   const lineHeight = 12;
   const paddingX = 10;
   const paddingY = 10;
-  const title = `Top Trends: ${agent.keyword || ''}`;
+  const title = `Top Trends: ${trendPanelState && trendPanelState.keyword ? trendPanelState.keyword : ''}`;
   const cardHeight = paddingY + lineHeight + normalizedItems.length * lineHeight + paddingY + 4;
 
   const cardX = agent.x - cardWidth / 2;
