@@ -149,13 +149,17 @@ test('placeEntityInWorldZone: position matches the declared zone coordinates', (
 test('placeEntityInWorldZone: same input always produces identical output (determinism)', () => {
   const cases = [
     { type: 'task',   status: 'created',       taskType: null },
-    { type: 'task',   status: 'claimed',        taskType: TASK_TYPE_TREND_RESEARCH },
-    { type: 'task',   status: 'executing',      taskType: TASK_TYPE_SHOPIFY },
-    { type: 'task',   status: 'awaiting_ack',   taskType: null },
-    { type: 'task',   status: 'failed',         taskType: null },
-    { type: 'worker', status: 'idle',           taskType: null },
-    { type: 'worker', status: 'working',        taskType: TASK_TYPE_IMAGE_RENDER },
-    { type: 'worker', status: 'delivering',     taskType: null },
+    { type: 'task',   status: 'queued',        taskType: null },
+    { type: 'task',   status: 'claimed',       taskType: TASK_TYPE_TREND_RESEARCH },
+    { type: 'task',   status: 'executing',     taskType: TASK_TYPE_SHOPIFY },
+    { type: 'task',   status: 'awaiting_ack',  taskType: null },
+    { type: 'task',   status: 'acknowledged',  taskType: null },
+    { type: 'task',   status: 'done',          taskType: null },
+    { type: 'task',   status: 'completed',     taskType: null },
+    { type: 'task',   status: 'failed',        taskType: null },
+    { type: 'worker', status: 'idle',          taskType: null },
+    { type: 'worker', status: 'working',       taskType: TASK_TYPE_IMAGE_RENDER },
+    { type: 'worker', status: 'delivering',    taskType: null },
   ];
   for (const entity of cases) {
     const first  = placeEntityInWorldZone(entity);
@@ -210,32 +214,46 @@ test('placeEntityInWorldZone: claimed task with null taskType falls back to engi
 });
 
 // ---------------------------------------------------------------------------
-// placeEntityInWorldZone — task lifecycle routing
+// placeEntityInWorldZone — exhaustive task lifecycle routing
+// Covers every status currently emitted by the engine/app.
 // ---------------------------------------------------------------------------
 
-test('placeEntityInWorldZone: created task → intakeDesk', () => {
-  const { zoneId } = placeEntityInWorldZone({ type: 'task', status: 'created', taskType: null });
-  assert.strictEqual(zoneId, 'intakeDesk');
+const ALL_TASK_STATUS_ROUTES = [
+  // Intake / pre-execution
+  { status: 'created',      expectedZoneId: 'intakeDesk'    },
+  { status: 'queued',       expectedZoneId: 'intakeDesk'    },
+  // Active execution (type-neutral; type-specific routing is covered separately)
+  { status: 'claimed',      expectedZoneId: 'engineCrystal' },
+  { status: 'executing',    expectedZoneId: 'engineCrystal' },
+  // Awaiting acknowledgment
+  { status: 'awaiting_ack', expectedZoneId: 'approvalDesk'  },
+  // Terminal: archive
+  { status: 'acknowledged', expectedZoneId: 'archiveLibrary' },
+  { status: 'done',         expectedZoneId: 'archiveLibrary' },
+  { status: 'completed',    expectedZoneId: 'archiveLibrary' },
+  // Terminal: anomaly
+  { status: 'failed',       expectedZoneId: 'anomalyShelf'  },
+];
+
+test('placeEntityInWorldZone: all engine task statuses route to the correct zone (null taskType)', () => {
+  for (const { status, expectedZoneId } of ALL_TASK_STATUS_ROUTES) {
+    const { zoneId } = placeEntityInWorldZone({ type: 'task', status, taskType: null });
+    assert.strictEqual(zoneId, expectedZoneId,
+      `task status '${status}' must route to '${expectedZoneId}', got '${zoneId}'`);
+  }
 });
 
-test('placeEntityInWorldZone: queued task → intakeDesk', () => {
-  const { zoneId } = placeEntityInWorldZone({ type: 'task', status: 'queued', taskType: null });
-  assert.strictEqual(zoneId, 'intakeDesk');
-});
-
-test('placeEntityInWorldZone: awaiting_ack task → approvalDesk', () => {
-  const { zoneId } = placeEntityInWorldZone({ type: 'task', status: 'awaiting_ack', taskType: null });
-  assert.strictEqual(zoneId, 'approvalDesk');
-});
-
-test('placeEntityInWorldZone: completed task → archiveLibrary', () => {
-  const { zoneId } = placeEntityInWorldZone({ type: 'task', status: 'completed', taskType: null });
+test('placeEntityInWorldZone: task status "done" → archiveLibrary', () => {
+  const { zoneId } = placeEntityInWorldZone({ type: 'task', status: 'done', taskType: null });
   assert.strictEqual(zoneId, 'archiveLibrary');
 });
 
-test('placeEntityInWorldZone: failed task → anomalyShelf', () => {
-  const { zoneId } = placeEntityInWorldZone({ type: 'task', status: 'failed', taskType: null });
-  assert.strictEqual(zoneId, 'anomalyShelf');
+test('placeEntityInWorldZone: terminal archive statuses (acknowledged, done, completed) all map to archiveLibrary', () => {
+  for (const status of ['acknowledged', 'done', 'completed']) {
+    const { zoneId } = placeEntityInWorldZone({ type: 'task', status, taskType: null });
+    assert.strictEqual(zoneId, 'archiveLibrary',
+      `status '${status}' must map to archiveLibrary`);
+  }
 });
 
 // ---------------------------------------------------------------------------

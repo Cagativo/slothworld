@@ -62,7 +62,7 @@ function resolveTaskZoneId(status, taskType) {
     return 'anomalyShelf';
   }
 
-  if (status === 'completed' || status === 'acknowledged') {
+  if (status === 'completed' || status === 'acknowledged' || status === 'done') {
     return 'archiveLibrary';
   }
 
