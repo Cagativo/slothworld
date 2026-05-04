@@ -104,7 +104,13 @@ const UI_SIZE   = { w: 52, h: 22 }; // px — floating display panel
 const TREND_PANEL_ASSET_ID = 'ui_floating_display_01.png';
 const TREND_PANEL_MAX_VISIBLE = 4;
 const TREND_PANEL_HIDE_AFTER_MS = 30_000;
-const TREND_PANEL_FADE_START_MS = 20_000;
+const PANEL_OFFSET_Y = 6;           // px gap between top of agent sprite and panel bottom
+const PANEL_ENTER_DURATION_MS = 250;
+const PANEL_ENTER_SLIDE_PX = 10;    // px slide distance on enter (downward offset → 0)
+const PANEL_EXIT_DURATION_MS = 250;
+const RESULT_FADE_DURATION_MS = 180;
+const RESULT_STAGGER_MS = 50;       // ms delay between successive result fade-ins
+const RESULT_HIGHLIGHT_DURATION_MS = 800;
 const trendPanelUIState = new Map();
 
 /**
@@ -773,25 +779,22 @@ export function renderEffectLayer(ctx, components, entityPositions) {
 export function renderUIOverlayLayer(ctx, components, entityPositions) {
   const now = Date.now();
 
-  for (const [taskId, panelState] of trendPanelUIState.entries()) {
-    const lastSeenAt = Number.isFinite(panelState && panelState.lastSeenAt)
-      ? Number(panelState.lastSeenAt)
-      : 0;
-    if ((now - lastSeenAt) > TREND_PANEL_HIDE_AFTER_MS) {
-      trendPanelUIState.delete(taskId);
-    }
-  }
+  // ── Pass 1: collect panels currently reported by selectors ───────────────
+  // taskId → { results, keyword, agentX, agentY }
+  const activePanels = new Map();
 
   for (const c of components) {
     if (c.componentType !== 'agent-sprite') continue;
 
-    const { x, y } = posOf(c, entityPositions);
     const panel = c.trendPanelState && typeof c.trendPanelState === 'object'
       ? c.trendPanelState
       : null;
-    if (!panel) {
-      continue;
-    }
+    if (!panel) continue;
+
+    const panelTaskId = typeof panel.taskId === 'string' && panel.taskId.trim().length > 0
+      ? panel.taskId
+      : null;
+    if (!panelTaskId) continue;
 
     const panelResults = Array.isArray(panel.results) ? panel.results : [];
     const normalizedItems = panelResults
@@ -799,70 +802,120 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
         if (entry && typeof entry === 'object') {
           return {
             item: typeof entry.item === 'string' ? entry.item : '',
-            score: Number.isFinite(entry.score) ? Number(entry.score) : null
+            score: Number.isFinite(entry.score) ? Number(entry.score) : null,
           };
         }
-
-        return {
-          item: typeof entry === 'string' ? entry : '',
-          score: null
-        };
+        return { item: typeof entry === 'string' ? entry : '', score: null };
       })
-      .filter((entry) => typeof entry.item === 'string' && entry.item.length > 0);
-    if (normalizedItems.length === 0) {
-      continue;
-    }
+      .filter((entry) => entry.item.length > 0);
 
-    const panelTaskId = typeof panel.taskId === 'string' && panel.taskId.trim().length > 0
-      ? panel.taskId
-      : null;
-    if (!panelTaskId) {
-      continue;
-    }
+    if (normalizedItems.length === 0) continue;
 
-    if (!trendPanelUIState.has(panelTaskId)) {
-      trendPanelUIState.set(panelTaskId, {
+    const { x, y } = posOf(c, entityPositions);
+    activePanels.set(panelTaskId, {
+      results: normalizedItems,
+      keyword: typeof panel.keyword === 'string' ? panel.keyword : '',
+      agentX: x,
+      agentY: y,
+    });
+  }
+
+  // ── Pass 2: update renderer-local state ──────────────────────────────────
+
+  // Begin exit for panels no longer in selector output
+  for (const [taskId, state] of trendPanelUIState) {
+    if (!activePanels.has(taskId) && !state.exitingAt) {
+      state.exitingAt = now;
+    }
+  }
+
+  for (const [taskId, panelData] of activePanels) {
+    if (!trendPanelUIState.has(taskId)) {
+      // First appearance — capture anchor and stagger initial results
+      const resultFirstSeenAt = new Map();
+      panelData.results.forEach((r, i) => {
+        resultFirstSeenAt.set(r.item, now + i * RESULT_STAGGER_MS);
+      });
+      const topItem = panelData.results.slice(-TREND_PANEL_MAX_VISIBLE)[0]?.item ?? null;
+      trendPanelUIState.set(taskId, {
         firstSeenAt: now,
-        lastSeenAt: now
+        exitingAt: null,
+        anchorX: panelData.agentX,
+        anchorY: panelData.agentY,
+        cachedResults: panelData.results,
+        cachedKeyword: panelData.keyword,
+        resultFirstSeenAt,
+        highlightItem: topItem,
+        highlightStartAt: topItem ? now : null,
       });
     } else {
-      const panelUIState = trendPanelUIState.get(panelTaskId);
-      panelUIState.lastSeenAt = now;
+      const state = trendPanelUIState.get(taskId);
+      state.exitingAt = null; // cancel pending exit if selector returned again
+      state.cachedResults = panelData.results;
+      state.cachedKeyword = panelData.keyword;
+
+      // Register newly arrived results with staggered timestamps
+      let newIdx = 0;
+      for (const r of panelData.results) {
+        if (!state.resultFirstSeenAt.has(r.item)) {
+          state.resultFirstSeenAt.set(r.item, now + newIdx * RESULT_STAGGER_MS);
+          newIdx++;
+        }
+      }
+
+      // Highlight top visible result when it changes
+      const topItem = panelData.results.slice(-TREND_PANEL_MAX_VISIBLE)[0]?.item ?? null;
+      if (topItem && topItem !== state.highlightItem) {
+        state.highlightItem = topItem;
+        state.highlightStartAt = now;
+      }
     }
+  }
 
-    const panelUIState = trendPanelUIState.get(panelTaskId);
-    const lastSeenAt = Number.isFinite(panelUIState && panelUIState.lastSeenAt)
-      ? Number(panelUIState.lastSeenAt)
-      : 0;
-    const ageMs = Math.max(0, now - lastSeenAt);
-
-    if (ageMs >= TREND_PANEL_HIDE_AFTER_MS) {
-      continue;
+  // Prune fully-exited panels; safety-timeout stale ones
+  for (const [taskId, state] of trendPanelUIState) {
+    const exitDone = state.exitingAt !== null && (now - state.exitingAt) >= PANEL_EXIT_DURATION_MS;
+    const timedOut = (now - state.firstSeenAt) >= TREND_PANEL_HIDE_AFTER_MS;
+    if (exitDone || timedOut) {
+      trendPanelUIState.delete(taskId);
     }
+  }
 
-    const fadeWindowMs = TREND_PANEL_HIDE_AFTER_MS - TREND_PANEL_FADE_START_MS;
-    const fadeProgress = ageMs <= TREND_PANEL_FADE_START_MS
-      ? 0
-      : Math.min(1, (ageMs - TREND_PANEL_FADE_START_MS) / fadeWindowMs);
-    const fadeAlpha = 1 - fadeProgress;
+  // ── Pass 3: render ───────────────────────────────────────────────────────
 
-    const visibleResults = normalizedItems.slice(-TREND_PANEL_MAX_VISIBLE);
-    const needsScroll = normalizedItems.length > TREND_PANEL_MAX_VISIBLE;
+  const agentHalfH = (spriteConfigs?.agent?.height ?? 54) / 2;
 
+  for (const [, state] of trendPanelUIState) {
+    // Enter animation
+    const enterProgress = Math.min(1, (now - state.firstSeenAt) / PANEL_ENTER_DURATION_MS);
+    const slideY = PANEL_ENTER_SLIDE_PX * (1 - enterProgress);
+
+    // Exit animation
+    const exitAlpha = state.exitingAt !== null
+      ? Math.max(0, 1 - (now - state.exitingAt) / PANEL_EXIT_DURATION_MS)
+      : 1;
+
+    const panelAlpha = enterProgress * exitAlpha;
+    if (panelAlpha <= 0) continue;
+
+    // Layout (computed from cached data, anchored to initial position)
+    const visibleResults = state.cachedResults.slice(-TREND_PANEL_MAX_VISIBLE);
+    const needsScroll = state.cachedResults.length > TREND_PANEL_MAX_VISIBLE;
     const lineHeight = 12;
     const paddingX = 10;
     const paddingY = 10;
     const panelWidth = 170;
-    const panelHeight = paddingY + lineHeight + visibleResults.length * lineHeight + (needsScroll ? lineHeight : 0) + paddingY + 4;
-    const panelX = x - panelWidth / 2;
-    const panelY = y - (spriteConfigs?.agent?.height ?? 54) / 2 - panelHeight - 6;
-    const title = `Top Trends: ${panel.keyword || ''}`;
+    const panelHeight = paddingY + lineHeight + visibleResults.length * lineHeight
+      + (needsScroll ? lineHeight : 0) + paddingY + 4;
+
+    const panelX = state.anchorX - panelWidth / 2;
+    const panelY = state.anchorY - agentHalfH - PANEL_OFFSET_Y - panelHeight + slideY;
 
     ctx.save();
-    ctx.globalAlpha = fadeAlpha;
+    ctx.globalAlpha = panelAlpha;
 
+    // Background
     drawIfLoaded(ctx, TREND_PANEL_ASSET_ID, panelX, panelY, panelWidth, panelHeight);
-
     if (!loadedAssets[TREND_PANEL_ASSET_ID]) {
       ctx.fillStyle = 'rgba(12, 16, 30, 0.88)';
       ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
@@ -873,22 +926,53 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#e8a838';
     ctx.font = '9px monospace';
 
-    const headerBaselineY = panelY + paddingY + (lineHeight / 2);
-    ctx.fillText(title, panelX + paddingX, headerBaselineY);
+    const headerBaselineY = panelY + paddingY + lineHeight / 2;
 
-    ctx.fillStyle = '#f7f4df';
-    for (let i = 0; i < visibleResults.length; i += 1) {
-      const item = visibleResults[i];
-      const scoreLabel = item.score === null ? '' : ` ${item.score.toFixed(2)}`;
-      ctx.fillText(`${item.item}${scoreLabel}`, panelX + paddingX, headerBaselineY + ((i + 1) * lineHeight));
+    // Title
+    ctx.fillStyle = '#e8a838';
+    ctx.fillText(`Top Trends: ${state.cachedKeyword}`, panelX + paddingX, headerBaselineY);
+
+    // Result rows — each fades in independently with stagger
+    for (let i = 0; i < visibleResults.length; i++) {
+      const r = visibleResults[i];
+      const itemFirstSeen = state.resultFirstSeenAt.get(r.item) ?? state.firstSeenAt;
+      const itemFadeIn = Math.min(1, Math.max(0, (now - itemFirstSeen) / RESULT_FADE_DURATION_MS));
+      if (itemFadeIn <= 0) continue;
+
+      const itemBaselineY = headerBaselineY + (i + 1) * lineHeight;
+      const isHighlighted = r.item === state.highlightItem && state.highlightStartAt !== null;
+
+      // Highlight pulse — subtle background glow on the top result at arrival
+      if (isHighlighted) {
+        const pulseAge = now - state.highlightStartAt;
+        if (pulseAge < RESULT_HIGHLIGHT_DURATION_MS) {
+          const pulse = Math.sin((pulseAge / RESULT_HIGHLIGHT_DURATION_MS) * Math.PI);
+          ctx.save();
+          ctx.globalAlpha = panelAlpha * itemFadeIn * pulse * 0.30;
+          ctx.fillStyle = '#ffdd88';
+          ctx.fillRect(
+            panelX + paddingX - 2,
+            itemBaselineY - lineHeight / 2,
+            panelWidth - paddingX * 2 + 4,
+            lineHeight,
+          );
+          ctx.restore();
+        }
+      }
+
+      const scoreLabel = r.score === null ? '' : ` ${r.score.toFixed(2)}`;
+      ctx.save();
+      ctx.globalAlpha = panelAlpha * itemFadeIn;
+      ctx.fillStyle = isHighlighted ? '#ffe97a' : '#f7f4df';
+      ctx.fillText(`${r.item}${scoreLabel}`, panelX + paddingX, itemBaselineY);
+      ctx.restore();
     }
 
     if (needsScroll) {
       ctx.fillStyle = '#cfd7f4';
-      ctx.fillText('... more', panelX + paddingX, headerBaselineY + ((visibleResults.length + 1) * lineHeight));
+      ctx.fillText('... more', panelX + paddingX, headerBaselineY + (visibleResults.length + 1) * lineHeight);
     }
 
     ctx.restore();
