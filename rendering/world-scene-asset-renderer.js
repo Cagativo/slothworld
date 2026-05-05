@@ -25,6 +25,7 @@
 
 import { ASSET_MAPPING, loadedAssets } from './assets.js';
 import { CENTRAL_STRUCTURE, DECORATIONS } from './world-scene.js';
+import { renderTreehouseBackdrop } from './world-background-composition.js';
 import { spriteConfigs } from '../core/constants.js';
 
 // ---------------------------------------------------------------------------
@@ -496,8 +497,8 @@ export function renderBackgroundLayer(ctx, frame) {
     // only — no procedural room, no teal stream — so there is no blue/teal flash
     // during the asset loading window. drawRoomScene and the full stream body are
     // kept for reference but suppressed here to avoid any premature colour bleed.
-    ctx.fillStyle = '#1a0f05';
-    ctx.fillRect(0, 0, cw, ch);
+    // Current fallback is the static treehouse projection in world-background-composition.js.
+    renderTreehouseBackdrop(ctx, frame);
   }
 }
 

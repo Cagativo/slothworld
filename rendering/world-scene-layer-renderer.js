@@ -82,6 +82,7 @@ export function renderAllLayers(ctx, components, frame) {
     renderAllZones(ctx, components);
   }
   renderZoneLayer(ctx, components);
+  renderWorldCompositionLayer(ctx, { debug: isRenderDebug, frame });
 
   // ── Layer 3.5: zone labels (debug mode only) ───────────────────────────
   // Themed zone-name badges (Intake Nook, Task Engine, …). Shown only in
