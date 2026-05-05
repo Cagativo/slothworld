@@ -154,20 +154,20 @@ export function renderInspectionPopover(ctx, hit, options = {}) {
 
   ctx.save();
 
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.32)';
-  ctx.shadowBlur = 8;
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.26)';
+  ctx.shadowBlur = 10;
   ctx.shadowOffsetY = 2;
   roundRect(ctx, x, y, cardW, cardH, 6);
-  ctx.fillStyle = model.debug ? 'rgba(32, 20, 8, 0.86)' : 'rgba(32, 22, 12, 0.68)';
+  ctx.fillStyle = model.debug ? 'rgba(32, 20, 8, 0.86)' : 'rgba(38, 27, 14, 0.58)';
   ctx.fill();
 
   ctx.shadowColor = 'transparent';
-  ctx.strokeStyle = model.hasAnomaly ? 'rgba(207, 105, 54, 0.70)' : 'rgba(215, 174, 104, 0.46)';
-  ctx.lineWidth = 0.8;
+  ctx.strokeStyle = model.hasAnomaly ? 'rgba(207, 105, 54, 0.62)' : 'rgba(215, 174, 104, 0.34)';
+  ctx.lineWidth = model.debug ? 0.8 : 0.6;
   roundRect(ctx, x, y, cardW, cardH, 6);
   ctx.stroke();
 
-  ctx.fillStyle = '#f0d9a8';
+  ctx.fillStyle = '#ead0a0';
   ctx.font = 'bold 10px monospace';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
@@ -182,7 +182,7 @@ export function renderInspectionPopover(ctx, hit, options = {}) {
   }
 
   ctx.font = '9px monospace';
-  ctx.fillStyle = 'rgba(252, 239, 204, 0.84)';
+  ctx.fillStyle = model.debug ? 'rgba(252, 239, 204, 0.84)' : 'rgba(252, 239, 204, 0.74)';
   let rowY = y + PAD + 16;
   for (const row of model.rows) {
     ctx.fillText(row, x + PAD, rowY);

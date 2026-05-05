@@ -50,20 +50,20 @@ const CARD_R  = 2;
  * @type {Readonly<Record<string, Readonly<{ fill: string, barColor: string }>>>}
  */
 export const CHIP_STYLES = Object.freeze({
-  idle:       Object.freeze({ fill: 'rgba(243,232,198,0.90)', barColor: '#8fbc8f' }),
-  waiting:    Object.freeze({ fill: 'rgba(245,236,196,0.90)', barColor: '#d4a017' }),
-  working:    Object.freeze({ fill: 'rgba(232,248,244,0.90)', barColor: '#00b8a9' }),
-  processing: Object.freeze({ fill: 'rgba(228,244,250,0.92)', barColor: '#7ec8c8' }),
-  completed:  Object.freeze({ fill: 'rgba(230,248,232,0.88)', barColor: '#4caf50' }),
-  error:      Object.freeze({ fill: 'rgba(250,232,232,0.90)', barColor: '#e53935' }),
-  unknown:    Object.freeze({ fill: 'rgba(240,234,220,0.85)', barColor: '#8d7b68' }),
+  idle:       Object.freeze({ fill: 'rgba(238,224,184,0.82)', barColor: '#8fbc8f' }),
+  waiting:    Object.freeze({ fill: 'rgba(242,226,176,0.82)', barColor: '#d4a017' }),
+  working:    Object.freeze({ fill: 'rgba(222,242,224,0.80)', barColor: '#56bfa5' }),
+  processing: Object.freeze({ fill: 'rgba(224,238,226,0.82)', barColor: '#7ec8c8' }),
+  completed:  Object.freeze({ fill: 'rgba(224,240,214,0.78)', barColor: '#4caf50' }),
+  error:      Object.freeze({ fill: 'rgba(244,218,204,0.84)', barColor: '#d65b42' }),
+  unknown:    Object.freeze({ fill: 'rgba(235,224,204,0.72)', barColor: '#8d7b68' }),
 });
 
 /** Fallback style for visualState values not listed in CHIP_STYLES. */
 const FALLBACK_CHIP_STYLE = CHIP_STYLES.unknown;
 
 /** Card border — dark warm tone shared across all states. */
-const CARD_STROKE = '#7a5030';
+const CARD_STROKE = 'rgba(92, 61, 34, 0.72)';
 
 /** Task ID text colour — dark ink on parchment. */
 const CARD_TEXT_COLOR = '#3a1c08';
@@ -96,10 +96,10 @@ export const NORMAL_MODE_CHIP_ALPHA = Object.freeze({
   working:    1.0,   // active in-flight tasks — always visible
   processing: 1.0,   // awaiting-ack tasks — always visible
   error:      1.0,   // failed tasks — always visible
-  waiting:    0.38,  // enqueued tasks — subdued
+  waiting:    0.28,  // enqueued tasks — subdued
   idle:       0,     // created tasks — hidden; paper-stack indicator handles this
   completed:  0,     // done tasks — hidden; archive glow handles this
-  unknown:    0.20,  // fallback
+  unknown:    0.14,  // fallback
 });
 
 // ---------------------------------------------------------------------------
@@ -162,7 +162,7 @@ function drawTaskCard(ctx, component, x, y, showId) {
   // Card border
   roundRect(ctx, cx, cy, CARD_W, CARD_H, CARD_R);
   ctx.strokeStyle = CARD_STROKE;
-  ctx.lineWidth   = 0.8;
+  ctx.lineWidth   = 0.6;
   ctx.stroke();
 
   // Left state-colour bar (clipped to left rounded-corner shape)
@@ -200,7 +200,7 @@ function drawProcessingPulse(ctx, x, y) {
   const now   = Date.now();
   const phase = (now % 1600) / 1600;                         // 1.6 s cycle
   const scale = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
-  const alpha = 0.16 + 0.24 * scale;
+  const alpha = 0.10 + 0.18 * scale;
   const rX    = CARD_W / 2 + 3 + 2 * scale;
   const rY    = CARD_H / 2 + 3 + 1 * scale;
 

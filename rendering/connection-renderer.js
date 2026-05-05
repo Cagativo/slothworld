@@ -37,8 +37,8 @@ export const FLOW_LINE_STYLE = Object.freeze({
 });
 
 export const NORMAL_FLOW_LINE_STYLE = Object.freeze({
-  stroke: 'rgba(96, 220, 200, 0.14)',
-  width:  0.85,
+  stroke: 'rgba(126, 232, 206, 0.10)',
+  width:  0.65,
 });
 
 // ---------------------------------------------------------------------------
