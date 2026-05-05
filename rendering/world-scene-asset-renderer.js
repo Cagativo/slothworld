@@ -28,6 +28,7 @@ import { CENTRAL_STRUCTURE, DECORATIONS } from './world-scene.js';
 import { renderTreehouseBackdrop } from './world-background-composition.js';
 import { spriteConfigs } from '../core/constants.js';
 import { compareByDepthY } from './scene-anchors.js';
+import { drawRuntimePropAsset } from './prop-asset-renderer.js';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -734,7 +735,17 @@ export function renderConnectionLayer(ctx, components, entityPositions, isDebugM
       const mx = (fromPos.x + toPos.x) / 2;
       const my = (fromPos.y + toPos.y) / 2;
       const filename = flowAssets[idx % flowAssets.length];
-      drawIfLoaded(ctx, filename, mx - FLOW_SIZE.w / 2, my - FLOW_SIZE.h / 2, FLOW_SIZE.w, FLOW_SIZE.h);
+      const assetKey = isDebugMode ? 'dataStreamMain' : 'dataStreamSoft';
+      const drawn = drawRuntimePropAsset(ctx, assetKey, {
+        x: mx,
+        y: my,
+        width: isDebugMode ? 22 : 18,
+        height: isDebugMode ? 11 : 9,
+        alpha: isDebugMode ? 0.18 : 0.10,
+      });
+      if (!drawn) {
+        drawIfLoaded(ctx, filename, mx - FLOW_SIZE.w / 2, my - FLOW_SIZE.h / 2, FLOW_SIZE.w, FLOW_SIZE.h);
+      }
     }
     idx++;
   }

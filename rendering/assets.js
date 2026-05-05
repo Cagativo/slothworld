@@ -96,9 +96,11 @@ export const assetPaths = [
   // ── Flow / stream ──────────────────────────────────────────────────────────
   'assets/slothworldassets/flow_stream_01.png',
   'assets/slothworldassets/flow_stream_cascade_01.png',
+  'assets/slothworldassets/flow_stream_small_01.png',
 
   // ── UI overlays ────────────────────────────────────────────────────────────
   'assets/slothworldassets/ui_floating_display_01.png',
+  'assets/slothworldassets/ui_floating_display_02.png',
   'assets/slothworldassets/ui_panel_small_01.png',
   'assets/slothworldassets/createtask.png',
   'assets/slothworldassets/createtaskselected.png',

@@ -61,12 +61,23 @@ export const SCENE_ANCHORS = Object.freeze({
   approvalDesk: Object.freeze({
     deliveryDesk: anchor({ x: 646, y: 248, scale: 0.76, depthY: 266, bounds: { x: 625, y: 227, width: 42, height: 42 } }),
   }),
+  indicators: Object.freeze({
+    claimedMonitor: anchor({ x: 286, y: 246, scale: 0.78, depthY: 262, bounds: { x: 265, y: 225, width: 42, height: 42 } }),
+  }),
+  decor: Object.freeze({
+    foregroundVine: anchor({ x: 1008, y: 276, scale: 0.74, depthY: 512, bounds: { x: 968, y: 150, width: 76, height: 252 } }),
+    smallPlants: anchor({ x: 708, y: 420, scale: 0.56, depthY: 432, bounds: { x: 684, y: 392, width: 48, height: 56 } }),
+    booksStack: anchor({ x: 904, y: 118, scale: 0.48, depthY: 138, bounds: { x: 882, y: 96, width: 44, height: 42 } }),
+    deskTerminal: anchor({ x: 288, y: 232, scale: 0.42, depthY: 238, bounds: { x: 270, y: 214, width: 36, height: 28 } }),
+    archiveShelf: anchor({ x: 925, y: 170, scale: 0.58, depthY: 218, bounds: { x: 878, y: 74, width: 96, height: 160 } }),
+    mossShelf: anchor({ x: 818, y: 338, scale: 0.50, depthY: 368, bounds: { x: 780, y: 306, width: 76, height: 60 } }),
+  }),
 });
 
 export const ZONE_INDICATOR_ANCHORS = Object.freeze({
   CREATED: Object.freeze(SCENE_ANCHORS.shelves.intakeShelf),
   ENQUEUED: Object.freeze(SCENE_ANCHORS.shelves.queueRunes),
-  CLAIMED: Object.freeze({ x: 286, y: 246, scale: 0.78, depthY: 262, bounds: Object.freeze({ x: 265, y: 225, width: 42, height: 42 }) }),
+  CLAIMED: Object.freeze(SCENE_ANCHORS.indicators.claimedMonitor),
   EXECUTE_FINISHED: Object.freeze(SCENE_ANCHORS.approvalDesk.deliveryDesk),
   ACKED: Object.freeze(SCENE_ANCHORS.shelves.archiveShelf),
 });
