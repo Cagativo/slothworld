@@ -6,7 +6,8 @@
  * Visual convention (Themed World Projection):
  *  - Each lifecycle zone gets a small plaque/scroll label near its top edge
  *  - Labels use LIFECYCLE_ZONE_THEMES names instead of raw zone IDs
- *  - Hidden when debug mode is active (debug mode already shows raw IDs via renderAllZones)
+ *  - Shown ONLY in debug mode; in normal mode in-world diegetic indicators
+ *    (diegetic-indicator-renderer.js) communicate state instead of labels
  *
  * CONTRACT:
  *  - Input:  zone-background component descriptors from world-scene-adapter.js
@@ -134,16 +135,17 @@ function renderZoneLabel(ctx, component) {
 /**
  * Draw themed zone labels for all zone-background components.
  *
- * When hideWhenDebug is true the function is a no-op — debug mode already
- * renders raw zone IDs via renderAllZones(), so themed labels would compete.
+ * Labels are shown ONLY in debug mode. In normal mode the world communicates
+ * state through in-world diegetic indicators (diegetic-indicator-renderer.js)
+ * so persistent text labels are suppressed to avoid duplication.
  *
  * @param {CanvasRenderingContext2D} ctx
- * @param {Array<object>}            components      flat component list from toRenderableComponents()
- * @param {boolean}                  [hideWhenDebug] suppress rendering when debug overlay is active
+ * @param {Array<object>}            components   flat component list from toRenderableComponents()
+ * @param {boolean}                  isDebugMode  render labels when true; no-op when false
  */
-export function renderZoneLabels(ctx, components, hideWhenDebug) {
+export function renderZoneLabels(ctx, components, isDebugMode) {
   if (!ctx || !Array.isArray(components)) return;
-  if (hideWhenDebug) return;
+  if (!isDebugMode) return;
 
   for (const c of components) {
     if (c && c.componentType === 'zone-background') {
