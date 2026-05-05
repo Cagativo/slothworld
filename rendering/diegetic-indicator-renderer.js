@@ -33,6 +33,7 @@ import {
   ENGINE_CRYSTAL_ANCHOR,
   ANOMALY_ANCHOR,
 } from './scene-anchors.js';
+import { drawRuntimePropAsset } from './prop-asset-renderer.js';
 
 // ---------------------------------------------------------------------------
 // Visual constants
@@ -435,26 +436,46 @@ export function renderDiegeticIndicators(ctx, components, now) {
 
     switch (zoneId) {
       case 'CREATED':
-        drawAtAnchor(anchor, (x, y) => drawPaperStack(ctx, x, y, count));
+        if (!drawRuntimePropAsset(ctx, 'intakePaperStack', { anchor, alpha: count > 0 ? 0.72 : 0.18 })) {
+          drawAtAnchor(anchor, (x, y) => drawPaperStack(ctx, x, y, count));
+        }
         break;
       case 'ENQUEUED':
-        drawAtAnchor(anchor, (x, y) => drawRuneGlow(ctx, x, y, count, safeNow));
+        if (!drawRuntimePropAsset(ctx, 'queueRuneStone', { anchor, alpha: count > 0 ? 0.36 : 0.12 })) {
+          drawAtAnchor(anchor, (x, y) => drawRuneGlow(ctx, x, y, count, safeNow));
+        }
         break;
       case 'CLAIMED':
-        drawAtAnchor(anchor, (x, y) => drawMonitorGlow(ctx, x, y, workingByZone[zoneId] ?? 0, safeNow));
+        if (!drawRuntimePropAsset(ctx, 'monitorGlow', { anchor, alpha: (workingByZone[zoneId] ?? 0) > 0 ? 0.30 : 0.10 })) {
+          drawAtAnchor(anchor, (x, y) => drawMonitorGlow(ctx, x, y, workingByZone[zoneId] ?? 0, safeNow));
+        }
         break;
       case 'EXECUTE_FINISHED':
-        drawAtAnchor(anchor, (x, y) => drawApprovalMarker(ctx, x, y, processingByZone[zoneId] ?? 0, safeNow));
+        if (!drawRuntimePropAsset(ctx, 'approvalMarker', { anchor, alpha: (processingByZone[zoneId] ?? 0) > 0 ? 0.46 : 0.12 })) {
+          drawAtAnchor(anchor, (x, y) => drawApprovalMarker(ctx, x, y, processingByZone[zoneId] ?? 0, safeNow));
+        }
         break;
       case 'ACKED':
-        drawAtAnchor(anchor, (x, y) => drawArchiveGlow(ctx, x, y, completedByZone[zoneId] ?? 0, safeNow));
+        if (!drawRuntimePropAsset(ctx, 'archiveGlow', { anchor, alpha: (completedByZone[zoneId] ?? 0) > 0 ? 0.28 : 0.08 })) {
+          drawAtAnchor(anchor, (x, y) => drawArchiveGlow(ctx, x, y, completedByZone[zoneId] ?? 0, safeNow));
+        }
         break;
     }
   }
 
   // Engine crystal - always drawn
-  drawAtAnchor(ENGINE_CRYSTAL_ANCHOR, (x, y) => drawEngineCrystalPulse(ctx, x, y, totalActive, safeNow));
+  if (!drawRuntimePropAsset(ctx, 'engineCrystalGlow', {
+    anchor: ENGINE_CRYSTAL_ANCHOR,
+    alpha: totalActive > 0 ? 0.42 : 0.18,
+  })) {
+    drawAtAnchor(ENGINE_CRYSTAL_ANCHOR, (x, y) => drawEngineCrystalPulse(ctx, x, y, totalActive, safeNow));
+  }
 
   // Anomaly glint - only when an anomaly is present
-  drawAtAnchor(ANOMALY_ANCHOR, (x, y) => drawAnomalyGlint(ctx, x, y, hasAnomaly, hasHighSeverity, safeNow));
+  if (!hasAnomaly || !drawRuntimePropAsset(ctx, 'anomalyShelfLight', {
+    anchor: ANOMALY_ANCHOR,
+    alpha: hasHighSeverity ? 0.38 : 0.24,
+  })) {
+    drawAtAnchor(ANOMALY_ANCHOR, (x, y) => drawAnomalyGlint(ctx, x, y, hasAnomaly, hasHighSeverity, safeNow));
+  }
 }
