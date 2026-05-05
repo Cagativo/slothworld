@@ -31,6 +31,7 @@ import { renderAllAgentEntities }   from './agent-entity-renderer.js';
 import { buildEntityPositionMap }   from './zone-renderer.js';
 import { renderZoneLabels }         from './zone-label-renderer.js';
 import { renderAllTaskChips }       from './task-chip-renderer.js';
+import { renderWorldCompositionLayer } from './world-background-composition.js';
 import {
   renderBackgroundLayer,
   renderCoreLayer,
@@ -81,6 +82,7 @@ export function renderAllLayers(ctx, components, frame) {
     renderAllZones(ctx, components);
   }
   renderZoneLayer(ctx, components);
+  renderWorldCompositionLayer(ctx, { debug: isRenderDebug, frame });
 
   // ── Layer 3.5: zone labels ──────────────────────────────────────────────
   // Themed zone name badges (Intake Nook, Task Engine, …) drawn over the
