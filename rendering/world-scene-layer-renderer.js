@@ -33,6 +33,9 @@ import { renderZoneLabels }         from './zone-label-renderer.js';
 import { renderAllTaskChips }       from './task-chip-renderer.js';
 import { renderDiegeticIndicators } from './diegetic-indicator-renderer.js';
 import { renderWorldCompositionLayer } from './world-background-composition.js';
+import { loadedAssets } from './assets.js';
+import { isBakedBackgroundActive, selectLoadedBackground } from './background-config.js';
+import { renderWorkstationHotspotDebug } from './workstation-hotspots.js';
 import {
   renderBackgroundLayer,
   renderCoreLayer,
@@ -53,6 +56,8 @@ import {
 export function renderAllLayers(ctx, components, frame) {
   // Build entity position map once; shared across geometry and sprite layers
   const entityPositions = buildEntityPositionMap(components);
+  const activeBackground = selectLoadedBackground(loadedAssets);
+  const bakedBackgroundActive = isBakedBackgroundActive(activeBackground);
 
   // Debug log — component counts + entity position map size
   if (typeof window !== 'undefined' && window.DEV_MODE) {
@@ -83,19 +88,22 @@ export function renderAllLayers(ctx, components, frame) {
     renderAllZones(ctx, components);
   }
   renderZoneLayer(ctx, components);
-  renderWorldCompositionLayer(ctx, { debug: isRenderDebug, frame });
+  renderWorldCompositionLayer(ctx, { debug: isRenderDebug, frame, bakedBackground: bakedBackgroundActive });
 
   // ── Layer 3.5: zone labels (debug mode only) ───────────────────────────
   // Themed zone-name badges (Intake Nook, Task Engine, …). Shown only in
   // debug mode alongside raw zone IDs. In normal mode, in-world diegetic
   // indicators communicate state instead — no duplicate text labels.
   renderZoneLabels(ctx, components, isRenderDebug);
+  if (isRenderDebug) {
+    renderWorkstationHotspotDebug(ctx);
+  }
 
   // ── Layer 3.6: diegetic indicators (normal mode only) ──────────────────
   // In-world visual props (paper stacks, monitor glow, rune pulse, …) that
   // communicate zone activity without persistent text labels.
   if (!isRenderDebug) {
-    renderDiegeticIndicators(ctx, components, Date.now());
+    renderDiegeticIndicators(ctx, components, Date.now(), { bakedBackground: bakedBackgroundActive });
   }
 
   // ── Layer 4: connection ─────────────────────────────────────────────────
@@ -105,7 +113,10 @@ export function renderAllLayers(ctx, components, frame) {
   // ── Layers 5–8: agents, props, effects, UI overlay ─────────────────────
   // Layer 5 agent rendering always runs and resolves positions through
   // entityPositions. Geometry fallback still applies while sprite assets load.
-  renderAllAgentEntities(ctx, components, entityPositions, Date.now());
+  renderAllAgentEntities(ctx, components, entityPositions, Date.now(), {
+    debug: isRenderDebug,
+    bakedBackground: bakedBackgroundActive,
+  });
 
   // ── Layer 5.5: task chips ───────────────────────────────────────────────
   // Parchment work-cards for task entities: card body + processing pulse + anomaly badge.
@@ -114,5 +125,8 @@ export function renderAllLayers(ctx, components, frame) {
   renderAllTaskChips(ctx, components, entityPositions, isRenderDebug);
 
   // renderPropLayer remains suppressed in image mode. renderEffectLayer is a hard no-op.
-  renderUIOverlayLayer(ctx, components, entityPositions);
+  renderUIOverlayLayer(ctx, components, entityPositions, {
+    debug: isRenderDebug,
+    bakedBackground: bakedBackgroundActive,
+  });
 }

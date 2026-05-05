@@ -39,6 +39,7 @@ function cleanText(value) {
 function titleFor(component, componentType) {
   if (componentType === 'task-chip') return 'Task Scroll';
   if (componentType === 'agent-sprite') return 'Agent Desk';
+  if (componentType === 'workstation-hotspot') return cleanText(component.label) || 'Workstation';
   const zoneId = cleanText(component.worldZoneId) || cleanText(component.zoneId) || cleanText(component.id);
   return ZONE_TITLES[zoneId] || 'World Zone';
 }
@@ -46,6 +47,7 @@ function titleFor(component, componentType) {
 function typeLabel(componentType) {
   if (componentType === 'task-chip') return 'task';
   if (componentType === 'agent-sprite') return 'agent';
+  if (componentType === 'workstation-hotspot') return 'workstation';
   return 'world-zone';
 }
 
@@ -66,9 +68,33 @@ export function buildInspectionPopoverRows(hit, options = {}) {
 
   const component = hit.component;
   const isDebug = Boolean(options.debug);
-  const rows = [
-    `type: ${typeLabel(hit.componentType)}`,
-  ];
+  const rows = [];
+  if (isDebug || hit.componentType !== 'workstation-hotspot') {
+    rows.push(`type: ${typeLabel(hit.componentType)}`);
+  }
+
+  if (hit.componentType === 'workstation-hotspot') {
+    const summary = component.summary && typeof component.summary === 'object' ? component.summary : {};
+    const activeTasks = summary.activeTasks ?? 0;
+    const waitingTasks = summary.waitingTasks ?? 0;
+    if (isDebug || activeTasks > 0) rows.push(`active tasks: ${activeTasks}`);
+    if (isDebug || waitingTasks > 0) rows.push(`waiting tasks: ${waitingTasks}`);
+    if (summary.failedTasks || summary.anomaly) rows.push('attention: yes');
+    if (summary.assignedAgents) rows.push(`assigned agents: ${summary.assignedAgents}`);
+    if (isDebug) {
+      const id = cleanText(component.id);
+      if (id) rows.push(`id: ${id}`);
+      if (hit.bounds) {
+        rows.push(`bounds: ${Math.round(hit.bounds.x)},${Math.round(hit.bounds.y)} ${Math.round(hit.bounds.width)}x${Math.round(hit.bounds.height)}`);
+      }
+    }
+    return {
+      title: titleFor(component, hit.componentType),
+      rows,
+      hasAnomaly: Boolean(summary.failedTasks || summary.anomaly),
+      debug: isDebug,
+    };
+  }
 
   const visualState = cleanText(component.visualState);
   if (visualState && (isDebug || visualState !== 'unknown')) rows.push(`status: ${visualState}`);

@@ -51,6 +51,8 @@ export const assetPaths = [
   // ── Unified scene background ───────────────────────────────────────────────
   // Place the reference image at this path to activate the image-backed mode.
   // When absent the renderer falls back to the procedural room (drawRoomScene).
+  'assets/slothworldassets/scene_background_02.png',
+  'assets/slothworldassets/scene_background_02.jpg',
   'assets/slothworldassets/scene_background_01.jpg',
 
   // ── Environment — core tree ────────────────────────────────────────────────
