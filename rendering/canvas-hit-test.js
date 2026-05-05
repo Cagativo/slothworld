@@ -5,7 +5,7 @@
  * descriptors and computed entity positions supplied by the canvas pipeline.
  */
 
-import { ZONE_INDICATOR_ANCHORS } from './diegetic-indicator-renderer.js';
+import { ZONE_INDICATOR_ANCHORS } from './scene-anchors.js';
 
 const TASK_CHIP_BOUNDS = Object.freeze({ width: 36, height: 16 });
 const ZONE_INDICATOR_BOUNDS = Object.freeze({ width: 48, height: 48 });
@@ -94,6 +94,15 @@ function getZoneIndicatorHitBounds(component) {
   const anchor = component && component.id ? ZONE_INDICATOR_ANCHORS[component.id] : null;
   if (!anchor) {
     return null;
+  }
+
+  if (anchor.bounds) {
+    return {
+      x: anchor.bounds.x,
+      y: anchor.bounds.y,
+      width: anchor.bounds.width,
+      height: anchor.bounds.height,
+    };
   }
 
   return {

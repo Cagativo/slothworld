@@ -22,29 +22,17 @@
  *  - Positions are hardcoded to match the 1060×520 background layout
  */
 
-// ---------------------------------------------------------------------------
-// Indicator anchor positions — matched to the 1060×520 canvas background
-// ---------------------------------------------------------------------------
+export {
+  ZONE_INDICATOR_ANCHORS,
+  ENGINE_CRYSTAL_ANCHOR,
+  ANOMALY_ANCHOR,
+} from './scene-anchors.js';
 
-/**
- * Per-lifecycle-zone indicator anchor (canvas x/y).
- * Each entry sits near a visually meaningful area within the zone.
- *
- * @type {Readonly<Record<string, Readonly<{ x: number, y: number }>>>}
- */
-export const ZONE_INDICATOR_ANCHORS = Object.freeze({
-  CREATED:          Object.freeze({ x: 107, y: 165 }),  // intake nook desk surface
-  ENQUEUED:         Object.freeze({ x: 117, y: 358 }),  // rune-stone area
-  CLAIMED:          Object.freeze({ x: 297, y: 240 }),  // workshop floor centre
-  EXECUTE_FINISHED: Object.freeze({ x: 657, y: 240 }),  // delivery bay floor centre
-  ACKED:            Object.freeze({ x: 894, y: 182 }),  // archive shelving upper area
-});
-
-/** Engine-crystal pulse anchor — base of the central tree crystal. */
-export const ENGINE_CRYSTAL_ANCHOR = Object.freeze({ x: 480, y: 388 });
-
-/** Anomaly shelf anchor — lower-right quadrant of the ACKED zone. */
-export const ANOMALY_ANCHOR = Object.freeze({ x: 878, y: 415 });
+import {
+  ZONE_INDICATOR_ANCHORS,
+  ENGINE_CRYSTAL_ANCHOR,
+  ANOMALY_ANCHOR,
+} from './scene-anchors.js';
 
 // ---------------------------------------------------------------------------
 // Visual constants

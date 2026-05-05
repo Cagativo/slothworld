@@ -17,6 +17,8 @@
  *  - No event access, no selector access, no lifecycle inference
  */
 
+import { SCENE_ANCHORS, getDeskAnchor } from './scene-anchors.js';
+
 // ---------------------------------------------------------------------------
 // Static visual style for zones
 // ---------------------------------------------------------------------------
@@ -52,14 +54,7 @@ export const ZONE_STYLE = Object.freeze({
 // Background image is 1376×768; canvas is 1060×520 (scale ≈ 0.770x, 0.677y).
 // Anchor = desk surface centre. left_back dx offset is handled in
 // agent-entity-renderer.js (DESK_SPRITE_OFFSETS), not here.
-export const DESK_POSITIONS = Object.freeze({
-  'desk-0': Object.freeze({ x: 370, y: 220 }),  // left mushroom platform (right_front)
-  'desk-1': Object.freeze({ x: 740, y: 230 }),  // upper-right first desk  (left_front)
-  'desk-2': Object.freeze({ x: 840, y: 275 }),  // upper-right second desk (left_front)
-  'desk-3': Object.freeze({ x: 580, y: 420 }),  // lower-centre desk       (right_back)
-  'desk-4': Object.freeze({ x: 750, y: 450 }),  // lower-right first desk  (left_back) +14dx in renderer
-  'desk-5': Object.freeze({ x: 880, y: 380 }),  // far lower-right desk    (left_back) +14dx in renderer
-});
+export const DESK_POSITIONS = SCENE_ANCHORS.desks;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -180,8 +175,15 @@ export function buildEntityPositionMap(components) {
 
     // Prefer desk-specific position when deskId is known — gives accurate
     // per-desk placement without any layout computation.
-    if (c.deskId && DESK_POSITIONS[c.deskId]) {
-      positions.set(c.id, { ...DESK_POSITIONS[c.deskId] });
+    const deskAnchor = getDeskAnchor(c.deskId);
+    if (deskAnchor) {
+      positions.set(c.id, {
+        x: deskAnchor.x,
+        y: deskAnchor.y,
+        scale: deskAnchor.scale,
+        depthY: deskAnchor.depthY,
+        anchorId: c.deskId,
+      });
       continue;
     }
 
@@ -189,7 +191,9 @@ export function buildEntityPositionMap(components) {
 
     if (!zone) {
       // No zone assigned — use the component's own x/y directly
-      positions.set(c.id, { x: c.x ?? 0, y: c.y ?? 0 });
+      const x = c.x ?? 0;
+      const y = c.y ?? 0;
+      positions.set(c.id, { x, y, scale: 1, depthY: y });
       continue;
     }
 
@@ -201,7 +205,7 @@ export function buildEntityPositionMap(components) {
     const px = zone.x + ZONE_STYLE.padding + slotWidth / 2 + slotIndex * slotWidth;
     const py = zone.y + (zone.height ?? 0) / 2;
 
-    positions.set(c.id, { x: px, y: py });
+    positions.set(c.id, { x: px, y: py, scale: 1, depthY: py });
   }
 
   return positions;

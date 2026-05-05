@@ -24,6 +24,7 @@ import {
 } from '../core/constants.js';
 import { hashString } from '../core/utils.js';
 import { isRenderDebugEnabled, debugPointer } from './debug.js';
+import { compareByDepthY } from './scene-anchors.js';
 
 // ---------------------------------------------------------------------------
 // Static visual style table — one entry per supported visualState
@@ -268,17 +269,22 @@ export function renderAgentEntity(ctx, component, frameNow) {
   const offsets = (component.deskId && DESK_SPRITE_OFFSETS[component.deskId])
     ? DESK_SPRITE_OFFSETS[component.deskId]
     : { dx: 0, dy: 0 };
+  const anchorScale = Number.isFinite(component.scale) && component.scale > 0 ? component.scale : 1;
 
   if (spriteImage) {
     if (sizes) {
       // Desk sprite — fixed dimensions, no frame animation.
+      const drawW = sizes.w * anchorScale;
+      const drawH = sizes.h * anchorScale;
+      const drawDx = offsets.dx * anchorScale;
+      const drawDy = offsets.dy * anchorScale;
       ctx.drawImage(spriteImage,
-        x - sizes.w / 2 + offsets.dx,
-        y - sizes.h / 2 + offsets.dy,
-        sizes.w, sizes.h);
+        x - drawW / 2 + drawDx,
+        y - drawH / 2 + drawDy,
+        drawW, drawH);
 
       if (isRenderDebugEnabled()) {
-        const label = spriteFilename.replace('.png', '');
+        const label = `${spriteFilename.replace('.png', '')} @${anchorScale.toFixed(2)}`;
         ctx.font      = '8px monospace';
         ctx.fillStyle = style.stroke;
         ctx.textAlign = 'center';
@@ -292,7 +298,12 @@ export function renderAgentEntity(ctx, component, frameNow) {
       // are propagated through the component descriptor.
       const now   = typeof frameNow === 'number' ? frameNow : Date.now();
       const frame = resolveSpriteFrame(null, spriteImage, now, component.id);
-      const drawSize = resolveSpriteDrawSize(frame);
+      const baseDrawSize = resolveSpriteDrawSize(frame);
+      const drawSize = {
+        width: baseDrawSize.width * anchorScale,
+        height: baseDrawSize.height * anchorScale,
+        scale: baseDrawSize.scale * anchorScale,
+      };
 
       const isHovered = debugPointer.inside
         && Number.isFinite(debugPointer.x)
@@ -319,7 +330,7 @@ export function renderAgentEntity(ctx, component, frameNow) {
   } else {
     // Keep geometry fallback while images are still loading.
     ctx.beginPath();
-    ctx.arc(x, y, style.radius, 0, Math.PI * 2);
+    ctx.arc(x, y, style.radius * anchorScale, 0, Math.PI * 2);
     ctx.fillStyle   = style.fill;
     ctx.strokeStyle = style.stroke;
     ctx.lineWidth   = 2;
@@ -330,7 +341,7 @@ export function renderAgentEntity(ctx, component, frameNow) {
   // Anomaly ring — drawn over the body when anomaly is present
   if (component.anomaly) {
     ctx.beginPath();
-    ctx.arc(x, y, style.radius + 4, 0, Math.PI * 2);
+    ctx.arc(x, y, style.radius * anchorScale + 4, 0, Math.PI * 2);
     ctx.strokeStyle = component.anomaly.severity === 'high' ? '#d32f2f' : '#f57c00';
     ctx.lineWidth   = 2;
     ctx.stroke();
@@ -341,9 +352,9 @@ export function renderAgentEntity(ctx, component, frameNow) {
   // and warm cream text, replacing the plain debug-style dark rectangle.
   if (component.id) {
     const isDebugMode = isRenderDebugEnabled();
-    const tagOffsetDx = offsets.dx;
-    const tagOffsetDy = offsets.dy;
-    const tagH  = sizes ? sizes.h : (spriteConfigs?.agent?.height ?? 54);
+    const tagOffsetDx = offsets.dx * anchorScale;
+    const tagOffsetDy = offsets.dy * anchorScale;
+    const tagH  = (sizes ? sizes.h : (spriteConfigs?.agent?.height ?? 54)) * anchorScale;
     const tagX  = x + tagOffsetDx;
     const tagY  = y - tagH / 2 + tagOffsetDy - 6;
 
@@ -414,10 +425,15 @@ export function renderAgentEntity(ctx, component, frameNow) {
  */
 export function renderAllAgentEntities(ctx, components, entityPositions, frameNow) {
   if (!ctx || !Array.isArray(components)) return;
-  for (const c of components) {
-    if (c && c.componentType === 'agent-sprite') {
+  const agents = components
+    .filter((c) => c && c.componentType === 'agent-sprite')
+    .map((c) => {
       const p = entityPositions && entityPositions.get(c.id);
-      renderAgentEntity(ctx, p ? { ...c, x: p.x, y: p.y } : c, frameNow);
-    }
+      return p ? { ...c, ...p } : c;
+    })
+    .sort(compareByDepthY);
+
+  for (const c of agents) {
+    renderAgentEntity(ctx, c, frameNow);
   }
 }

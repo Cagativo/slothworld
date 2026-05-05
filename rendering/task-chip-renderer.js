@@ -22,6 +22,8 @@
  *  - No DOM or asset dependencies — safe to import in headless test environments
  */
 
+import { compareByDepthY } from './scene-anchors.js';
+
 // ---------------------------------------------------------------------------
 // Card geometry constants
 // ---------------------------------------------------------------------------
@@ -282,12 +284,17 @@ function drawAnomalyBadge(ctx, x, y, anomaly) {
 export function renderAllTaskChips(ctx, components, entityPositions, isDebugMode) {
   if (!ctx || !Array.isArray(components)) return;
 
-  for (const c of components) {
-    if (!c || c.componentType !== 'task-chip') continue;
+  const chips = components
+    .filter((c) => c && c.componentType === 'task-chip')
+    .map((c) => {
+      const p = entityPositions && entityPositions.get(c.id);
+      return p ? { ...c, ...p } : c;
+    })
+    .sort(compareByDepthY);
 
-    const p = entityPositions && entityPositions.get(c.id);
-    const x = p ? p.x : (typeof c.x === 'number' ? c.x : 0);
-    const y = p ? p.y : (typeof c.y === 'number' ? c.y : 0);
+  for (const c of chips) {
+    const x = typeof c.x === 'number' ? c.x : 0;
+    const y = typeof c.y === 'number' ? c.y : 0;
 
     let chipAlpha = 1;
     if (!isDebugMode) {
