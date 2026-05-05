@@ -24,6 +24,8 @@ import {
   NORMAL_FLOW_LINE_STYLE,
   renderConnection,
 } from '../rendering/connection-renderer.js';
+import { renderWorldCompositionLayer } from '../rendering/world-background-composition.js';
+import { renderUIOverlayLayer } from '../rendering/world-scene-asset-renderer.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -36,6 +38,14 @@ const COMPONENTS = Object.freeze([
     y: 55,
     width: 165,
     height: 155,
+  }),
+  Object.freeze({
+    componentType: 'zone-background',
+    id: 'ENQUEUED',
+    x: 75,
+    y: 310,
+    width: 120,
+    height: 105,
   }),
   Object.freeze({
     componentType: 'agent-sprite',
@@ -71,14 +81,28 @@ function createMockContext() {
     beginPath: () => calls.push(['beginPath']),
     moveTo: (...args) => calls.push(['moveTo', ...args]),
     lineTo: (...args) => calls.push(['lineTo', ...args]),
+    bezierCurveTo: (...args) => calls.push(['bezierCurveTo', ...args]),
     quadraticCurveTo: (...args) => calls.push(['quadraticCurveTo', ...args]),
     closePath: () => calls.push(['closePath']),
     fill: () => calls.push(['fill']),
     stroke: () => calls.push(['stroke']),
     fillText: (...args) => calls.push(['fillText', ...args]),
     fillRect: (...args) => calls.push(['fillRect', ...args]),
+    strokeRect: (...args) => calls.push(['strokeRect', ...args]),
     arc: (...args) => calls.push(['arc', ...args]),
+    ellipse: (...args) => calls.push(['ellipse', ...args]),
+    drawImage: (...args) => calls.push(['drawImage', ...args]),
     setLineDash: (...args) => calls.push(['setLineDash', ...args]),
+    createLinearGradient: (...args) => {
+      const gradient = { addColorStop: (...stopArgs) => calls.push(['addColorStop', ...stopArgs]) };
+      calls.push(['createLinearGradient', ...args]);
+      return gradient;
+    },
+    createRadialGradient: (...args) => {
+      const gradient = { addColorStop: (...stopArgs) => calls.push(['addColorStop', ...stopArgs]) };
+      calls.push(['createRadialGradient', ...args]);
+      return gradient;
+    },
     measureText: (text) => ({ width: String(text).length * 6 }),
   };
 
@@ -86,7 +110,7 @@ function createMockContext() {
 }
 
 test('canvas inspection: hit-test returns stable result for known component positions', () => {
-  const taskBounds = getComponentHitBounds(COMPONENTS[2], null);
+  const taskBounds = getComponentHitBounds(COMPONENTS[3], null);
   assert.deepStrictEqual(taskBounds, { x: 282, y: 252, width: 36, height: 16 });
 
   const hit = hitTestRenderableComponents(COMPONENTS, { x: 300, y: 260 }, null);
@@ -105,6 +129,26 @@ test('canvas inspection: normal mode still hits task-chip and agent-sprite', () 
   assert.equal(agentHit.componentType, 'agent-sprite');
 });
 
+test('canvas inspection: normal mode skips idle agent hit and hits workstation hotspot', () => {
+  const components = [
+    { componentType: 'agent-sprite', id: 'agent-idle', x: 352, y: 224, visualState: 'idle', deskId: 'desk-0', worldZoneId: 'researchDesk', zoneId: 'CLAIMED' },
+  ];
+  const hit = hitTestRenderableComponents(components, { x: 330, y: 210 }, null, { debug: false });
+
+  assert.equal(hit.componentType, 'workstation-hotspot');
+  assert.equal(hit.entityId, 'researchMonitorHotspot');
+});
+
+test('canvas inspection: debug mode still hit-tests idle agents before workstation hotspots', () => {
+  const components = [
+    { componentType: 'agent-sprite', id: 'agent-idle', x: 352, y: 224, visualState: 'idle', deskId: 'desk-0', worldZoneId: 'researchDesk', zoneId: 'CLAIMED' },
+  ];
+  const hit = hitTestRenderableComponents(components, { x: 330, y: 210 }, null, { debug: true });
+
+  assert.equal(hit.componentType, 'agent-sprite');
+  assert.equal(hit.entityId, 'agent-idle');
+});
+
 test('canvas inspection: normal mode does not hit broad zone-background rectangles', () => {
   const zoneHit = hitTestRenderableComponents(COMPONENTS, { x: 60, y: 80 }, null, { debug: false });
   assert.equal(zoneHit, null);
@@ -117,10 +161,10 @@ test('canvas inspection: debug mode can hit broad zone-background rectangles', (
 });
 
 test('canvas inspection: normal mode hits small diegetic indicator anchors', () => {
-  const zoneHit = hitTestRenderableComponents(COMPONENTS, { x: 107, y: 165 }, null, { debug: false });
-  assert.equal(zoneHit.entityId, 'CREATED');
+  const zoneHit = hitTestRenderableComponents(COMPONENTS, { x: 126, y: 356 }, null, { debug: false });
+  assert.equal(zoneHit.entityId, 'ENQUEUED');
   assert.equal(zoneHit.componentType, 'world-zone-indicator');
-  assert.deepStrictEqual(zoneHit.bounds, { x: 83, y: 147, width: 42, height: 42 });
+  assert.deepStrictEqual(zoneHit.bounds, { x: 103, y: 333, width: 46, height: 46 });
 });
 
 test('canvas inspection: hover and click state update deterministically', () => {
@@ -189,11 +233,50 @@ test('canvas inspection: popover normal mode hides unknown status', () => {
   assert.deepStrictEqual(model.rows, ['type: task', 'zone: nook']);
 });
 
-test('canvas inspection: zone popover uses friendly zone title without unknown status', () => {
-  const hit = hitTestRenderableComponents(COMPONENTS, { x: 107, y: 165 }, null, { debug: false });
+test('canvas inspection: workstation popover summarizes render-component data only', () => {
+  const components = [
+    { componentType: 'task-chip', id: 'task-active', visualState: 'working', worldZoneId: 'researchDesk', zoneId: 'CLAIMED', anomaly: null },
+    { componentType: 'task-chip', id: 'task-waiting', visualState: 'waiting', worldZoneId: 'researchDesk', zoneId: 'CLAIMED', anomaly: null },
+    { componentType: 'task-chip', id: 'task-failed', visualState: 'error', worldZoneId: 'researchDesk', zoneId: 'CLAIMED', anomaly: { severity: 'high', type: 'stalled_tasks' } },
+    { componentType: 'agent-sprite', id: 'agent-active', visualState: 'working', worldZoneId: 'researchDesk', zoneId: 'CLAIMED', currentTaskId: 'task-active' },
+  ];
+  const hit = hitTestRenderableComponents(components, { x: 330, y: 210 }, null, { debug: false });
   const model = buildInspectionPopoverRows(hit, { debug: false });
 
-  assert.equal(model.title, 'Intake Nook');
+  assert.equal(model.title, 'Research Desk');
+  assert.ok(!model.rows.includes('type: workstation'));
+  assert.ok(model.rows.includes('active tasks: 1'));
+  assert.ok(model.rows.includes('waiting tasks: 1'));
+  assert.ok(model.rows.includes('attention: yes'));
+  assert.ok(model.rows.includes('assigned agents: 1'));
+  assert.ok(!model.rows.some((row) => row.startsWith('id:')));
+});
+
+test('canvas inspection: baked normal workstation popover omits zero-count and type rows', () => {
+  const hit = hitTestRenderableComponents([], { x: 330, y: 210 }, null, { debug: false, bakedBackground: true });
+  const model = buildInspectionPopoverRows(hit, { debug: false });
+
+  assert.equal(model.title, 'Research Desk');
+  assert.ok(!model.rows.includes('type: workstation'));
+  assert.ok(!model.rows.includes('active tasks: 0'));
+  assert.ok(!model.rows.includes('waiting tasks: 0'));
+});
+
+test('canvas inspection: debug workstation popover keeps detailed rows', () => {
+  const hit = hitTestRenderableComponents([], { x: 330, y: 210 }, null, { debug: true, bakedBackground: true });
+  const model = buildInspectionPopoverRows(hit, { debug: true });
+
+  assert.ok(model.rows.includes('type: workstation'));
+  assert.ok(model.rows.includes('active tasks: 0'));
+  assert.ok(model.rows.includes('waiting tasks: 0'));
+  assert.ok(model.rows.some((row) => row.startsWith('id:')));
+});
+
+test('canvas inspection: zone popover uses friendly zone title without unknown status', () => {
+  const hit = hitTestRenderableComponents(COMPONENTS, { x: 126, y: 356 }, null, { debug: false });
+  const model = buildInspectionPopoverRows(hit, { debug: false });
+
+  assert.equal(model.title, 'Task Engine');
   assert.ok(model.rows.includes('type: world-zone'));
   assert.ok(!model.rows.includes('status: unknown'));
 });
@@ -230,6 +313,89 @@ test('canvas inspection: connection stream is softer in normal mode and full in 
   assert.equal(debugCtx.lineWidth, FLOW_LINE_STYLE.width);
 });
 
+test('canvas inspection: baked normal mode suppresses large world composition overlays', () => {
+  const ctx = createMockContext();
+
+  renderWorldCompositionLayer(ctx, { bakedBackground: true, debug: false, frame: 12 });
+
+  assert.equal(ctx.calls.length, 0);
+});
+
+test('canvas inspection: debug mode still renders world composition diagnostics over baked background', () => {
+  const ctx = createMockContext();
+
+  renderWorldCompositionLayer(ctx, { bakedBackground: true, debug: true, frame: 12 });
+
+  assert.ok(ctx.calls.length > 0);
+  assert.ok(ctx.calls.some((call) => call[0] === 'fillText'));
+});
+
+test('canvas inspection: fallback background mode still renders world composition layers', () => {
+  const ctx = createMockContext();
+
+  renderWorldCompositionLayer(ctx, { bakedBackground: false, debug: false, frame: 12 });
+
+  assert.ok(ctx.calls.length > 0);
+  assert.ok(ctx.calls.some((call) => call[0] === 'fillRect' || call[0] === 'arc' || call[0] === 'ellipse'));
+});
+
+test('canvas inspection: baked normal mode renders trend data as compact monitor glow', () => {
+  const originalNow = Date.now;
+  let fakeNow = 10_000;
+  Date.now = () => fakeNow;
+  try {
+    const ctx = createMockContext();
+    const components = [{
+      componentType: 'agent-sprite',
+      id: 'trend-agent-compact',
+      trendPanelState: {
+        taskId: 'trend-task-compact',
+        keyword: 'cozy',
+        status: 'done',
+        results: [{ item: 'treehouse', score: 0.98 }],
+      },
+    }];
+    const positions = new Map([['trend-agent-compact', { x: 420, y: 280 }]]);
+
+    renderUIOverlayLayer(ctx, components, positions, { bakedBackground: true, debug: false });
+    fakeNow += 300;
+    renderUIOverlayLayer(ctx, components, positions, { bakedBackground: true, debug: false });
+
+    assert.ok(ctx.calls.some((call) => call[0] === 'fillRect'));
+    assert.ok(!ctx.calls.some((call) => call[0] === 'fillText'));
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test('canvas inspection: debug mode keeps full trend panel diagnostics', () => {
+  const originalNow = Date.now;
+  let fakeNow = 20_000;
+  Date.now = () => fakeNow;
+  try {
+    const ctx = createMockContext();
+    const components = [{
+      componentType: 'agent-sprite',
+      id: 'trend-agent-debug',
+      trendPanelState: {
+        taskId: 'trend-task-debug',
+        keyword: 'cozy',
+        status: 'done',
+        results: [{ item: 'treehouse', score: 0.98 }],
+      },
+    }];
+    const positions = new Map([['trend-agent-debug', { x: 420, y: 280 }]]);
+
+    renderUIOverlayLayer(ctx, components, positions, { bakedBackground: true, debug: true });
+    fakeNow += 300;
+    renderUIOverlayLayer(ctx, components, positions, { bakedBackground: true, debug: true });
+
+    assert.ok(ctx.calls.some((call) => call[0] === 'fillText'));
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
 test('canvas inspection: agent raw IDs are hidden in normal mode and visible in debug mode', async () => {
   const canvas = {
     width: 1060,
@@ -255,11 +421,62 @@ test('canvas inspection: agent raw IDs are hidden in normal mode and visible in 
   assert.ok(debugCtx.calls.some((call) => call[0] === 'fillText' && call[1] === 'agent-raw-123'));
 });
 
+test('canvas inspection: baked normal mode suppresses all dynamic agent sprites', async () => {
+  globalThis.window = { __SLOTHWORLD_RENDER_DEBUG__: false, location: { search: '' } };
+  const moduleUrl = `../rendering/agent-entity-renderer.js?baked-agent-test=${Date.now()}`;
+  const { renderAgentEntity } = await import(moduleUrl);
+  for (const visualState of ['idle', 'working', 'processing', 'error']) {
+    const ctx = createMockContext();
+    renderAgentEntity(ctx, { componentType: 'agent-sprite', id: `${visualState}-agent`, x: 100, y: 120, visualState, currentTaskId: 'task-active' }, 0, {
+      bakedBackground: true,
+      debug: false,
+    });
+    assert.equal(ctx.calls.length, 0, `${visualState} agent should be hidden over baked background`);
+  }
+});
+
+test('canvas inspection: baked normal mode routes active agent hits to workstation hotspots', () => {
+  const components = [
+    { componentType: 'agent-sprite', id: 'agent-active', x: 352, y: 224, visualState: 'working', deskId: 'desk-0', worldZoneId: 'researchDesk', zoneId: 'CLAIMED', currentTaskId: 'task-active' },
+  ];
+  const hit = hitTestRenderableComponents(components, { x: 330, y: 210 }, null, { debug: false, bakedBackground: true });
+
+  assert.equal(hit.componentType, 'workstation-hotspot');
+  assert.equal(hit.entityId, 'researchMonitorHotspot');
+});
+
+test('canvas inspection: fallback normal mode still renders dynamic agents', async () => {
+  globalThis.window = { __SLOTHWORLD_RENDER_DEBUG__: false, location: { search: '' } };
+  const moduleUrl = `../rendering/agent-entity-renderer.js?fallback-agent-test=${Date.now()}`;
+  const { renderAgentEntity } = await import(moduleUrl);
+
+  const workingCtx = createMockContext();
+  renderAgentEntity(workingCtx, { componentType: 'agent-sprite', id: 'working-agent', x: 100, y: 120, visualState: 'working' }, 0, {
+    bakedBackground: false,
+    debug: false,
+  });
+  assert.ok(workingCtx.calls.length > 0);
+});
+
+test('canvas inspection: debug mode still renders dynamic agents over baked background', async () => {
+  globalThis.window = { __SLOTHWORLD_RENDER_DEBUG__: false, location: { search: '' } };
+  const moduleUrl = `../rendering/agent-entity-renderer.js?debug-baked-agent-test=${Date.now()}`;
+  const { renderAgentEntity } = await import(moduleUrl);
+  const debugCtx = createMockContext();
+
+  renderAgentEntity(debugCtx, { componentType: 'agent-sprite', id: 'debug-agent', x: 100, y: 120, visualState: 'idle' }, 0, {
+    bakedBackground: true,
+    debug: true,
+  });
+  assert.ok(debugCtx.calls.length > 0);
+});
+
 test('canvas inspection: inspection modules do not access raw event sources', () => {
   const files = [
     'rendering/canvas-hit-test.js',
     'rendering/canvas-inspection-state.js',
     'rendering/inspection-popover-renderer.js',
+    'rendering/workstation-hotspots.js',
   ];
   const forbidden = [
     /\beventsByTaskId\b/,

@@ -5,6 +5,7 @@
  */
 
 import { hitTestRenderableComponents } from './canvas-hit-test.js';
+import { componentForHotspot, getWorkstationHotspotById } from './workstation-hotspots.js';
 
 export function createCanvasInspectionState() {
   return {
@@ -67,6 +68,21 @@ export function clearInspectionSelection(state) {
 export function refreshInspectionSelection(state, components, entityPositions, options = {}) {
   if (!state || !state.selectedEntityId || !state.selectedComponentType || !Array.isArray(components)) {
     return null;
+  }
+
+  if (state.selectedComponentType === 'workstation-hotspot') {
+    const hotspot = getWorkstationHotspotById(state.selectedEntityId);
+    if (!hotspot) {
+      clearInspectionSelection(state);
+      return null;
+    }
+    state.selectedHit = {
+      entityId: hotspot.id,
+      componentType: 'workstation-hotspot',
+      component: componentForHotspot(hotspot, components),
+      bounds: hotspot.bounds,
+    };
+    return state.selectedHit;
   }
 
   const selected = components.find((component) => {

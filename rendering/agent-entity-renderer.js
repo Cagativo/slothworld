@@ -112,6 +112,13 @@ function spriteForComponent(component) {
   return ASSET_MAPPING.agents.base;
 }
 
+export function shouldRenderAgentComponent(component, options = {}) {
+  if (!component) return false;
+  if (options.debug === true) return true;
+  if (options.bakedBackground !== true) return true;
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Sprite sheet helpers
 // ---------------------------------------------------------------------------
@@ -254,8 +261,12 @@ export function drawSpriteDebugOverlay(ctx, x, y, drawSize, frame, hovered) {
  * @param {object} component  agent-sprite descriptor from toRenderableComponents()
  * @param {number} [frameNow]  Current timestamp in ms for sprite animation (optional)
  */
-export function renderAgentEntity(ctx, component, frameNow) {
+export function renderAgentEntity(ctx, component, frameNow, options = {}) {
   if (!ctx || !component) return;
+  if (!shouldRenderAgentComponent(component, {
+    ...options,
+    debug: options.debug === true || isRenderDebugEnabled(),
+  })) return;
 
   const x     = typeof component.x === 'number' ? component.x : 0;
   const y     = typeof component.y === 'number' ? component.y : 0;
@@ -423,7 +434,7 @@ export function renderAgentEntity(ctx, component, frameNow) {
  * @param {Array<object>} components  Output of toRenderableComponents()
  * @param {number} [frameNow]  Current timestamp in ms for sprite animation (optional)
  */
-export function renderAllAgentEntities(ctx, components, entityPositions, frameNow) {
+export function renderAllAgentEntities(ctx, components, entityPositions, frameNow, options = {}) {
   if (!ctx || !Array.isArray(components)) return;
   const agents = components
     .filter((c) => c && c.componentType === 'agent-sprite')
@@ -434,6 +445,6 @@ export function renderAllAgentEntities(ctx, components, entityPositions, frameNo
     .sort(compareByDepthY);
 
   for (const c of agents) {
-    renderAgentEntity(ctx, c, frameNow);
+    renderAgentEntity(ctx, c, frameNow, options);
   }
 }

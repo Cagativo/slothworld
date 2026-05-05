@@ -287,7 +287,12 @@ export function renderTreehouseBackdrop(ctx, frame = 0) {
 export function renderWorldCompositionLayer(ctx, options = {}) {
   if (!ctx) return;
   const debug = options.debug === true;
+  const bakedBackground = options.bakedBackground === true;
   const frame = Number.isFinite(options.frame) ? options.frame : 0;
+
+  if (bakedBackground && !debug) {
+    return;
+  }
 
   ctx.save();
   for (const zone of WORLD_COMPOSITION_ZONES) {

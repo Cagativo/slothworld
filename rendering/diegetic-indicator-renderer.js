@@ -391,8 +391,9 @@ function drawAnomalyGlint(ctx, ax, ay, hasAnomaly, hasHighSeverity, now) {
  * @param {Array<object>}            components  Flat component list from toRenderableComponents()
  * @param {number}                   now         Current timestamp ms for animation
  */
-export function renderDiegeticIndicators(ctx, components, now) {
+export function renderDiegeticIndicators(ctx, components, now, options = {}) {
   if (!ctx || !Array.isArray(components)) return;
+  const bakedBackground = options.bakedBackground === true;
 
   // Accumulate per-zone stats from task-chip components only
   const countByZone      = {};
@@ -433,30 +434,31 @@ export function renderDiegeticIndicators(ctx, components, now) {
   // Draw per-zone indicators using hardcoded anchors
   for (const [zoneId, anchor] of Object.entries(ZONE_INDICATOR_ANCHORS)) {
     const count = countByZone[zoneId] ?? 0;
+    if (bakedBackground && count === 0) continue;
 
     switch (zoneId) {
       case 'CREATED':
-        if (!drawRuntimePropAsset(ctx, 'intakePaperStack', { anchor, alpha: count > 0 ? 0.72 : 0.18 })) {
+        if (!drawRuntimePropAsset(ctx, 'intakePaperStack', { anchor, alpha: bakedBackground ? 0.34 : (count > 0 ? 0.72 : 0.18) })) {
           drawAtAnchor(anchor, (x, y) => drawPaperStack(ctx, x, y, count));
         }
         break;
       case 'ENQUEUED':
-        if (!drawRuntimePropAsset(ctx, 'queueRuneStone', { anchor, alpha: count > 0 ? 0.36 : 0.12 })) {
+        if (!drawRuntimePropAsset(ctx, 'queueRuneStone', { anchor, alpha: bakedBackground ? 0.22 : (count > 0 ? 0.36 : 0.12) })) {
           drawAtAnchor(anchor, (x, y) => drawRuneGlow(ctx, x, y, count, safeNow));
         }
         break;
       case 'CLAIMED':
-        if (!drawRuntimePropAsset(ctx, 'monitorGlow', { anchor, alpha: (workingByZone[zoneId] ?? 0) > 0 ? 0.30 : 0.10 })) {
+        if (!drawRuntimePropAsset(ctx, 'monitorGlow', { anchor, alpha: bakedBackground ? 0.20 : ((workingByZone[zoneId] ?? 0) > 0 ? 0.30 : 0.10) })) {
           drawAtAnchor(anchor, (x, y) => drawMonitorGlow(ctx, x, y, workingByZone[zoneId] ?? 0, safeNow));
         }
         break;
       case 'EXECUTE_FINISHED':
-        if (!drawRuntimePropAsset(ctx, 'approvalMarker', { anchor, alpha: (processingByZone[zoneId] ?? 0) > 0 ? 0.46 : 0.12 })) {
+        if (!drawRuntimePropAsset(ctx, 'approvalMarker', { anchor, alpha: bakedBackground ? 0.26 : ((processingByZone[zoneId] ?? 0) > 0 ? 0.46 : 0.12) })) {
           drawAtAnchor(anchor, (x, y) => drawApprovalMarker(ctx, x, y, processingByZone[zoneId] ?? 0, safeNow));
         }
         break;
       case 'ACKED':
-        if (!drawRuntimePropAsset(ctx, 'archiveGlow', { anchor, alpha: (completedByZone[zoneId] ?? 0) > 0 ? 0.28 : 0.08 })) {
+        if (!drawRuntimePropAsset(ctx, 'archiveGlow', { anchor, alpha: bakedBackground ? 0.16 : ((completedByZone[zoneId] ?? 0) > 0 ? 0.28 : 0.08) })) {
           drawAtAnchor(anchor, (x, y) => drawArchiveGlow(ctx, x, y, completedByZone[zoneId] ?? 0, safeNow));
         }
         break;
@@ -464,11 +466,16 @@ export function renderDiegeticIndicators(ctx, components, now) {
   }
 
   // Engine crystal - always drawn
+  const engineAnchor = bakedBackground
+    ? { ...ENGINE_CRYSTAL_ANCHOR, scale: (Number.isFinite(ENGINE_CRYSTAL_ANCHOR.scale) ? ENGINE_CRYSTAL_ANCHOR.scale : 1) * 0.58 }
+    : ENGINE_CRYSTAL_ANCHOR;
   if (!drawRuntimePropAsset(ctx, 'engineCrystalGlow', {
-    anchor: ENGINE_CRYSTAL_ANCHOR,
-    alpha: totalActive > 0 ? 0.42 : 0.18,
+    anchor: engineAnchor,
+    width: bakedBackground ? 44 : undefined,
+    height: bakedBackground ? 44 : undefined,
+    alpha: bakedBackground ? (totalActive > 0 ? 0.18 : 0.045) : (totalActive > 0 ? 0.42 : 0.18),
   })) {
-    drawAtAnchor(ENGINE_CRYSTAL_ANCHOR, (x, y) => drawEngineCrystalPulse(ctx, x, y, totalActive, safeNow));
+    drawAtAnchor(engineAnchor, (x, y) => drawEngineCrystalPulse(ctx, x, y, totalActive, safeNow));
   }
 
   // Anomaly glint - only when an anomaly is present

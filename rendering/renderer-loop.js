@@ -13,6 +13,8 @@ import {
 } from './canvas-inspection-state.js';
 import { renderInspectionPopover } from './inspection-popover-renderer.js';
 import { isRenderDebugEnabled } from './debug.js';
+import { loadedAssets } from './assets.js';
+import { isBakedBackgroundActive } from './background-config.js';
 
 let _frame = 0;
 let _inspectionBindingsAttached = false;
@@ -31,6 +33,13 @@ function eventToCanvasPoint(event) {
   };
 }
 
+function currentHitTestOptions() {
+  return {
+    debug: isRenderDebugEnabled(),
+    bakedBackground: isBakedBackgroundActive(loadedAssets),
+  };
+}
+
 export function initRenderer() {
   if (_inspectionBindingsAttached || !canvas) {
     return;
@@ -38,7 +47,7 @@ export function initRenderer() {
 
   canvas.addEventListener('mousemove', (event) => {
     const point = eventToCanvasPoint(event);
-    const hitTestOptions = { debug: isRenderDebugEnabled() };
+    const hitTestOptions = currentHitTestOptions();
     const hit = updateInspectionHover(
       canvasInspectionState,
       _latestComponents,
@@ -55,7 +64,7 @@ export function initRenderer() {
       _latestComponents,
       null,
       _latestEntityPositions,
-      { debug: isRenderDebugEnabled() }
+      currentHitTestOptions()
     );
     canvas.style.cursor = 'default';
   });
@@ -67,7 +76,7 @@ export function initRenderer() {
       _latestComponents,
       point,
       _latestEntityPositions,
-      { debug: isRenderDebugEnabled() }
+      currentHitTestOptions()
     );
   });
 
@@ -89,7 +98,7 @@ export function renderFrame(renderView) {
   const entityPositions = buildEntityPositionMap(components);
   _latestComponents = components;
   _latestEntityPositions = entityPositions;
-  const hitTestOptions = { debug: isRenderDebugEnabled() };
+  const hitTestOptions = currentHitTestOptions();
   refreshInspectionSelection(canvasInspectionState, components, entityPositions, hitTestOptions);
 
   if (canvasInspectionState.pointer.inside) {

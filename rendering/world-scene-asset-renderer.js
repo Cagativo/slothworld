@@ -29,6 +29,7 @@ import { renderTreehouseBackdrop } from './world-background-composition.js';
 import { spriteConfigs } from '../core/constants.js';
 import { compareByDepthY } from './scene-anchors.js';
 import { drawRuntimePropAsset } from './prop-asset-renderer.js';
+import { selectLoadedBackground } from './background-config.js';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -182,6 +183,29 @@ function renderSkeletonRow(ctx, rowY, panelX, panelY, panelWidth, paddingX, line
   ctx.fillStyle = grad;
   ctx.fillRect(shimmerX - shimmerWidth / 2, rowY - lineHeight / 2, shimmerWidth, lineHeight);
 
+  ctx.restore();
+}
+
+function renderCompactTrendScreen(ctx, state, alpha, now) {
+  const pulse = 0.5 + 0.5 * Math.sin((now * Math.PI * 2) / 1400);
+  const w = 34;
+  const h = 14;
+  const x = state.anchorX - w / 2;
+  const y = state.anchorY - 44;
+  const activeAlpha = state.cachedStatus === 'working' ? 0.18 + 0.12 * pulse : 0.12;
+
+  ctx.save();
+  ctx.globalAlpha = alpha * activeAlpha;
+  ctx.globalCompositeOperation = 'screen';
+  ctx.fillStyle = '#54eccc';
+  ctx.fillRect(x - 5, y - 4, w + 10, h + 8);
+  ctx.globalAlpha = alpha * Math.min(0.42, activeAlpha + 0.10);
+  ctx.fillStyle = '#8fffea';
+  ctx.fillRect(x, y, w, h);
+  ctx.globalAlpha = alpha * 0.26;
+  ctx.fillStyle = '#f8ffe8';
+  ctx.fillRect(x + 5, y + 4, w * 0.52, 2);
+  ctx.fillRect(x + 5, y + 8, w * 0.34, 2);
   ctx.restore();
 }
 
@@ -487,7 +511,8 @@ export function renderBackgroundLayer(ctx, frame) {
   const cw = ctx.canvas.width;
   const ch = ctx.canvas.height;
 
-  const bgImg = loadedAssets[ASSET_MAPPING.environment.sceneBackground];
+  const bg = selectLoadedBackground(loadedAssets);
+  const bgImg = bg && bg.image;
 
   if (bgImg) {
     // ── A. Image mode ────────────────────────────────────────────────────
@@ -688,7 +713,8 @@ export function renderZoneLayer(ctx, components) {
   // shelves) is already baked into the image. Drawing zone sprites on top doubles
   // the furniture and produces floating blocks over the background.
   // Skip entirely in image mode — only run in procedural fallback mode.
-  const bgImg = loadedAssets[ASSET_MAPPING.environment.sceneBackground];
+  const bg = selectLoadedBackground(loadedAssets);
+  const bgImg = bg && bg.image;
   if (bgImg) return;
 
   for (const c of components) {
@@ -855,8 +881,9 @@ export function renderEffectLayer(ctx, components, entityPositions) {
  * @param {Array<object>} components
  * @param {Map<string, {x:number, y:number}>} entityPositions
  */
-export function renderUIOverlayLayer(ctx, components, entityPositions) {
+export function renderUIOverlayLayer(ctx, components, entityPositions, options = {}) {
   const now = Date.now();
+  const bakedNormalMode = options.bakedBackground === true && options.debug !== true;
 
   // ── Pass 1: collect panels currently reported by selectors ───────────────
   // taskId → { results, keyword, agentX, agentY, status }
@@ -979,6 +1006,11 @@ export function renderUIOverlayLayer(ctx, components, entityPositions) {
 
     const panelAlpha = enterProgress * exitAlpha;
     if (panelAlpha <= 0) continue;
+
+    if (bakedNormalMode) {
+      renderCompactTrendScreen(ctx, state, panelAlpha, now);
+      continue;
+    }
 
     const isLoading = state.cachedStatus === 'working' && state.cachedResults.length === 0;
     const visibleResults = isLoading ? [] : state.cachedResults.slice(-TREND_PANEL_MAX_VISIBLE);

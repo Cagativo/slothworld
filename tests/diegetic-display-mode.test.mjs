@@ -305,14 +305,20 @@ describe('render determinism', () => {
   });
 
   it('renderAllTaskChips normal mode is deterministic', () => {
+    const originalNow = Date.now;
+    Date.now = () => 42_000;
     const components = runComponents(ALL_STATES_GRAPH);
     const entityPos  = buildEntityPositionMap(components);
     const { ctx: c1, log: l1 } = makeLogCtx();
     const { ctx: c2, log: l2 } = makeLogCtx();
-    renderAllTaskChips(c1, components, entityPos, false);
-    renderAllTaskChips(c2, components, entityPos, false);
-    assert.equal(JSON.stringify(l1), JSON.stringify(l2),
-      'renderAllTaskChips normal must be deterministic');
+    try {
+      renderAllTaskChips(c1, components, entityPos, false);
+      renderAllTaskChips(c2, components, entityPos, false);
+      assert.equal(JSON.stringify(l1), JSON.stringify(l2),
+        'renderAllTaskChips normal must be deterministic');
+    } finally {
+      Date.now = originalNow;
+    }
   });
 
   it('renderAllTaskChips debug mode produces deterministic method sequence', () => {

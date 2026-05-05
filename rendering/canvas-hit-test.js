@@ -6,6 +6,7 @@
  */
 
 import { ZONE_INDICATOR_ANCHORS } from './scene-anchors.js';
+import { WORKSTATION_HOTSPOTS, componentForHotspot } from './workstation-hotspots.js';
 
 const TASK_CHIP_BOUNDS = Object.freeze({ width: 36, height: 16 });
 const ZONE_INDICATOR_BOUNDS = Object.freeze({ width: 48, height: 48 });
@@ -23,6 +24,7 @@ const AGENT_FALLBACK_BOUNDS = Object.freeze({ width: 64, height: 54, dx: 0, dy: 
 
 const HOVERABLE_TYPES = Object.freeze([
   'world-zone-indicator',
+  'workstation-hotspot',
   'agent-sprite',
   'task-chip',
 ]);
@@ -90,6 +92,15 @@ export function getComponentHitBounds(component, entityPositions) {
   return null;
 }
 
+function isNormalInteractiveAgent(component) {
+  return component
+    && (component.visualState === 'working'
+      || component.visualState === 'processing'
+      || component.visualState === 'error'
+      || Boolean(component.anomaly)
+      || Boolean(component.currentTaskId));
+}
+
 function getZoneIndicatorHitBounds(component) {
   const anchor = component && component.id ? ZONE_INDICATOR_ANCHORS[component.id] : null;
   if (!anchor) {
@@ -128,6 +139,7 @@ export function hitTestRenderableComponents(components, point, entityPositions, 
   }
 
   const debug = options && options.debug === true;
+  const bakedBackground = options && options.bakedBackground === true;
 
   for (let i = components.length - 1; i >= 0; i--) {
     const component = components[i];
@@ -141,9 +153,19 @@ export function hitTestRenderableComponents(components, point, entityPositions, 
   for (let i = components.length - 1; i >= 0; i--) {
     const component = components[i];
     if (!component || component.componentType !== 'agent-sprite') continue;
+    if (!debug && bakedBackground) continue;
+    if (!debug && !isNormalInteractiveAgent(component)) continue;
     const bounds = getComponentHitBounds(component, entityPositions);
     if (bounds && rectContains(bounds, point)) {
       return resultForComponent(component, 'agent-sprite', bounds);
+    }
+  }
+
+  for (let i = WORKSTATION_HOTSPOTS.length - 1; i >= 0; i--) {
+    const hotspot = WORKSTATION_HOTSPOTS[i];
+    if (hotspot.bounds && rectContains(hotspot.bounds, point)) {
+      const component = componentForHotspot(hotspot, components);
+      return resultForComponent(component, 'workstation-hotspot', hotspot.bounds);
     }
   }
 
