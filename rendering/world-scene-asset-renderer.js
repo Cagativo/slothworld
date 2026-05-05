@@ -717,9 +717,13 @@ export function renderZoneLayer(ctx, components) {
  * @param {Array<object>} components
  * @param {Map<string, {x:number, y:number}>} entityPositions
  */
-export function renderConnectionLayer(ctx, components, entityPositions) {
+export function renderConnectionLayer(ctx, components, entityPositions, isDebugMode = false) {
   const flowAssets = ASSET_MAPPING.effects.flow;
   let idx = 0;
+  ctx.save();
+  if (!isDebugMode) {
+    ctx.globalAlpha = 0.28;
+  }
   for (const c of components) {
     if (c.componentType !== 'flow-line') continue;
     const fromPos = entityPositions.get(c.from);
@@ -732,6 +736,7 @@ export function renderConnectionLayer(ctx, components, entityPositions) {
     }
     idx++;
   }
+  ctx.restore();
 }
 
 // ---------------------------------------------------------------------------

@@ -32,6 +32,7 @@ import { buildEntityPositionMap }   from './zone-renderer.js';
 import { renderZoneLabels }         from './zone-label-renderer.js';
 import { renderAllTaskChips }       from './task-chip-renderer.js';
 import { renderDiegeticIndicators } from './diegetic-indicator-renderer.js';
+import { renderWorldCompositionLayer } from './world-background-composition.js';
 import {
   renderBackgroundLayer,
   renderCoreLayer,
@@ -98,8 +99,8 @@ export function renderAllLayers(ctx, components, frame) {
   }
 
   // ── Layer 4: connection ─────────────────────────────────────────────────
-  renderAllConnections(ctx, components, entityPositions, frame);
-  renderConnectionLayer(ctx, components, entityPositions);
+  renderAllConnections(ctx, components, entityPositions, frame, isRenderDebug);
+  renderConnectionLayer(ctx, components, entityPositions, isRenderDebug);
 
   // ── Layers 5–8: agents, props, effects, UI overlay ─────────────────────
   // Layer 5 agent rendering always runs and resolves positions through

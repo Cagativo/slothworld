@@ -28,7 +28,6 @@ export const WORLD_COMPOSITION_ZONES = Object.freeze(
 
 const LABEL_STYLE = Object.freeze({
   font: 'bold 9px monospace',
-  subtleFill: 'rgba(234, 217, 178, 0.64)',
   debugFill: '#fff2bd',
 });
 
@@ -211,20 +210,6 @@ function drawZoneProp(ctx, zone, frame) {
   drawDesk(ctx, zone, 'rgba(73, 58, 35, 0.78)');
 }
 
-function drawSubtleLabel(ctx, zone) {
-  const p = scalePoint(ctx, zone.position.x, zone.position.y);
-  const text = zone.label;
-  ctx.save();
-  ctx.font = LABEL_STYLE.font;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const width = Math.max(40, (ctx.measureText(text)?.width || text.length * 5) + 12);
-  fillPill(ctx, p.x - width / 2, p.y - zone.size.height * 0.18, width, 16, 'rgba(23, 13, 5, 0.46)');
-  ctx.fillStyle = LABEL_STYLE.subtleFill;
-  ctx.fillText(text, p.x, p.y - zone.size.height * 0.18 + 8);
-  ctx.restore();
-}
-
 function drawDebugZone(ctx, zone) {
   const r = scaleRect(ctx, zone);
   ctx.save();
@@ -294,7 +279,7 @@ export function renderTreehouseBackdrop(ctx, frame = 0) {
 }
 
 /**
- * Draw semantic-zone props and labels. Debug mode overlays bounds and raw zone ids.
+ * Draw semantic-zone props. Debug mode overlays bounds and raw zone ids.
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ debug?: boolean, frame?: number }} options
@@ -308,8 +293,10 @@ export function renderWorldCompositionLayer(ctx, options = {}) {
   for (const zone of WORLD_COMPOSITION_ZONES) {
     drawZoneProp(ctx, zone, frame);
   }
-  for (const zone of WORLD_COMPOSITION_ZONES) {
-    debug ? drawDebugZone(ctx, zone) : drawSubtleLabel(ctx, zone);
+  if (debug) {
+    for (const zone of WORLD_COMPOSITION_ZONES) {
+      drawDebugZone(ctx, zone);
+    }
   }
   ctx.restore();
 }

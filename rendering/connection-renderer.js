@@ -36,6 +36,11 @@ export const FLOW_LINE_STYLE = Object.freeze({
   speed:   0.6,        // px of offset advancement per frame
 });
 
+export const NORMAL_FLOW_LINE_STYLE = Object.freeze({
+  stroke: 'rgba(96, 220, 200, 0.20)',
+  width:  1.1,
+});
+
 // ---------------------------------------------------------------------------
 // Renderer
 // ---------------------------------------------------------------------------
@@ -52,7 +57,7 @@ export const FLOW_LINE_STYLE = Object.freeze({
  * @param {{ x: number, y: number }} toPos     Resolved position of the "to" endpoint
  * @param {number}                   frame     Current render frame counter (read-only)
  */
-export function renderConnection(ctx, fromPos, toPos, frame) {
+export function renderConnection(ctx, fromPos, toPos, frame, isDebugMode = false) {
   if (!ctx || !fromPos || !toPos) return;
 
   const f = typeof frame === 'number' ? frame : 0;
@@ -76,8 +81,8 @@ export function renderConnection(ctx, fromPos, toPos, frame) {
   ctx.quadraticCurveTo(cx, cy, toPos.x, toPos.y);
   ctx.setLineDash([FLOW_LINE_STYLE.dashLen, FLOW_LINE_STYLE.gapLen]);
   ctx.lineDashOffset = dashOffset;
-  ctx.strokeStyle    = FLOW_LINE_STYLE.stroke;
-  ctx.lineWidth      = FLOW_LINE_STYLE.width;
+  ctx.strokeStyle    = isDebugMode ? FLOW_LINE_STYLE.stroke : NORMAL_FLOW_LINE_STYLE.stroke;
+  ctx.lineWidth      = isDebugMode ? FLOW_LINE_STYLE.width : NORMAL_FLOW_LINE_STYLE.width;
   ctx.stroke();
   ctx.restore();
 }
@@ -93,7 +98,7 @@ export function renderConnection(ctx, fromPos, toPos, frame) {
  * @param {Map<string, { x: number, y: number }>} entityPositions  id → position lookup
  * @param {number}                         frame           Current render frame counter
  */
-export function renderAllConnections(ctx, components, entityPositions, frame) {
+export function renderAllConnections(ctx, components, entityPositions, frame, isDebugMode = false) {
   if (!ctx || !Array.isArray(components) || !(entityPositions instanceof Map)) return;
 
   for (const c of components) {
@@ -103,7 +108,7 @@ export function renderAllConnections(ctx, components, entityPositions, frame) {
     const toPos   = entityPositions.get(c.to);
 
     if (fromPos && toPos) {
-      renderConnection(ctx, fromPos, toPos, frame);
+      renderConnection(ctx, fromPos, toPos, frame, isDebugMode);
     }
   }
 }
