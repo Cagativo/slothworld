@@ -723,7 +723,7 @@ export function renderConnectionLayer(ctx, components, entityPositions, isDebugM
   let idx = 0;
   ctx.save();
   if (!isDebugMode) {
-    ctx.globalAlpha = 0.18;
+    ctx.globalAlpha = 0.11;
     ctx.globalCompositeOperation = 'screen';
   }
   for (const c of components) {

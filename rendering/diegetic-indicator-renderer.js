@@ -38,15 +38,15 @@ import {
 // Visual constants
 // ---------------------------------------------------------------------------
 
-const PARCHMENT_FILL   = 'rgba(240, 228, 196, 0.88)';
-const PARCHMENT_STROKE = '#8a6030';
+const PARCHMENT_FILL   = 'rgba(240, 228, 196, 0.78)';
+const PARCHMENT_STROKE = 'rgba(138, 96, 48, 0.76)';
 const AMBER_FILL       = '#d4a017';
-const AMBER_GLOW       = 'rgba(212, 160, 23, 0.55)';
+const AMBER_GLOW       = 'rgba(212, 160, 23, 0.34)';
 const TEAL_FILL        = '#00b8a9';
-const TEAL_GLOW        = 'rgba(0, 184, 169, 0.45)';
-const ARCHIVE_GLOW     = 'rgba(130, 200, 220, 0.50)';
+const TEAL_GLOW        = 'rgba(0, 184, 169, 0.28)';
+const ARCHIVE_GLOW     = 'rgba(130, 200, 220, 0.32)';
 const ANOMALY_RED      = '#d32f2f';
-const ANOMALY_GLOW     = 'rgba(211, 47, 47, 0.45)';
+const ANOMALY_GLOW     = 'rgba(211, 47, 47, 0.30)';
 
 // ---------------------------------------------------------------------------
 // Per-zone visual helpers
@@ -68,7 +68,7 @@ function drawPaperStack(ctx, ax, ay, count) {
 
   if (count === 0) {
     // Empty tray outline
-    ctx.strokeStyle = 'rgba(138, 96, 48, 0.28)';
+    ctx.strokeStyle = 'rgba(138, 96, 48, 0.20)';
     ctx.lineWidth   = 0.8;
     ctx.strokeRect(ax - 11, ay - 7, 22, 13);
     ctx.restore();
@@ -106,10 +106,10 @@ function drawRuneGlow(ctx, ax, ay, count, now) {
   const phase = (now % 2000) / 2000;
   const pulse = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
   const baseAlpha = count > 0 ? 0.35 + Math.min(count, 4) * 0.12 : 0.12;
-  const alpha = Math.min(0.92, baseAlpha + 0.25 * pulse);
+  const alpha = Math.min(0.72, baseAlpha + 0.16 * pulse);
 
   // Outer glow halo
-  ctx.globalAlpha = alpha * 0.6;
+  ctx.globalAlpha = alpha * 0.42;
   ctx.fillStyle   = AMBER_GLOW;
   ctx.fillRect(ax - 13, ay - 13, 26, 26);
 
@@ -150,15 +150,15 @@ function drawMonitorGlow(ctx, ax, ay, workingCount, now) {
 
   const phase = (now % 1600) / 1600;
   const pulse = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
-  const alpha = workingCount > 0 ? 0.45 + 0.35 * pulse : 0.13;
+  const alpha = workingCount > 0 ? 0.34 + 0.24 * pulse : 0.09;
 
   // Screen glow halo
-  ctx.globalAlpha = alpha * 0.55;
+  ctx.globalAlpha = alpha * 0.42;
   ctx.fillStyle   = TEAL_GLOW;
   ctx.fillRect(ax - 15, ay - 11, 30, 20);
 
   // Screen bezel (outer rect)
-  ctx.globalAlpha = Math.max(alpha, 0.25);
+  ctx.globalAlpha = Math.max(alpha, 0.18);
   ctx.strokeStyle = '#3a5c5c';
   ctx.lineWidth   = 1;
   ctx.strokeRect(ax - 12, ay - 8, 24, 15);
@@ -191,7 +191,7 @@ function drawApprovalMarker(ctx, ax, ay, processingCount, now) {
 
   if (processingCount === 0) {
     // Faint clipboard outline
-    ctx.globalAlpha = 0.18;
+    ctx.globalAlpha = 0.12;
     ctx.strokeStyle = AMBER_FILL;
     ctx.lineWidth   = 0.8;
     ctx.beginPath();
@@ -201,10 +201,10 @@ function drawApprovalMarker(ctx, ax, ay, processingCount, now) {
     return;
   }
 
-  const alpha = 0.30 + 0.45 * pulse;
+  const alpha = 0.22 + 0.32 * pulse;
 
   // Outer amber glow ring
-  ctx.globalAlpha = alpha * 0.55;
+  ctx.globalAlpha = alpha * 0.42;
   ctx.strokeStyle = AMBER_FILL;
   ctx.lineWidth   = 3 + 2 * pulse;
   ctx.beginPath();
@@ -251,8 +251,8 @@ function drawArchiveGlow(ctx, ax, ay, completedCount, now) {
   const baseR  = 6 + Math.min(completedCount * 1.2, 8);
   const radius = baseR + 1.6 * breathe;
   const alpha  = completedCount > 0
-    ? Math.min(0.42, 0.14 + completedCount * 0.025 + 0.10 * breathe)
-    : 0.05 + 0.03 * breathe;
+    ? Math.min(0.30, 0.10 + completedCount * 0.018 + 0.07 * breathe)
+    : 0.035 + 0.02 * breathe;
 
   // Outer aura
   ctx.globalAlpha = alpha * 0.36;
@@ -301,14 +301,14 @@ function drawEngineCrystalPulse(ctx, ax, ay, activeCount, now) {
   const phase   = (now % cycleMs) / cycleMs;
   const pulse   = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
   const alpha   = activeCount > 0
-    ? Math.min(0.80, 0.30 + Math.min(activeCount, 5) * 0.08 + 0.28 * pulse)
-    : 0.12 + 0.08 * pulse;
+    ? Math.min(0.54, 0.22 + Math.min(activeCount, 5) * 0.05 + 0.18 * pulse)
+    : 0.08 + 0.05 * pulse;
 
   const rInner = 18 + 3  * pulse;
   const rOuter = 28 + 6  * pulse;
 
   // Outer diffuse ring
-  ctx.globalAlpha = alpha * 0.40;
+  ctx.globalAlpha = alpha * 0.26;
   ctx.strokeStyle = 'rgba(180, 240, 200, 0.90)';
   ctx.lineWidth   = 5 + 3 * pulse;
   ctx.beginPath();
@@ -347,7 +347,7 @@ function drawAnomalyGlint(ctx, ax, ay, hasAnomaly, hasHighSeverity, now) {
   const cycleMs = hasHighSeverity ? 900 : 1500;
   const phase = (now % cycleMs) / cycleMs;
   const pulse = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
-  const alpha = hasHighSeverity ? 0.40 + 0.30 * pulse : 0.18 + 0.16 * pulse;
+  const alpha = hasHighSeverity ? 0.32 + 0.22 * pulse : 0.14 + 0.12 * pulse;
   const radius = hasHighSeverity ? 3.5 + pulse : 2.5 + pulse * 0.6;
 
   // Tiny shelf-light halo
@@ -420,33 +420,41 @@ export function renderDiegeticIndicators(ctx, components, now) {
 
   const safeNow = typeof now === 'number' ? now : 0;
 
+  function drawAtAnchor(anchor, draw) {
+    const scale = Number.isFinite(anchor.scale) && anchor.scale > 0 ? anchor.scale : 1;
+    ctx.save();
+    ctx.translate(anchor.x, anchor.y);
+    ctx.scale(scale, scale);
+    draw(0, 0);
+    ctx.restore();
+  }
+
   // Draw per-zone indicators using hardcoded anchors
   for (const [zoneId, anchor] of Object.entries(ZONE_INDICATOR_ANCHORS)) {
-    const { x, y } = anchor;
     const count = countByZone[zoneId] ?? 0;
 
     switch (zoneId) {
       case 'CREATED':
-        drawPaperStack(ctx, x, y, count);
+        drawAtAnchor(anchor, (x, y) => drawPaperStack(ctx, x, y, count));
         break;
       case 'ENQUEUED':
-        drawRuneGlow(ctx, x, y, count, safeNow);
+        drawAtAnchor(anchor, (x, y) => drawRuneGlow(ctx, x, y, count, safeNow));
         break;
       case 'CLAIMED':
-        drawMonitorGlow(ctx, x, y, workingByZone[zoneId] ?? 0, safeNow);
+        drawAtAnchor(anchor, (x, y) => drawMonitorGlow(ctx, x, y, workingByZone[zoneId] ?? 0, safeNow));
         break;
       case 'EXECUTE_FINISHED':
-        drawApprovalMarker(ctx, x, y, processingByZone[zoneId] ?? 0, safeNow);
+        drawAtAnchor(anchor, (x, y) => drawApprovalMarker(ctx, x, y, processingByZone[zoneId] ?? 0, safeNow));
         break;
       case 'ACKED':
-        drawArchiveGlow(ctx, x, y, completedByZone[zoneId] ?? 0, safeNow);
+        drawAtAnchor(anchor, (x, y) => drawArchiveGlow(ctx, x, y, completedByZone[zoneId] ?? 0, safeNow));
         break;
     }
   }
 
-  // Engine crystal — always drawn
-  drawEngineCrystalPulse(ctx, ENGINE_CRYSTAL_ANCHOR.x, ENGINE_CRYSTAL_ANCHOR.y, totalActive, safeNow);
+  // Engine crystal - always drawn
+  drawAtAnchor(ENGINE_CRYSTAL_ANCHOR, (x, y) => drawEngineCrystalPulse(ctx, x, y, totalActive, safeNow));
 
-  // Anomaly glint — only when an anomaly is present
-  drawAnomalyGlint(ctx, ANOMALY_ANCHOR.x, ANOMALY_ANCHOR.y, hasAnomaly, hasHighSeverity, safeNow);
+  // Anomaly glint - only when an anomaly is present
+  drawAtAnchor(ANOMALY_ANCHOR, (x, y) => drawAnomalyGlint(ctx, x, y, hasAnomaly, hasHighSeverity, safeNow));
 }

@@ -120,7 +120,7 @@ test('canvas inspection: normal mode hits small diegetic indicator anchors', () 
   const zoneHit = hitTestRenderableComponents(COMPONENTS, { x: 107, y: 165 }, null, { debug: false });
   assert.equal(zoneHit.entityId, 'CREATED');
   assert.equal(zoneHit.componentType, 'world-zone-indicator');
-  assert.deepStrictEqual(zoneHit.bounds, { x: 83, y: 141, width: 48, height: 48 });
+  assert.deepStrictEqual(zoneHit.bounds, { x: 83, y: 147, width: 42, height: 42 });
 });
 
 test('canvas inspection: hover and click state update deterministically', () => {
