@@ -340,6 +340,7 @@ export function renderAgentEntity(ctx, component, frameNow) {
   // Visual convention (Themed World Projection): rounded badge with amber border
   // and warm cream text, replacing the plain debug-style dark rectangle.
   if (component.id) {
+    const isDebugMode = isRenderDebugEnabled();
     const tagOffsetDx = offsets.dx;
     const tagOffsetDy = offsets.dy;
     const tagH  = sizes ? sizes.h : (spriteConfigs?.agent?.height ?? 54);
@@ -351,11 +352,12 @@ export function renderAgentEntity(ctx, component, frameNow) {
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'bottom';
 
-    const textW = ctx.measureText(component.id).width;
+    const labelText = isDebugMode ? component.id : '';
+    const textW = isDebugMode ? ctx.measureText(labelText).width : 12;
     const padX  = 4;
     const padY  = 2;
     const bw    = textW + padX * 2;
-    const bh    = 11 + padY * 2;
+    const bh    = isDebugMode ? 11 + padY * 2 : 5;
     const bx    = tagX - bw / 2;
     const by    = tagY - bh;
     const cr    = 3;
@@ -372,7 +374,7 @@ export function renderAgentEntity(ctx, component, frameNow) {
     ctx.lineTo(bx, by + cr);
     ctx.quadraticCurveTo(bx, by, bx + cr, by);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(26, 14, 4, 0.82)';
+    ctx.fillStyle = isDebugMode ? 'rgba(26, 14, 4, 0.82)' : 'rgba(26, 14, 4, 0.32)';
     ctx.fill();
 
     // Badge border — amber-brown accent
@@ -387,13 +389,17 @@ export function renderAgentEntity(ctx, component, frameNow) {
     ctx.lineTo(bx, by + cr);
     ctx.quadraticCurveTo(bx, by, bx + cr, by);
     ctx.closePath();
-    ctx.strokeStyle = component.anomaly ? '#d07030' : '#8a6030';
-    ctx.lineWidth   = 0.8;
+    ctx.strokeStyle = component.anomaly
+      ? (isDebugMode ? '#d07030' : 'rgba(208, 112, 48, 0.38)')
+      : (isDebugMode ? '#8a6030' : 'rgba(138, 96, 48, 0.28)');
+    ctx.lineWidth   = isDebugMode ? 0.8 : 0.5;
     ctx.stroke();
 
     // Agent ID text — warm cream
-    ctx.fillStyle = '#e8d8b0';
-    ctx.fillText(component.id, tagX, tagY);
+    if (isDebugMode) {
+      ctx.fillStyle = '#e8d8b0';
+      ctx.fillText(labelText, tagX, tagY);
+    }
 
     ctx.restore();
   }

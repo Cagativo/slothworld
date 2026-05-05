@@ -109,7 +109,7 @@ test('world background renderer runs against a mock canvas context', () => {
   assert.doesNotThrow(() => renderTreehouseBackdrop(ctx, 12));
   assert.doesNotThrow(() => renderWorldCompositionLayer(ctx, { debug: false, frame: 12 }));
   assert.ok(log.some((entry) => entry.method === 'fillRect'), 'expected fillRect calls');
-  assert.ok(log.some((entry) => entry.method === 'fillText'), 'expected labels to render');
+  assert.ok(!log.some((entry) => entry.method === 'fillText'), 'normal mode must not render semantic labels');
 });
 
 test('world background composition is deterministic for identical inputs', () => {
@@ -162,4 +162,18 @@ test('debug overlay draws zone bounds and semantic ids', () => {
     assert.ok(labels.includes(zone.id), `missing debug label ${zone.id}`);
   }
   assert.ok(log.some((entry) => entry.method === 'strokeRect'), 'expected debug bounds');
+});
+
+test('normal world composition suppresses semantic zone labels', () => {
+  const { ctx, log } = makeMockCtx();
+  renderWorldCompositionLayer(ctx, { debug: false, frame: 0 });
+
+  const labels = log
+    .filter((entry) => entry.method === 'fillText')
+    .map((entry) => entry.args[0]);
+
+  for (const zone of WORLD_COMPOSITION_ZONES) {
+    assert.ok(!labels.includes(zone.label), `normal mode must hide semantic label ${zone.label}`);
+    assert.ok(!labels.includes(zone.id), `normal mode must hide semantic id ${zone.id}`);
+  }
 });

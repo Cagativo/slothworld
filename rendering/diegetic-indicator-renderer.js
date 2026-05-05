@@ -260,28 +260,28 @@ function drawArchiveGlow(ctx, ax, ay, completedCount, now) {
 
   const phase  = (now % 3000) / 3000;
   const breathe = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
-  const baseR  = 10 + Math.min(completedCount * 2.5, 18);
-  const radius = baseR + 3 * breathe;
+  const baseR  = 6 + Math.min(completedCount * 1.2, 8);
+  const radius = baseR + 1.6 * breathe;
   const alpha  = completedCount > 0
-    ? Math.min(0.72, 0.25 + completedCount * 0.06 + 0.2 * breathe)
-    : 0.10 + 0.06 * breathe;
+    ? Math.min(0.42, 0.14 + completedCount * 0.025 + 0.10 * breathe)
+    : 0.05 + 0.03 * breathe;
 
   // Outer aura
-  ctx.globalAlpha = alpha * 0.5;
+  ctx.globalAlpha = alpha * 0.36;
   ctx.fillStyle   = ARCHIVE_GLOW;
   ctx.beginPath();
-  ctx.arc(ax, ay, radius * 1.6, 0, Math.PI * 2);
+  ctx.arc(ax, ay, radius * 1.35, 0, Math.PI * 2);
   ctx.fill();
 
   // Core glow
   ctx.globalAlpha = alpha;
-  ctx.fillStyle   = 'rgba(100, 200, 230, 0.70)';
+  ctx.fillStyle   = 'rgba(100, 200, 230, 0.46)';
   ctx.beginPath();
   ctx.arc(ax, ay, radius, 0, Math.PI * 2);
   ctx.fill();
 
   // Crystal facet lines (static — purely decorative)
-  ctx.globalAlpha = alpha * 0.55;
+  ctx.globalAlpha = alpha * 0.38;
   ctx.strokeStyle = '#c8f0ff';
   ctx.lineWidth   = 0.7;
   ctx.beginPath();
@@ -356,33 +356,32 @@ function drawAnomalyGlint(ctx, ax, ay, hasAnomaly, hasHighSeverity, now) {
 
   ctx.save();
 
-  const phase = (now % 800) / 800;
+  const cycleMs = hasHighSeverity ? 900 : 1500;
+  const phase = (now % cycleMs) / cycleMs;
   const pulse = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
-  const alpha = 0.55 + 0.40 * pulse;
-  const ts    = 7 + 1.5 * pulse;   // triangle half-span
+  const alpha = hasHighSeverity ? 0.40 + 0.30 * pulse : 0.18 + 0.16 * pulse;
+  const radius = hasHighSeverity ? 3.5 + pulse : 2.5 + pulse * 0.6;
 
-  // Glow halo
-  ctx.globalAlpha = alpha * 0.35;
+  // Tiny shelf-light halo
+  ctx.globalAlpha = alpha * 0.28;
   ctx.fillStyle   = ANOMALY_GLOW;
   ctx.beginPath();
-  ctx.arc(ax, ay, ts * 1.6, 0, Math.PI * 2);
+  ctx.arc(ax, ay, radius * 3, 0, Math.PI * 2);
   ctx.fill();
 
-  // Triangle
+  // Warning gem
   ctx.globalAlpha = alpha;
   ctx.fillStyle   = hasHighSeverity ? ANOMALY_RED : '#f57c00';
   ctx.beginPath();
-  ctx.moveTo(ax,          ay - ts);
-  ctx.lineTo(ax + ts,     ay + ts);
-  ctx.lineTo(ax - ts,     ay + ts);
-  ctx.closePath();
+  ctx.arc(ax, ay, radius, 0, Math.PI * 2);
   ctx.fill();
 
-  // Exclamation
-  ctx.globalAlpha = 0.95;
-  ctx.fillStyle   = '#ffffff';
-  ctx.fillRect(ax - 0.8, ay - 1.5, 1.6, 4.5);
-  ctx.fillRect(ax - 0.8, ay + 3.5, 1.6, 1.6);
+  ctx.globalAlpha = alpha * 0.8;
+  ctx.strokeStyle = 'rgba(255, 232, 190, 0.78)';
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.arc(ax, ay, radius + 1.5, 0, Math.PI * 2);
+  ctx.stroke();
 
   ctx.restore();
 }

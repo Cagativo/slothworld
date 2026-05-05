@@ -51,6 +51,7 @@ function entityToAgentSpriteComponent(entity) {
     y:             entity.position ? entity.position.y : 0,
     visualState:   entity.visualState   ?? 'unknown',
     zoneId:        entity.zoneId        ?? null,
+    worldZoneId:   entity.worldZoneId   ?? null,
     deskId:        entity.deskId        ?? null,
     // Forwarded from agentSelectors output via buildWorldScene — null when agent is idle.
     currentTaskId: entity.currentTaskId ?? null,
@@ -77,6 +78,7 @@ function entityToTaskChipComponent(entity) {
     y:             entity.position ? entity.position.y : 0,
     visualState:   entity.visualState ?? 'unknown',
     zoneId:        entity.zoneId      ?? null,
+    worldZoneId:   entity.worldZoneId ?? null,
     metrics:       entity.metrics     ?? { duration: null, queueTime: null, latency: null },
     anomaly:       entity.anomaly     ?? null,
   };
