@@ -27,6 +27,7 @@ import { ASSET_MAPPING, loadedAssets } from './assets.js';
 import { CENTRAL_STRUCTURE, DECORATIONS } from './world-scene.js';
 import { renderTreehouseBackdrop } from './world-background-composition.js';
 import { spriteConfigs } from '../core/constants.js';
+import { compareByDepthY } from './scene-anchors.js';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -722,7 +723,8 @@ export function renderConnectionLayer(ctx, components, entityPositions, isDebugM
   let idx = 0;
   ctx.save();
   if (!isDebugMode) {
-    ctx.globalAlpha = 0.28;
+    ctx.globalAlpha = 0.18;
+    ctx.globalCompositeOperation = 'screen';
   }
   for (const c of components) {
     if (c.componentType !== 'flow-line') continue;
@@ -770,9 +772,14 @@ export function renderPropLayer(ctx, components, entityPositions) {
   const taskAssets  = ASSET_MAPPING.props.task;
   const booksAssets = ASSET_MAPPING.props.books;
   let   debugLogged = false;
-  for (const c of components) {
-    if (c.componentType !== 'agent-sprite') continue;
-    const { x, y }  = posOf(c, entityPositions);
+  const agents = components
+    .filter((c) => c && c.componentType === 'agent-sprite')
+    .map((c) => ({ ...c, ...posOf(c, entityPositions) }))
+    .sort(compareByDepthY);
+
+  for (const c of agents) {
+    const { x, y, scale = 1 }  = c;
+    const propSize = PROP_SIZE * (Number.isFinite(scale) ? scale : 1);
     // Props offset relative to agent anchor; larger PROP_SIZE to stay visible
     // next to the now-bigger sloth sprites.
     const taskFile  = taskAssets[deterministicIndex(c.id, taskAssets.length)];
@@ -782,8 +789,8 @@ export function renderPropLayer(ctx, components, entityPositions) {
         '| books prop:', booksFile, '| loaded:', !!loadedAssets[booksFile]);
       debugLogged = true;
     }
-    drawIfLoaded(ctx, taskFile,  x + 22, y - 6, PROP_SIZE, PROP_SIZE);
-    drawIfLoaded(ctx, booksFile, x - 22, y - 6, PROP_SIZE, PROP_SIZE);
+    drawIfLoaded(ctx, taskFile,  x + 22, y - 6, propSize, propSize);
+    drawIfLoaded(ctx, booksFile, x - 22, y - 6, propSize, propSize);
   }
 }
 

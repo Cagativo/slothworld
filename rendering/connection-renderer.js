@@ -37,8 +37,8 @@ export const FLOW_LINE_STYLE = Object.freeze({
 });
 
 export const NORMAL_FLOW_LINE_STYLE = Object.freeze({
-  stroke: 'rgba(96, 220, 200, 0.20)',
-  width:  1.1,
+  stroke: 'rgba(96, 220, 200, 0.14)',
+  width:  0.85,
 });
 
 // ---------------------------------------------------------------------------
@@ -76,6 +76,8 @@ export function renderConnection(ctx, fromPos, toPos, frame, isDebugMode = false
   const cy = Math.abs(dy) > Math.abs(dx) ? my        : my - bow;
 
   ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.beginPath();
   ctx.moveTo(fromPos.x, fromPos.y);
   ctx.quadraticCurveTo(cx, cy, toPos.x, toPos.y);
