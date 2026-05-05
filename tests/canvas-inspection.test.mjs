@@ -95,14 +95,32 @@ test('canvas inspection: hit-test returns stable result for known component posi
   assert.deepStrictEqual(hit.bounds, taskBounds);
 });
 
-test('canvas inspection: agent and zone hit regions are deterministic', () => {
+test('canvas inspection: normal mode still hits task-chip and agent-sprite', () => {
+  const taskHit = hitTestRenderableComponents(COMPONENTS, { x: 300, y: 260 }, null, { debug: false });
+  assert.equal(taskHit.entityId, 'task-1');
+  assert.equal(taskHit.componentType, 'task-chip');
+
   const agentHit = hitTestRenderableComponents(COMPONENTS, { x: 230, y: 225 }, null);
   assert.equal(agentHit.entityId, 'agent-1');
   assert.equal(agentHit.componentType, 'agent-sprite');
+});
 
-  const zoneHit = hitTestRenderableComponents(COMPONENTS, { x: 60, y: 80 }, null);
+test('canvas inspection: normal mode does not hit broad zone-background rectangles', () => {
+  const zoneHit = hitTestRenderableComponents(COMPONENTS, { x: 60, y: 80 }, null, { debug: false });
+  assert.equal(zoneHit, null);
+});
+
+test('canvas inspection: debug mode can hit broad zone-background rectangles', () => {
+  const zoneHit = hitTestRenderableComponents(COMPONENTS, { x: 60, y: 80 }, null, { debug: true });
   assert.equal(zoneHit.entityId, 'CREATED');
   assert.equal(zoneHit.componentType, 'world-zone-indicator');
+});
+
+test('canvas inspection: normal mode hits small diegetic indicator anchors', () => {
+  const zoneHit = hitTestRenderableComponents(COMPONENTS, { x: 107, y: 165 }, null, { debug: false });
+  assert.equal(zoneHit.entityId, 'CREATED');
+  assert.equal(zoneHit.componentType, 'world-zone-indicator');
+  assert.deepStrictEqual(zoneHit.bounds, { x: 83, y: 141, width: 48, height: 48 });
 });
 
 test('canvas inspection: hover and click state update deterministically', () => {
@@ -125,7 +143,7 @@ test('canvas inspection: background click clears selection', () => {
   updateInspectionSelection(state, COMPONENTS, { x: 300, y: 260 }, null);
   assert.equal(state.selectedEntityId, 'task-1');
 
-  const selection = updateInspectionSelection(state, COMPONENTS, { x: 1040, y: 500 }, null);
+  const selection = updateInspectionSelection(state, COMPONENTS, { x: 60, y: 80 }, null, { debug: false });
   assert.equal(selection, null);
   assert.equal(state.selectedEntityId, null);
   assert.equal(state.selectedComponentType, null);
@@ -172,7 +190,7 @@ test('canvas inspection: popover normal mode hides unknown status', () => {
 });
 
 test('canvas inspection: zone popover uses friendly zone title without unknown status', () => {
-  const hit = hitTestRenderableComponents(COMPONENTS, { x: 60, y: 80 }, null);
+  const hit = hitTestRenderableComponents(COMPONENTS, { x: 107, y: 165 }, null, { debug: false });
   const model = buildInspectionPopoverRows(hit, { debug: false });
 
   assert.equal(model.title, 'Intake Nook');
@@ -249,6 +267,8 @@ test('canvas inspection: inspection modules do not access raw event sources', ()
     /\bgetRawEvents\b/,
     /\bpayload\s*\./,
     /\bindexedWorldSnapshot\b/,
+    /\bworldIndex\b/,
+    /\bworld-index\b/,
   ];
 
   for (const file of files) {

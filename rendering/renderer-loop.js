@@ -38,17 +38,25 @@ export function initRenderer() {
 
   canvas.addEventListener('mousemove', (event) => {
     const point = eventToCanvasPoint(event);
+    const hitTestOptions = { debug: isRenderDebugEnabled() };
     const hit = updateInspectionHover(
       canvasInspectionState,
       _latestComponents,
       point,
-      _latestEntityPositions
+      _latestEntityPositions,
+      hitTestOptions
     );
     canvas.style.cursor = hit ? 'pointer' : 'default';
   });
 
   canvas.addEventListener('mouseleave', () => {
-    updateInspectionHover(canvasInspectionState, _latestComponents, null, _latestEntityPositions);
+    updateInspectionHover(
+      canvasInspectionState,
+      _latestComponents,
+      null,
+      _latestEntityPositions,
+      { debug: isRenderDebugEnabled() }
+    );
     canvas.style.cursor = 'default';
   });
 
@@ -58,7 +66,8 @@ export function initRenderer() {
       canvasInspectionState,
       _latestComponents,
       point,
-      _latestEntityPositions
+      _latestEntityPositions,
+      { debug: isRenderDebugEnabled() }
     );
   });
 
@@ -80,14 +89,16 @@ export function renderFrame(renderView) {
   const entityPositions = buildEntityPositionMap(components);
   _latestComponents = components;
   _latestEntityPositions = entityPositions;
-  refreshInspectionSelection(canvasInspectionState, components, entityPositions);
+  const hitTestOptions = { debug: isRenderDebugEnabled() };
+  refreshInspectionSelection(canvasInspectionState, components, entityPositions, hitTestOptions);
 
   if (canvasInspectionState.pointer.inside) {
     updateInspectionHover(
       canvasInspectionState,
       components,
       canvasInspectionState.pointer,
-      entityPositions
+      entityPositions,
+      hitTestOptions
     );
   }
 

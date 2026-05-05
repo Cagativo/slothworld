@@ -32,7 +32,7 @@ function assignHover(state, hit) {
   state.hoveredHit = hit;
 }
 
-export function updateInspectionHover(state, components, point, entityPositions) {
+export function updateInspectionHover(state, components, point, entityPositions, options = {}) {
   if (!state) return null;
 
   if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
@@ -42,15 +42,15 @@ export function updateInspectionHover(state, components, point, entityPositions)
   }
 
   state.pointer = { x: point.x, y: point.y, inside: true };
-  const hit = hitTestRenderableComponents(components, point, entityPositions);
+  const hit = hitTestRenderableComponents(components, point, entityPositions, options);
   assignHover(state, hit);
   return hit;
 }
 
-export function updateInspectionSelection(state, components, point, entityPositions) {
+export function updateInspectionSelection(state, components, point, entityPositions, options = {}) {
   if (!state) return null;
 
-  const hit = hitTestRenderableComponents(components, point, entityPositions);
+  const hit = hitTestRenderableComponents(components, point, entityPositions, options);
   state.selectedEntityId = hit ? hit.entityId : null;
   state.selectedComponentType = hit ? hit.componentType : null;
   state.selectedHit = hit;
@@ -64,7 +64,7 @@ export function clearInspectionSelection(state) {
   state.selectedHit = null;
 }
 
-export function refreshInspectionSelection(state, components, entityPositions) {
+export function refreshInspectionSelection(state, components, entityPositions, options = {}) {
   if (!state || !state.selectedEntityId || !state.selectedComponentType || !Array.isArray(components)) {
     return null;
   }
@@ -88,7 +88,8 @@ export function refreshInspectionSelection(state, components, entityPositions) {
       x: selected.x ?? 0,
       y: selected.y ?? 0,
     },
-    entityPositions
+    entityPositions,
+    options
   );
 
   state.selectedHit = hit

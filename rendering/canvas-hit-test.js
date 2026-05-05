@@ -5,7 +5,10 @@
  * descriptors and computed entity positions supplied by the canvas pipeline.
  */
 
+import { ZONE_INDICATOR_ANCHORS } from './diegetic-indicator-renderer.js';
+
 const TASK_CHIP_BOUNDS = Object.freeze({ width: 36, height: 16 });
+const ZONE_INDICATOR_BOUNDS = Object.freeze({ width: 48, height: 48 });
 
 const AGENT_DESK_BOUNDS = Object.freeze({
   'desk-0': Object.freeze({ width: 180, height: 170, dx: 0,  dy: 0 }),
@@ -87,6 +90,20 @@ export function getComponentHitBounds(component, entityPositions) {
   return null;
 }
 
+function getZoneIndicatorHitBounds(component) {
+  const anchor = component && component.id ? ZONE_INDICATOR_ANCHORS[component.id] : null;
+  if (!anchor) {
+    return null;
+  }
+
+  return {
+    x: anchor.x - ZONE_INDICATOR_BOUNDS.width / 2,
+    y: anchor.y - ZONE_INDICATOR_BOUNDS.height / 2,
+    width: ZONE_INDICATOR_BOUNDS.width,
+    height: ZONE_INDICATOR_BOUNDS.height,
+  };
+}
+
 function resultForComponent(component, componentType, bounds) {
   return {
     entityId: component.id ?? null,
@@ -96,10 +113,12 @@ function resultForComponent(component, componentType, bounds) {
   };
 }
 
-export function hitTestRenderableComponents(components, point, entityPositions) {
+export function hitTestRenderableComponents(components, point, entityPositions, options = {}) {
   if (!Array.isArray(components) || !point || !isFiniteNumber(point.x) || !isFiniteNumber(point.y)) {
     return null;
   }
+
+  const debug = options && options.debug === true;
 
   for (let i = components.length - 1; i >= 0; i--) {
     const component = components[i];
@@ -122,9 +141,20 @@ export function hitTestRenderableComponents(components, point, entityPositions) 
   for (let i = components.length - 1; i >= 0; i--) {
     const component = components[i];
     if (!component || component.componentType !== 'zone-background') continue;
-    const bounds = getComponentHitBounds(component, entityPositions);
+    const bounds = getZoneIndicatorHitBounds(component);
     if (bounds && rectContains(bounds, point)) {
       return resultForComponent(component, 'world-zone-indicator', bounds);
+    }
+  }
+
+  if (debug) {
+    for (let i = components.length - 1; i >= 0; i--) {
+      const component = components[i];
+      if (!component || component.componentType !== 'zone-background') continue;
+      const bounds = getComponentHitBounds(component, entityPositions);
+      if (bounds && rectContains(bounds, point)) {
+        return resultForComponent(component, 'world-zone-indicator', bounds);
+      }
     }
   }
 
