@@ -80,6 +80,26 @@ export const ANOMALY_BADGE_COLORS = Object.freeze({
 /** Processing pulse ring colour for cards in the 'processing' visual state. */
 export const PROCESSING_PULSE_COLOR = '#ffb300';
 
+/**
+ * Per-visualState chip opacity in normal (non-debug) display mode.
+ *
+ * 0 → chip is hidden (completed/idle states are communicated through
+ *     diegetic zone indicators instead).
+ * 0 < x < 1 → chip rendered at reduced alpha (queued/waiting states).
+ * 1 → chip rendered at full opacity (active, processing, error states).
+ *
+ * @type {Readonly<Record<string, number>>}
+ */
+export const NORMAL_MODE_CHIP_ALPHA = Object.freeze({
+  working:    1.0,   // active in-flight tasks — always visible
+  processing: 1.0,   // awaiting-ack tasks — always visible
+  error:      1.0,   // failed tasks — always visible
+  waiting:    0.38,  // enqueued tasks — subdued
+  idle:       0,     // created tasks — hidden; paper-stack indicator handles this
+  completed:  0,     // done tasks — hidden; archive glow handles this
+  unknown:    0.20,  // fallback
+});
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -117,14 +137,15 @@ function roundRect(ctx, x, y, w, h, r) {
  * Draw a parchment work-card for one task entity.
  *
  * Card anatomy (left → right):
- *   [ state bar | parchment body with short task ID ]
+ *   [ state bar | parchment body (+ short task ID when showId is true) ]
  *
  * @param {CanvasRenderingContext2D} ctx
- * @param {object} component  task-chip descriptor
- * @param {number} x          canvas X (entity centre)
- * @param {number} y          canvas Y (entity centre)
+ * @param {object}  component  task-chip descriptor
+ * @param {number}  x          canvas X (entity centre)
+ * @param {number}  y          canvas Y (entity centre)
+ * @param {boolean} showId     render the short task ID label when true
  */
-function drawTaskCard(ctx, component, x, y) {
+function drawTaskCard(ctx, component, x, y, showId) {
   const chipStyle = CHIP_STYLES[component.visualState] ?? FALLBACK_CHIP_STYLE;
   const cx = x - CARD_W / 2;
   const cy = y - CARD_H / 2;
@@ -150,8 +171,8 @@ function drawTaskCard(ctx, component, x, y) {
   ctx.fillStyle = chipStyle.fill;
   ctx.fillRect(cx + CARD_R, cy, BAR_W, CARD_H);
 
-  // Task ID label — last 6 chars of the id for brevity
-  if (component.id) {
+  // Task ID label — last 6 chars of the id for brevity; only in debug mode
+  if (showId && component.id) {
     const shortId = String(component.id).slice(-6);
     ctx.font         = '7px monospace';
     ctx.fillStyle    = CARD_TEXT_COLOR;
@@ -242,14 +263,23 @@ function drawAnomalyBadge(ctx, x, y, anomaly) {
  *
  * Draw order per entity (back → front):
  *  1. Processing pulse ring (behind card; only for 'processing' visualState)
- *  2. Parchment card   (background + state bar + ID label)
+ *  2. Parchment card   (background + state bar + ID label when isDebugMode)
  *  3. Anomaly badge    (top-right overlay; only when component.anomaly is set)
+ *
+ * In normal mode (isDebugMode = false):
+ *  - Chips with alpha 0 in NORMAL_MODE_CHIP_ALPHA are skipped entirely.
+ *  - Chips with reduced alpha are drawn at that opacity.
+ *  - Task ID text is hidden (only state bar communicates identity via colour).
+ *
+ * In debug mode (isDebugMode = true):
+ *  - All chips rendered at full opacity with task ID labels visible.
  *
  * @param {CanvasRenderingContext2D}           ctx
  * @param {Array<object>}                      components       flat component list
  * @param {Map<string, {x:number, y:number}>}  entityPositions  from buildEntityPositionMap()
+ * @param {boolean}                            [isDebugMode]    show all chips + IDs when true
  */
-export function renderAllTaskChips(ctx, components, entityPositions) {
+export function renderAllTaskChips(ctx, components, entityPositions, isDebugMode) {
   if (!ctx || !Array.isArray(components)) return;
 
   for (const c of components) {
@@ -259,17 +289,30 @@ export function renderAllTaskChips(ctx, components, entityPositions) {
     const x = p ? p.x : (typeof c.x === 'number' ? c.x : 0);
     const y = p ? p.y : (typeof c.y === 'number' ? c.y : 0);
 
+    let chipAlpha = 1;
+    if (!isDebugMode) {
+      chipAlpha = NORMAL_MODE_CHIP_ALPHA[c.visualState] ?? NORMAL_MODE_CHIP_ALPHA.unknown;
+      if (chipAlpha === 0) continue;  // hidden in normal mode
+    }
+
+    const showId = Boolean(isDebugMode);
+
+    ctx.save();
+    if (chipAlpha < 1) ctx.globalAlpha = chipAlpha;
+
     // 1. Processing pulse — drawn first so it sits behind the card body
     if (c.visualState === 'processing') {
       drawProcessingPulse(ctx, x, y);
     }
 
     // 2. Card body
-    drawTaskCard(ctx, c, x, y);
+    drawTaskCard(ctx, c, x, y, showId);
 
     // 3. Anomaly badge — drawn last so it overlays the card corner
     if (c.anomaly) {
       drawAnomalyBadge(ctx, x, y, c.anomaly);
     }
+
+    ctx.restore();
   }
 }

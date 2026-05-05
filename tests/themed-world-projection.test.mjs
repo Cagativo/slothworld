@@ -282,10 +282,10 @@ describe('renderZoneLabels — mock-canvas execution', () => {
     assert.doesNotThrow(() => renderZoneLabels(ctx, components, false));
   });
 
-  it('does not throw when hideWhenDebug is true (no-op)', () => {
+  it('does not throw when isDebugMode is false (no-op in normal mode)', () => {
     const components = runComponents(cloneGraph());
     const ctx        = makeMockCtx();
-    assert.doesNotThrow(() => renderZoneLabels(ctx, components, true));
+    assert.doesNotThrow(() => renderZoneLabels(ctx, components, false));
   });
 
   it('does not throw on an empty component list', () => {
@@ -298,7 +298,7 @@ describe('renderZoneLabels — mock-canvas execution', () => {
     assert.doesNotThrow(() => renderZoneLabels(null, components, false));
   });
 
-  it('makes no draw calls when hideWhenDebug is true', () => {
+  it('makes no draw calls in normal mode (isDebugMode=false)', () => {
     const components = runComponents(cloneGraph());
     const log        = [];
     const ctx        = new Proxy({}, {
@@ -308,11 +308,12 @@ describe('renderZoneLabels — mock-canvas execution', () => {
       },
       set(t, p, v) { t[p] = v; return true; },
     });
-    renderZoneLabels(ctx, components, true);
-    assert.equal(log.length, 0, 'hideWhenDebug=true must produce zero draw calls');
+    renderZoneLabels(ctx, components, false);
+    assert.equal(log.length, 0,
+      'normal mode (isDebugMode=false) must produce zero zone-label draw calls');
   });
 
-  it('produces draw calls for each zone-background when hideWhenDebug is false', () => {
+  it('produces draw calls for each zone-background in debug mode (isDebugMode=true)', () => {
     const components = runComponents(cloneGraph());
     const zoneBgs    = components.filter((c) => c.componentType === 'zone-background');
     const log        = [];
@@ -323,11 +324,11 @@ describe('renderZoneLabels — mock-canvas execution', () => {
       },
       set(t, p, v) { t[p] = v; return true; },
     });
-    renderZoneLabels(ctx, components, false);
+    renderZoneLabels(ctx, components, true);
     // Each zone that has a LIFECYCLE_ZONE_THEMES entry should produce at least one draw call
     const zonesWithLabels = zoneBgs.filter((c) => Object.prototype.hasOwnProperty.call(LIFECYCLE_ZONE_THEMES, c.id));
     assert.ok(log.length > 0 || zonesWithLabels.length === 0,
-      'zone labels must produce draw calls for each zone with a LIFECYCLE_ZONE_THEMES entry');
+      'debug mode (isDebugMode=true) must produce draw calls for zones with LIFECYCLE_ZONE_THEMES entries');
   });
 
 });

@@ -31,7 +31,7 @@ import { renderAllAgentEntities }   from './agent-entity-renderer.js';
 import { buildEntityPositionMap }   from './zone-renderer.js';
 import { renderZoneLabels }         from './zone-label-renderer.js';
 import { renderAllTaskChips }       from './task-chip-renderer.js';
-import { renderWorldCompositionLayer } from './world-background-composition.js';
+import { renderDiegeticIndicators } from './diegetic-indicator-renderer.js';
 import {
   renderBackgroundLayer,
   renderCoreLayer,
@@ -84,11 +84,18 @@ export function renderAllLayers(ctx, components, frame) {
   renderZoneLayer(ctx, components);
   renderWorldCompositionLayer(ctx, { debug: isRenderDebug, frame });
 
-  // ── Layer 3.5: zone labels ──────────────────────────────────────────────
-  // Themed zone name badges (Intake Nook, Task Engine, …) drawn over the
-  // background image or procedural scene. Suppressed in debug mode since
-  // renderAllZones already shows raw zone IDs.
+  // ── Layer 3.5: zone labels (debug mode only) ───────────────────────────
+  // Themed zone-name badges (Intake Nook, Task Engine, …). Shown only in
+  // debug mode alongside raw zone IDs. In normal mode, in-world diegetic
+  // indicators communicate state instead — no duplicate text labels.
   renderZoneLabels(ctx, components, isRenderDebug);
+
+  // ── Layer 3.6: diegetic indicators (normal mode only) ──────────────────
+  // In-world visual props (paper stacks, monitor glow, rune pulse, …) that
+  // communicate zone activity without persistent text labels.
+  if (!isRenderDebug) {
+    renderDiegeticIndicators(ctx, components, Date.now());
+  }
 
   // ── Layer 4: connection ─────────────────────────────────────────────────
   renderAllConnections(ctx, components, entityPositions, frame);
@@ -101,8 +108,9 @@ export function renderAllLayers(ctx, components, frame) {
 
   // ── Layer 5.5: task chips ───────────────────────────────────────────────
   // Parchment work-cards for task entities: card body + processing pulse + anomaly badge.
-  // Rendered after agents so cards appear in front of desk sprites.
-  renderAllTaskChips(ctx, components, entityPositions);
+  // In normal mode only active/failed/processing chips are shown and IDs are hidden.
+  // In debug mode all chips render with full IDs.
+  renderAllTaskChips(ctx, components, entityPositions, isRenderDebug);
 
   // renderPropLayer remains suppressed in image mode. renderEffectLayer is a hard no-op.
   renderUIOverlayLayer(ctx, components, entityPositions);
