@@ -35,7 +35,8 @@ import { renderDiegeticIndicators } from './diegetic-indicator-renderer.js';
 import { renderWorldCompositionLayer } from './world-background-composition.js';
 import { loadedAssets } from './assets.js';
 import { isBakedBackgroundActive, selectLoadedBackground } from './background-config.js';
-import { renderWorkstationHotspotDebug } from './workstation-hotspots.js';
+import { canvasInspectionState } from './canvas-inspection-state.js';
+import { renderWorkstationHotspotDebug, renderWorkstationHotspotFeedback } from './workstation-hotspots.js';
 import {
   renderBackgroundLayer,
   renderCoreLayer,
@@ -97,6 +98,11 @@ export function renderAllLayers(ctx, components, frame) {
   renderZoneLabels(ctx, components, isRenderDebug);
   if (isRenderDebug) {
     renderWorkstationHotspotDebug(ctx);
+  } else {
+    renderWorkstationHotspotFeedback(ctx, components, canvasInspectionState, {
+      debug: false,
+      bakedBackground: bakedBackgroundActive,
+    });
   }
 
   // ── Layer 3.6: diegetic indicators (normal mode only) ──────────────────
