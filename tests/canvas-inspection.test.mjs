@@ -26,6 +26,10 @@ import {
 } from '../rendering/connection-renderer.js';
 import { renderWorldCompositionLayer } from '../rendering/world-background-composition.js';
 import { renderUIOverlayLayer } from '../rendering/world-scene-asset-renderer.js';
+import {
+  renderWorkstationHotspotDebug,
+  renderWorkstationHotspotFeedback,
+} from '../rendering/workstation-hotspots.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -443,6 +447,71 @@ test('canvas inspection: baked normal mode routes active agent hits to workstati
 
   assert.equal(hit.componentType, 'workstation-hotspot');
   assert.equal(hit.entityId, 'researchMonitorHotspot');
+});
+
+test('canvas inspection: baked normal inactive workstation hotspots do not draw rectangles', () => {
+  const ctx = createMockContext();
+  const inspectionState = createCanvasInspectionState();
+
+  renderWorkstationHotspotFeedback(ctx, [], inspectionState, { bakedBackground: true, debug: false });
+
+  assert.equal(ctx.calls.length, 2);
+  assert.ok(!ctx.calls.some((call) => call[0] === 'fillRect' || call[0] === 'strokeRect'));
+  assert.ok(!ctx.calls.some((call) => call[0] === 'fillText'));
+});
+
+test('canvas inspection: baked normal hovered workstation draws subtle feedback without labels', () => {
+  const ctx = createMockContext();
+  const inspectionState = createCanvasInspectionState();
+  inspectionState.hoveredEntityId = 'researchMonitorHotspot';
+  inspectionState.hoveredComponentType = 'workstation-hotspot';
+
+  renderWorkstationHotspotFeedback(ctx, [], inspectionState, { bakedBackground: true, debug: false });
+
+  assert.ok(ctx.calls.some((call) => call[0] === 'ellipse'));
+  assert.ok(ctx.calls.some((call) => call[0] === 'stroke'));
+  assert.ok(ctx.calls.some((call) => call[0] === 'arc'));
+  assert.ok(!ctx.calls.some((call) => call[0] === 'fillRect' || call[0] === 'strokeRect'));
+  assert.ok(!ctx.calls.some((call) => call[0] === 'fillText'));
+});
+
+test('canvas inspection: baked normal active and anomaly hotspots draw state feedback', () => {
+  const activeCtx = createMockContext();
+  const activeComponents = [
+    { componentType: 'agent-sprite', id: 'agent-active', visualState: 'working', worldZoneId: 'researchDesk', zoneId: 'CLAIMED', currentTaskId: 'task-active' },
+  ];
+
+  renderWorkstationHotspotFeedback(activeCtx, activeComponents, createCanvasInspectionState(), {
+    bakedBackground: true,
+    debug: false,
+  });
+
+  assert.ok(activeCtx.calls.some((call) => call[0] === 'arc'));
+  assert.ok(!activeCtx.calls.some((call) => call[0] === 'fillRect' || call[0] === 'strokeRect'));
+
+  const anomalyCtx = createMockContext();
+  const anomalyComponents = [
+    { componentType: 'task-chip', id: 'task-anomaly', visualState: 'error', worldZoneId: 'anomalyShelf', zoneId: 'ACKED', anomaly: { severity: 'high', type: 'stalled_tasks' } },
+  ];
+
+  renderWorkstationHotspotFeedback(anomalyCtx, anomalyComponents, createCanvasInspectionState(), {
+    bakedBackground: true,
+    debug: false,
+  });
+
+  assert.ok(anomalyCtx.calls.some((call) => call[0] === 'arc'));
+  assert.ok(anomalyCtx.calls.some((call) => call[0] === 'createRadialGradient'));
+  assert.ok(!anomalyCtx.calls.some((call) => call[0] === 'fillText'));
+});
+
+test('canvas inspection: debug mode still renders workstation hotspot bounds and IDs', () => {
+  const ctx = createMockContext();
+
+  renderWorkstationHotspotDebug(ctx);
+
+  assert.ok(ctx.calls.some((call) => call[0] === 'strokeRect'));
+  assert.ok(ctx.calls.some((call) => call[0] === 'fillRect'));
+  assert.ok(ctx.calls.some((call) => call[0] === 'fillText' && call[1] === 'researchMonitorHotspot'));
 });
 
 test('canvas inspection: fallback normal mode still renders dynamic agents', async () => {
