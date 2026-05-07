@@ -21,19 +21,21 @@ export function rectShape(rect) {
     type: 'rect',
     x: finite(rect?.x),
     y: finite(rect?.y),
-    width: Math.max(0, finite(rect?.width)),
-    height: Math.max(0, finite(rect?.height)),
+    width: Math.max(0, finite(Number.isFinite(rect?.width) ? rect.width : rect?.w)),
+    height: Math.max(0, finite(Number.isFinite(rect?.height) ? rect.height : rect?.h)),
   });
 }
 
 export function pointInRect(point, rect) {
+  const width = Number.isFinite(rect?.width) ? rect.width : rect?.w;
+  const height = Number.isFinite(rect?.height) ? rect.height : rect?.h;
   return Boolean(point && rect
     && Number.isFinite(point.x)
     && Number.isFinite(point.y)
     && point.x >= rect.x
-    && point.x <= rect.x + rect.width
+    && point.x <= rect.x + width
     && point.y >= rect.y
-    && point.y <= rect.y + rect.height);
+    && point.y <= rect.y + height);
 }
 
 export function pointInCircle(point, circle) {
@@ -88,8 +90,8 @@ export function scaleShape(shape, targetSize = HOTSPOT_CANONICAL_SIZE, sourceSiz
     type: 'rect',
     x: scaleX(shape.x, targetSize, sourceSize),
     y: scaleY(shape.y, targetSize, sourceSize),
-    width: scaleX(shape.width, targetSize, sourceSize),
-    height: scaleY(shape.height, targetSize, sourceSize),
+    width: scaleX(Number.isFinite(shape.width) ? shape.width : shape.w, targetSize, sourceSize),
+    height: scaleY(Number.isFinite(shape.height) ? shape.height : shape.h, targetSize, sourceSize),
   };
 }
 
@@ -116,7 +118,12 @@ export function drawShapePath(ctx, shape) {
     ctx.closePath();
     return;
   }
-  ctx.rect(shape.x, shape.y, shape.width, shape.height);
+  ctx.rect(
+    shape.x,
+    shape.y,
+    Number.isFinite(shape.width) ? shape.width : shape.w,
+    Number.isFinite(shape.height) ? shape.height : shape.h
+  );
   ctx.closePath();
 }
 
@@ -142,7 +149,7 @@ export function getShapeBounds(shape) {
   return {
     x: finite(shape.x),
     y: finite(shape.y),
-    width: Math.max(0, finite(shape.width)),
-    height: Math.max(0, finite(shape.height)),
+    width: Math.max(0, finite(Number.isFinite(shape.width) ? shape.width : shape.w)),
+    height: Math.max(0, finite(Number.isFinite(shape.height) ? shape.height : shape.h)),
   };
 }

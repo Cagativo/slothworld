@@ -5,7 +5,12 @@
  */
 
 import { hitTestRenderableComponents } from './canvas-hit-test.js';
-import { buildWorkstationHotspotComponents, componentForHotspot, getWorkstationHotspotById } from './workstation-hotspots.js';
+import {
+  WORKSTATION_HOTSPOTS,
+  buildWorkstationHotspotComponents,
+  componentForHotspot,
+  getWorkstationHotspotById,
+} from './workstation-hotspots.js';
 import {
   buildInteractionTargets,
 } from '../ui/interactions/interactionTargets.js';
@@ -98,10 +103,11 @@ export function refreshInspectionSelection(state, components, entityPositions, o
   }
 
   if (state.selectedTargetId) {
-    const hotspots = options.hotspots || [];
+    const hotspots = options.hotspots || WORKSTATION_HOTSPOTS;
     const stationComponents = options.stationComponents || buildWorkstationHotspotComponents(hotspots, components);
     const targets = buildInteractionTargets(components, {
       ...options,
+      hotspots,
       entityPositions,
       stationComponents,
     });

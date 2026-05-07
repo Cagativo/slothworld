@@ -124,7 +124,12 @@ function resultForComponent(component, componentType, bounds) {
 
 function boundsFromRectShape(shape) {
   if (!shape || shape.type !== 'rect') return null;
-  return { x: shape.x, y: shape.y, width: shape.width, height: shape.height };
+  return {
+    x: shape.x,
+    y: shape.y,
+    width: Number.isFinite(shape.width) ? shape.width : shape.w,
+    height: Number.isFinite(shape.height) ? shape.height : shape.h,
+  };
 }
 
 function resultForInteractionTarget(target) {

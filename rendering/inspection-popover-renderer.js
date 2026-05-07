@@ -109,6 +109,8 @@ const NORMAL_POPOVER_FORBIDDEN_PATTERNS = Object.freeze([
   /\bzone\s*:/i,
   /\bpriority\s*:/i,
   /\bbounds\s*:/i,
+  /\bid\s*:/i,
+  /\bdebug\s*:/i,
   /\bworld-zone\b/i,
   /\bsloth-[\w-]*\b/i,
   /\bTASK_[A-Z0-9_]+\b/,

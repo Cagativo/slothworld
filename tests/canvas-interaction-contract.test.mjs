@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 
 import { hitTestRenderableComponents } from '../rendering/canvas-hit-test.js';
 import {
+  createCanvasInspectionState,
+  refreshInspectionSelection,
+  updateInspectionSelection,
+} from '../rendering/canvas-inspection-state.js';
+import {
   buildInspectionPopoverRows,
   canRenderNormalPopover,
   renderInspectionPopover,
@@ -143,6 +148,47 @@ test('canvas interaction contract: station works as forgiving fallback', () => {
   assert.equal(hit.interactionTarget.type, 'station');
 });
 
+test('canvas interaction contract: station selection refresh defaults to workstation hotspots', () => {
+  const state = createCanvasInspectionState();
+  const selected = updateInspectionSelection(state, [], { x: 330, y: 210 }, null, { debug: false });
+
+  assert.equal(selected.componentType, 'workstation-hotspot');
+  assert.equal(state.selectedTargetType, 'station');
+
+  const refreshed = refreshInspectionSelection(state, [], null);
+
+  assert.equal(refreshed.componentType, 'workstation-hotspot');
+  assert.equal(refreshed.interactionTarget.type, 'station');
+  assert.equal(state.selectedTargetType, 'station');
+});
+
+test('canvas interaction contract: rect interaction targets accept w/h schema', () => {
+  const hit = hitTestRenderableComponents([], { x: 15, y: 20 }, null, {
+    debug: false,
+    hotspots: [{
+      id: 'contractRectWH',
+      title: 'Contract Station',
+      worldZoneIds: [],
+      zoneIds: [],
+      hitArea: { type: 'rect', x: 10, y: 10, w: 30, h: 24 },
+      popoverAnchor: { x: 10, y: 10 },
+    }],
+    stationComponents: [{
+      componentType: 'workstation-hotspot',
+      id: 'contractRectWH',
+      inspectionViewModel: {
+        title: 'Contract Station',
+        statusLabel: 'Ready',
+        lines: ['Ready'],
+        taskSummaries: [],
+      },
+    }],
+  });
+
+  assert.equal(hit.componentType, 'workstation-hotspot');
+  assert.deepStrictEqual(hit.bounds, { x: 10, y: 10, width: 30, height: 24 });
+});
+
 test('canvas interaction contract: world-zone/debug target does not render normal popover', () => {
   const hit = {
     componentType: 'world-zone-indicator',
@@ -166,6 +212,8 @@ test('canvas interaction contract: normal popover guard rejects raw fields', () 
     'engineCrystal',
     'TASK_CREATED',
     'AGENT_ASSIGNED',
+    'id: sloth-public',
+    'debug: true',
   ];
 
   for (const text of banned) {
