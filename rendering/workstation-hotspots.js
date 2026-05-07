@@ -5,115 +5,67 @@
  * Summaries are derived only from render component descriptors.
  */
 
-import { SCENE_ANCHORS } from './scene-anchors.js';
+import {
+  WORKSTATION_HOTSPOTS,
+  getWorkstationHotspotById,
+} from '../ui/hotspots/workstationHotspots.js';
+import {
+  buildWorkstationNormalSummaryRows,
+  buildWorkstationInspectionViewModel,
+  buildWorkstationPopoverViewModel,
+  buildWorkstationVisualStateViewModel,
+  getWorkstationSemanticMetadata,
+} from '../ui/hotspots/workstationSemantics.js';
 
-function hotspot(config) {
-  return Object.freeze({
-    id: config.id,
-    label: config.label,
-    worldZoneIds: Object.freeze(config.worldZoneIds || []),
-    zoneIds: Object.freeze(config.zoneIds || []),
-    bounds: Object.freeze({ ...config.bounds }),
-    feedbackAnchor: Object.freeze(config.feedbackAnchor || config.bounds),
-    feedbackKind: config.feedbackKind || 'monitor',
-  });
-}
-
-function boundsFrom(anchor, inflate = 0) {
-  const b = anchor.bounds || { x: anchor.x - 20, y: anchor.y - 20, width: 40, height: 40 };
-  return {
-    x: b.x - inflate,
-    y: b.y - inflate,
-    width: b.width + inflate * 2,
-    height: b.height + inflate * 2,
-  };
-}
-
-export const WORKSTATION_HOTSPOTS = Object.freeze([
-  hotspot({
-    id: 'engineCrystalHotspot',
-    label: 'Engine Core',
-    worldZoneIds: ['engineCrystal'],
-    zoneIds: ['ENQUEUED'],
-    bounds: { x: 454, y: 118, width: 78, height: 292 },
-    feedbackAnchor: SCENE_ANCHORS.crystal.engineCrystal,
-    feedbackKind: 'crystal',
-  }),
-  hotspot({
-    id: 'intakeDeskHotspot',
-    label: 'Intake Desk',
-    worldZoneIds: ['intakeDesk'],
-    zoneIds: ['CREATED'],
-    bounds: { x: 44, y: 116, width: 172, height: 126 },
-    feedbackAnchor: SCENE_ANCHORS.shelves.intakeShelf,
-    feedbackKind: 'shelf',
-  }),
-  hotspot({
-    id: 'researchMonitorHotspot',
-    label: 'Research Desk',
-    worldZoneIds: ['researchDesk'],
-    zoneIds: ['CLAIMED'],
-    bounds: boundsFrom(SCENE_ANCHORS.desks['desk-0'], -24),
-    feedbackAnchor: SCENE_ANCHORS.desks['desk-0'],
-  }),
-  hotspot({
-    id: 'shopifyMonitorHotspot',
-    label: 'Shopify Desk',
-    worldZoneIds: ['shopifyDesk'],
-    zoneIds: ['CLAIMED'],
-    bounds: boundsFrom(SCENE_ANCHORS.desks['desk-1'], -34),
-    feedbackAnchor: SCENE_ANCHORS.desks['desk-1'],
-  }),
-  hotspot({
-    id: 'renderMonitorHotspot',
-    label: 'Render Desk',
-    worldZoneIds: ['renderDesk'],
-    zoneIds: ['EXECUTE_FINISHED'],
-    bounds: boundsFrom(SCENE_ANCHORS.desks['desk-4'], -46),
-    feedbackAnchor: SCENE_ANCHORS.desks['desk-4'],
-  }),
-  hotspot({
-    id: 'supportMonitorHotspot',
-    label: 'Support Desk',
-    worldZoneIds: ['supportDesk'],
-    zoneIds: ['CLAIMED'],
-    bounds: boundsFrom(SCENE_ANCHORS.desks['desk-5'], -42),
-    feedbackAnchor: SCENE_ANCHORS.desks['desk-5'],
-  }),
-  hotspot({
-    id: 'approvalDeskHotspot',
-    label: 'Approval Desk',
-    worldZoneIds: ['approvalDesk'],
-    zoneIds: ['EXECUTE_FINISHED'],
-    bounds: boundsFrom(SCENE_ANCHORS.approvalDesk.deliveryDesk, 6),
-    feedbackAnchor: SCENE_ANCHORS.approvalDesk.deliveryDesk,
-    feedbackKind: 'shelf',
-  }),
-  hotspot({
-    id: 'archiveShelfHotspot',
-    label: 'Archive Shelf',
-    worldZoneIds: ['archiveLibrary'],
-    zoneIds: ['ACKED'],
-    bounds: { x: 850, y: 42, width: 160, height: 250 },
-    feedbackAnchor: SCENE_ANCHORS.decor.archiveShelf,
-    feedbackKind: 'shelf',
-  }),
-  hotspot({
-    id: 'anomalyShelfHotspot',
-    label: 'Anomaly Shelf',
-    worldZoneIds: ['anomalyShelf'],
-    zoneIds: ['ACKED'],
-    bounds: boundsFrom(SCENE_ANCHORS.warningShelf.anomalyShelf, 8),
-    feedbackAnchor: SCENE_ANCHORS.warningShelf.anomalyShelf,
-    feedbackKind: 'warning',
-  }),
-]);
+export { WORKSTATION_HOTSPOTS, getWorkstationHotspotById };
+export { buildWorkstationNormalSummaryRows };
 
 const WAITING_STATES = Object.freeze(['idle', 'waiting']);
 const ACTIVE_STATES = Object.freeze(['working', 'processing']);
+const PROCESSING_STATES = Object.freeze(['processing']);
+const COMPLETED_STATES = Object.freeze(['completed']);
 
 function matchesHotspot(component, hotspot) {
   return hotspot.worldZoneIds.includes(component.worldZoneId) || hotspot.zoneIds.includes(component.zoneId);
+}
+
+function textForSemanticMatch(component) {
+  return [
+    component.taskType,
+    component.title,
+  ]
+    .filter((value) => typeof value === 'string' && value.trim())
+    .join(' ')
+    .toLowerCase();
+}
+
+function matchesSemanticTokens(component, hotspot) {
+  const semantics = getWorkstationSemanticMetadata(hotspot.id);
+  if (!semantics || semantics.tokens.length === 0) return true;
+  const text = textForSemanticMatch(component);
+  return semantics.tokens.some((token) => text.includes(token));
+}
+
+function matchesPrimaryWorldZone(component, hotspot) {
+  return hotspot.worldZoneIds.includes(component.worldZoneId);
+}
+
+function safeStationWorkItems(hotspot, components) {
+  if (!hotspot || !Array.isArray(components)) return Object.freeze([]);
+  const items = [];
+  for (const component of components) {
+    if (!component || component.componentType !== 'task-chip') continue;
+    if (!matchesHotspot(component, hotspot)) continue;
+    if (!matchesPrimaryWorldZone(component, hotspot) && !matchesSemanticTokens(component, hotspot)) continue;
+    items.push(Object.freeze({
+      title: typeof component.title === 'string' ? component.title : null,
+      taskType: typeof component.taskType === 'string' ? component.taskType : null,
+      visualState: typeof component.visualState === 'string' ? component.visualState : 'unknown',
+      anomaly: Boolean(component.anomaly),
+    }));
+    if (items.length >= 6) break;
+  }
+  return Object.freeze(items);
 }
 
 export function summarizeHotspotFromComponents(hotspot, components) {
@@ -124,6 +76,15 @@ export function summarizeHotspotFromComponents(hotspot, components) {
     anomaly: false,
     activeAgents: 0,
     assignedAgents: 0,
+    createdTasks: 0,
+    processingTasks: 0,
+    completedTasks: 0,
+    semanticActiveTasks: 0,
+    focusedActiveTasks: 0,
+    focusedWaitingTasks: 0,
+    focusedProcessingTasks: 0,
+    focusedCompletedTasks: 0,
+    focusedFailedTasks: 0,
   };
 
   if (!hotspot || !Array.isArray(components)) return Object.freeze(summary);
@@ -134,8 +95,21 @@ export function summarizeHotspotFromComponents(hotspot, components) {
     if (component.componentType === 'task-chip') {
       if (ACTIVE_STATES.includes(component.visualState)) summary.activeTasks++;
       if (WAITING_STATES.includes(component.visualState)) summary.waitingTasks++;
+      if (component.visualState === 'idle') summary.createdTasks++;
+      if (PROCESSING_STATES.includes(component.visualState)) summary.processingTasks++;
+      if (COMPLETED_STATES.includes(component.visualState)) summary.completedTasks++;
       if (component.visualState === 'error') summary.failedTasks++;
       if (component.anomaly) summary.anomaly = true;
+      if (ACTIVE_STATES.includes(component.visualState) && matchesSemanticTokens(component, hotspot)) {
+        summary.semanticActiveTasks++;
+      }
+      if (matchesPrimaryWorldZone(component, hotspot)) {
+        if (component.visualState === 'working') summary.focusedActiveTasks++;
+        if (WAITING_STATES.includes(component.visualState)) summary.focusedWaitingTasks++;
+        if (PROCESSING_STATES.includes(component.visualState)) summary.focusedProcessingTasks++;
+        if (COMPLETED_STATES.includes(component.visualState)) summary.focusedCompletedTasks++;
+        if (component.visualState === 'error') summary.focusedFailedTasks++;
+      }
     }
 
     if (component.componentType === 'agent-sprite') {
@@ -150,18 +124,34 @@ export function summarizeHotspotFromComponents(hotspot, components) {
 
 export function componentForHotspot(hotspot, components) {
   const summary = summarizeHotspotFromComponents(hotspot, components);
-  return Object.freeze({
+  const stationWorkItems = safeStationWorkItems(hotspot, components);
+  const component = {
     componentType: 'workstation-hotspot',
     id: hotspot.id,
-    label: hotspot.label,
+    label: hotspot.label || hotspot.title,
+    title: hotspot.title || hotspot.label,
+    purpose: hotspot.purpose || null,
+    popoverAnchor: hotspot.popoverAnchor || null,
     worldZoneId: hotspot.worldZoneIds[0] || null,
     zoneId: hotspot.zoneIds[0] || null,
     summary,
+    stationWorkItems,
+  };
+  const visualStateViewModel = buildWorkstationVisualStateViewModel(component);
+  const enrichedComponent = {
+    ...component,
+    popoverViewModel: buildWorkstationPopoverViewModel(component),
+    visualStateViewModel,
+  };
+  return Object.freeze({
+    ...enrichedComponent,
+    inspectionViewModel: buildWorkstationInspectionViewModel(enrichedComponent),
   });
 }
 
-export function getWorkstationHotspotById(id) {
-  return WORKSTATION_HOTSPOTS.find((hotspot) => hotspot.id === id) || null;
+export function buildWorkstationHotspotComponents(hotspots, components) {
+  const sourceHotspots = Array.isArray(hotspots) ? hotspots : WORKSTATION_HOTSPOTS;
+  return Object.freeze(sourceHotspots.map((hotspot) => componentForHotspot(hotspot, components)));
 }
 
 export function renderWorkstationHotspotDebug(ctx) {
@@ -185,7 +175,7 @@ export function renderWorkstationHotspotDebug(ctx) {
 }
 
 function anchorCenter(hotspot) {
-  const anchor = hotspot.feedbackAnchor || hotspot.bounds;
+  const anchor = hotspot.highlightAnchor || hotspot.feedbackAnchor || hotspot.bounds;
   const bounds = anchor.bounds || null;
   if (bounds) {
     return {

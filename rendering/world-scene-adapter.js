@@ -74,6 +74,8 @@ function entityToTaskChipComponent(entity) {
   return {
     componentType: 'task-chip',
     id:            entity.id,
+    title:         entity.title    ?? null,
+    taskType:      entity.taskType ?? null,
     x:             entity.position ? entity.position.x : 0,
     y:             entity.position ? entity.position.y : 0,
     visualState:   entity.visualState ?? 'unknown',
