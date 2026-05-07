@@ -36,10 +36,4 @@ export function exposeWindowAPI() {
   window.controlAPI = controlAPI;
   window.dispatchCommand = dispatchCommand;
   window.createTestProduct = createTestProduct;
-
-  window.getIndexedWorldState = () => controlAPI.getWorldState();
-  window.getTaskView = () => controlAPI.getTasks();
-  window.getAgentView = () => controlAPI.getAgents();
-  window.getDeskView = () => controlAPI.getDeskState();
-  window.getEventView = (limit) => controlAPI.getEventView(limit);
 }
