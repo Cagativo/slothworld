@@ -29,7 +29,12 @@ import { renderTreehouseBackdrop } from './world-background-composition.js';
 import { spriteConfigs } from '../core/constants.js';
 import { compareByDepthY } from './scene-anchors.js';
 import { drawRuntimePropAsset } from './prop-asset-renderer.js';
-import { selectLoadedBackground } from './background-config.js';
+import {
+  BACKGROUND_BOOT_POLICY,
+  getBackgroundBootPolicy,
+  selectLoadedBackground,
+} from './background-config.js';
+import { traceRenderBoot } from './debug.js';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -66,6 +71,21 @@ function drawIfLoaded(ctx, filename, x, y, w, h) {
   if (img) {
     ctx.drawImage(img, x, y, w, h);
   }
+}
+
+function drawBakedPendingBootBackground(ctx) {
+  const cw = ctx.canvas.width;
+  const ch = ctx.canvas.height;
+  const base = ctx.createLinearGradient(0, 0, 0, ch);
+  base.addColorStop(0, '#120d08');
+  base.addColorStop(0.58, '#1b130c');
+  base.addColorStop(1, '#17110a');
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, cw, ch);
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+  ctx.fillRect(0, 0, cw, Math.max(8, ch * 0.035));
+  ctx.fillRect(0, ch - Math.max(10, ch * 0.04), cw, Math.max(10, ch * 0.04));
 }
 
 function normalizeTrendResultItems(resultPayload) {
@@ -507,26 +527,55 @@ function drawRoomScene(ctx, frame) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {number} frame  Current render frame counter
  */
-export function renderBackgroundLayer(ctx, frame) {
+export function renderBackgroundLayer(ctx, frame, options = {}) {
   const cw = ctx.canvas.width;
   const ch = ctx.canvas.height;
 
   const bg = selectLoadedBackground(loadedAssets);
   const bgImg = bg && bg.image;
+  const bootPolicy = options.bootPolicy || getBackgroundBootPolicy(loadedAssets, options);
 
-  if (bgImg) {
+  if (bootPolicy === BACKGROUND_BOOT_POLICY.BAKED_READY && bgImg) {
+    traceRenderBoot('baked-background', {
+      ctx,
+      frame,
+      backgroundLoaded: true,
+      backgroundSource: bg.filename,
+      imageNaturalSize: {
+        width: bgImg.naturalWidth || bgImg.width || null,
+        height: bgImg.naturalHeight || bgImg.height || null,
+      },
+    });
     // ── A. Image mode ────────────────────────────────────────────────────
     // The background image is the sole environmental visual. No overlays drawn.
     ctx.drawImage(bgImg, 0, 0, cw, ch);
-  } else {
-    // ── B. Preload hold frame ─────────────────────────────────────────────
-    // The background image is not yet in loadedAssets. Render a plain dark fill
-    // only — no procedural room, no teal stream — so there is no blue/teal flash
-    // during the asset loading window. drawRoomScene and the full stream body are
-    // kept for reference but suppressed here to avoid any premature colour bleed.
-    // Current fallback is the static treehouse projection in world-background-composition.js.
-    renderTreehouseBackdrop(ctx, frame);
+    return;
   }
+
+  if (bootPolicy === BACKGROUND_BOOT_POLICY.FALLBACK_ALLOWED) {
+    traceRenderBoot('procedural-fallback', {
+      ctx,
+      frame,
+      backgroundLoaded: false,
+      backgroundSource: null,
+      fallbackFunction: 'renderTreehouseBackdrop',
+    });
+    // ── B. Explicit procedural fallback ───────────────────────────────────
+    // Debug/calibration/opt-in modes can still inspect the legacy treehouse
+    // projection while normal baked boot suppresses it.
+    renderTreehouseBackdrop(ctx, frame);
+    return;
+  }
+
+  traceRenderBoot('baked-pending-blank', {
+    ctx,
+    frame,
+    backgroundLoaded: false,
+    backgroundSource: null,
+    bootPolicy,
+    fallbackSuppressed: true,
+  });
+  drawBakedPendingBootBackground(ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -708,14 +757,48 @@ export function renderCoreLayer(ctx, frame) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {Array<object>} components
  */
-export function renderZoneLayer(ctx, components) {
+export function renderZoneLayer(ctx, components, options = {}) {
   // When the scene background image is loaded, all zone furniture (desks, benches,
   // shelves) is already baked into the image. Drawing zone sprites on top doubles
   // the furniture and produces floating blocks over the background.
   // Skip entirely in image mode — only run in procedural fallback mode.
   const bg = selectLoadedBackground(loadedAssets);
   const bgImg = bg && bg.image;
-  if (bgImg) return;
+  const bootPolicy = options.bootPolicy || getBackgroundBootPolicy(loadedAssets, options);
+  if (bgImg) {
+    traceRenderBoot('world-scene-asset-renderer.renderZoneLayer:skip-baked-background', {
+      ctx,
+      backgroundLoaded: true,
+      backgroundSource: bg.filename,
+      zoneCount: Array.isArray(components)
+        ? components.filter((c) => c && c.componentType === 'zone-background').length
+        : 0,
+    });
+    return;
+  }
+
+  if (bootPolicy === BACKGROUND_BOOT_POLICY.BAKED_PENDING) {
+    traceRenderBoot('world-scene-asset-renderer.renderZoneLayer:skip-baked-pending', {
+      ctx,
+      backgroundLoaded: false,
+      backgroundSource: null,
+      bootPolicy,
+      zoneCount: Array.isArray(components)
+        ? components.filter((c) => c && c.componentType === 'zone-background').length
+        : 0,
+    });
+    return;
+  }
+
+  traceRenderBoot('world-scene-asset-renderer.renderZoneLayer:procedural-zone-sprites', {
+    ctx,
+    backgroundLoaded: false,
+    backgroundSource: null,
+    zoneCount: Array.isArray(components)
+      ? components.filter((c) => c && c.componentType === 'zone-background').length
+      : 0,
+    staticDeskSprites: true,
+  });
 
   for (const c of components) {
     if (c.componentType !== 'zone-background') continue;
@@ -884,6 +967,10 @@ export function renderEffectLayer(ctx, components, entityPositions) {
 export function renderUIOverlayLayer(ctx, components, entityPositions, options = {}) {
   const now = Date.now();
   const bakedNormalMode = options.bakedBackground === true && options.debug !== true;
+  const activeBackground = selectLoadedBackground(loadedAssets);
+  const bootPolicy = options.bootPolicy
+    || (options.bakedBackground === true ? BACKGROUND_BOOT_POLICY.BAKED_READY : getBackgroundBootPolicy(loadedAssets, options));
+  const allowPendingOverlay = options.allowOverlayDuringBakedPending === true || options.debug === true;
 
   // ── Pass 1: collect panels currently reported by selectors ───────────────
   // taskId → { results, keyword, agentX, agentY, status }
@@ -925,6 +1012,23 @@ export function renderUIOverlayLayer(ctx, components, entityPositions, options =
       agentX: x,
       agentY: y,
     });
+  }
+
+  traceRenderBoot('world-scene-asset-renderer.renderUIOverlayLayer:task-result-overlay-state', {
+    ctx,
+    backgroundLoaded: Boolean(activeBackground && activeBackground.image),
+    backgroundSource: activeBackground ? activeBackground.filename : null,
+    bakedBackgroundActive: options.bakedBackground === true,
+    debug: options.debug === true,
+    bakedNormalMode,
+    bootPolicy,
+    pendingOverlaySuppressed: bootPolicy === BACKGROUND_BOOT_POLICY.BAKED_PENDING && !allowPendingOverlay,
+    activePanelCount: activePanels.size,
+    cachedPanelCount: trendPanelUIState.size,
+  });
+
+  if (bootPolicy === BACKGROUND_BOOT_POLICY.BAKED_PENDING && !allowPendingOverlay) {
+    return;
   }
 
   // ── Pass 2: update renderer-local state ──────────────────────────────────

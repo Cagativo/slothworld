@@ -267,6 +267,8 @@ export function buildWorldScene(graph) {
         queueTime: meta.queueTime ?? null,
         latency:   meta.latency   ?? null,
       };
+      const taskType = typeof meta.taskType === 'string' ? meta.taskType : null;
+      const title = typeof meta.title === 'string' ? meta.title : null;
 
       const firstIncident = Array.isArray(meta.incidents) && meta.incidents.length > 0
         ? meta.incidents[0]
@@ -287,6 +289,8 @@ export function buildWorldScene(graph) {
       return {
         id: n.id,
         type: n.type,
+        taskType,
+        title,
         zoneId,
         worldZoneId: placed.zoneId,
         visualState,

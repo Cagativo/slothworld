@@ -34,9 +34,13 @@ import { renderAllTaskChips }       from './task-chip-renderer.js';
 import { renderDiegeticIndicators } from './diegetic-indicator-renderer.js';
 import { renderWorldCompositionLayer } from './world-background-composition.js';
 import { loadedAssets } from './assets.js';
-import { isBakedBackgroundActive, selectLoadedBackground } from './background-config.js';
-import { canvasInspectionState } from './canvas-inspection-state.js';
-import { renderWorkstationHotspotDebug, renderWorkstationHotspotFeedback } from './workstation-hotspots.js';
+import {
+  BACKGROUND_BOOT_POLICY,
+  getBackgroundBootPolicy,
+  isBakedBackgroundActive,
+  selectLoadedBackground,
+} from './background-config.js';
+import { isRenderDebugEnabled, traceRenderBoot } from './debug.js';
 import {
   renderBackgroundLayer,
   renderCoreLayer,
@@ -54,11 +58,33 @@ import {
  * @param {Array<object>}            components      — flat component list from toRenderableComponents()
  * @param {number}                   frame           — current render frame counter (integer, read-only)
  */
-export function renderAllLayers(ctx, components, frame) {
+export function renderAllLayers(ctx, components, frame, options = {}) {
+  const isRenderDebug = isRenderDebugEnabled();
   // Build entity position map once; shared across geometry and sprite layers
   const entityPositions = buildEntityPositionMap(components);
   const activeBackground = selectLoadedBackground(loadedAssets);
   const bakedBackgroundActive = isBakedBackgroundActive(activeBackground);
+  const bootPolicy = options.bootPolicy || getBackgroundBootPolicy(loadedAssets, {
+    debug: isRenderDebug,
+    calibration: options.calibration === true,
+    allowProceduralFallback: options.allowProceduralFallback === true,
+  });
+  const zoneCount = components.filter((c) => c && c.componentType === 'zone-background').length;
+  const taskChipCount = components.filter((c) => c && c.componentType === 'task-chip').length;
+  const agentCount = components.filter((c) => c && c.componentType === 'agent-sprite').length;
+
+  traceRenderBoot('world-scene-layer-renderer.renderAllLayers:start', {
+    ctx,
+    frame,
+    backgroundLoaded: Boolean(activeBackground && activeBackground.image),
+    backgroundSource: activeBackground ? activeBackground.filename : null,
+    bakedBackgroundActive,
+    bootPolicy,
+    componentCount: components.length,
+    zoneCount,
+    taskChipCount,
+    agentCount,
+  });
 
   // Debug log — component counts + entity position map size
   if (typeof window !== 'undefined' && window.DEV_MODE) {
@@ -73,7 +99,11 @@ export function renderAllLayers(ctx, components, frame) {
 
 
   // ── Layer 1: background ─────────────────────────────────────────────────
-  renderBackgroundLayer(ctx, frame);
+  renderBackgroundLayer(ctx, frame, {
+    bootPolicy,
+    debug: isRenderDebug,
+    calibration: options.calibration === true,
+  });
 
   // ── Layer 2: core ───────────────────────────────────────────────────────
   renderCoreLayer(ctx, frame);
@@ -82,33 +112,52 @@ export function renderAllLayers(ctx, components, frame) {
   // Zone geometry (filled rect + id label from renderAllZones) is debug-only.
   // In normal mode the sprite assets in renderZoneLayer provide full zone coverage.
   // Enable via window.__SLOTHWORLD_RENDER_DEBUG__ = true  or ?renderDebug in the URL.
-  const isRenderDebug = typeof window !== 'undefined' &&
-    (window.__SLOTHWORLD_RENDER_DEBUG__ === true ||
-     (() => { try { return new URLSearchParams(window.location.search).has('renderDebug'); } catch (_) { return false; } })());
   if (isRenderDebug) {
+    traceRenderBoot('world-scene-layer-renderer.world-zone-render:debug-geometry', {
+      ctx,
+      frame,
+      backgroundLoaded: Boolean(activeBackground && activeBackground.image),
+      backgroundSource: activeBackground ? activeBackground.filename : null,
+      bakedBackgroundActive,
+      bootPolicy,
+      zoneCount,
+    });
     renderAllZones(ctx, components);
   }
-  renderZoneLayer(ctx, components);
-  renderWorldCompositionLayer(ctx, { debug: isRenderDebug, frame, bakedBackground: bakedBackgroundActive });
+  traceRenderBoot('world-scene-layer-renderer.world-zone-render:asset-layer', {
+    ctx,
+    frame,
+    backgroundLoaded: Boolean(activeBackground && activeBackground.image),
+    backgroundSource: activeBackground ? activeBackground.filename : null,
+    bakedBackgroundActive,
+    bootPolicy,
+    zoneCount,
+  });
+  renderZoneLayer(ctx, components, {
+    bootPolicy,
+    debug: isRenderDebug,
+    calibration: options.calibration === true,
+  });
+  traceRenderBoot('world-scene-layer-renderer.baked-scene-render:composition-layer', {
+    ctx,
+    frame,
+    backgroundLoaded: Boolean(activeBackground && activeBackground.image),
+    backgroundSource: activeBackground ? activeBackground.filename : null,
+    bakedBackgroundActive,
+    bootPolicy,
+    debug: isRenderDebug,
+  });
+  renderWorldCompositionLayer(ctx, { debug: isRenderDebug, frame, bakedBackground: bakedBackgroundActive, bootPolicy });
 
   // ── Layer 3.5: zone labels (debug mode only) ───────────────────────────
   // Themed zone-name badges (Intake Nook, Task Engine, …). Shown only in
   // debug mode alongside raw zone IDs. In normal mode, in-world diegetic
   // indicators communicate state instead — no duplicate text labels.
   renderZoneLabels(ctx, components, isRenderDebug);
-  if (isRenderDebug) {
-    renderWorkstationHotspotDebug(ctx);
-  } else {
-    renderWorkstationHotspotFeedback(ctx, components, canvasInspectionState, {
-      debug: false,
-      bakedBackground: bakedBackgroundActive,
-    });
-  }
-
   // ── Layer 3.6: diegetic indicators (normal mode only) ──────────────────
   // In-world visual props (paper stacks, monitor glow, rune pulse, …) that
   // communicate zone activity without persistent text labels.
-  if (!isRenderDebug) {
+  if (!isRenderDebug && bootPolicy !== BACKGROUND_BOOT_POLICY.BAKED_PENDING) {
     renderDiegeticIndicators(ctx, components, Date.now(), { bakedBackground: bakedBackgroundActive });
   }
 
@@ -131,8 +180,19 @@ export function renderAllLayers(ctx, components, frame) {
   renderAllTaskChips(ctx, components, entityPositions, isRenderDebug);
 
   // renderPropLayer remains suppressed in image mode. renderEffectLayer is a hard no-op.
+  traceRenderBoot('world-scene-layer-renderer.task-result-overlay-render:ui-overlay', {
+    ctx,
+    frame,
+    backgroundLoaded: Boolean(activeBackground && activeBackground.image),
+    backgroundSource: activeBackground ? activeBackground.filename : null,
+    bakedBackgroundActive,
+    bootPolicy,
+    agentCount,
+  });
   renderUIOverlayLayer(ctx, components, entityPositions, {
     debug: isRenderDebug,
     bakedBackground: bakedBackgroundActive,
+    bootPolicy,
+    allowOverlayDuringBakedPending: options.allowOverlayDuringBakedPending === true,
   });
 }

@@ -6,8 +6,11 @@ import { fileURLToPath } from 'node:url';
 
 import { assetPaths } from '../rendering/assets.js';
 import {
+  BACKGROUND_BOOT_POLICY,
   BACKGROUND_ASSET_PREFERENCE,
+  getBackgroundBootPolicy,
   isBakedBackgroundActive,
+  isProceduralFallbackAllowed,
   selectLoadedBackground,
 } from '../rendering/background-config.js';
 
@@ -58,6 +61,23 @@ test('background config: baked background helper only matches scene_background_0
   assert.equal(isBakedBackgroundActive({ 'scene_background_01.jpg': { id: '01' } }), false);
   assert.equal(isBakedBackgroundActive({ filename: 'scene_background_02.png', isPreferredBakedPlate: true }), true);
   assert.equal(isBakedBackgroundActive(null), false);
+});
+
+test('background config: boot policy reports baked-ready when a background is loaded', () => {
+  assert.equal(
+    getBackgroundBootPolicy({ 'scene_background_02.png': { id: '02' } }),
+    BACKGROUND_BOOT_POLICY.BAKED_READY,
+  );
+});
+
+test('background config: boot policy reports baked-pending in normal mode with no background', () => {
+  assert.equal(getBackgroundBootPolicy({}), BACKGROUND_BOOT_POLICY.BAKED_PENDING);
+});
+
+test('background config: debug and calibration allow procedural fallback', () => {
+  assert.equal(getBackgroundBootPolicy({}, { debug: true }), BACKGROUND_BOOT_POLICY.FALLBACK_ALLOWED);
+  assert.equal(getBackgroundBootPolicy({}, { calibration: true }), BACKGROUND_BOOT_POLICY.FALLBACK_ALLOWED);
+  assert.equal(isProceduralFallbackAllowed({ allowProceduralFallback: true }), true);
 });
 
 test('background config: runtime modules do not reference docs uiendgoal path', () => {

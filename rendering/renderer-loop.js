@@ -12,9 +12,22 @@ import {
   resolveInspectionTarget,
 } from './canvas-inspection-state.js';
 import { renderInspectionPopover } from './inspection-popover-renderer.js';
-import { isRenderDebugEnabled } from './debug.js';
+import { isRenderDebugEnabled, traceRenderBoot } from './debug.js';
 import { loadedAssets } from './assets.js';
-import { isBakedBackgroundActive } from './background-config.js';
+import { isBakedBackgroundActive, selectLoadedBackground } from './background-config.js';
+import { renderHotspotHighlights } from './hotspot-highlight-renderer.js';
+import {
+  getCalibratedHotspots,
+  handleHotspotCalibrationPointerDown,
+  handleHotspotCalibrationPointerMove,
+  handleHotspotCalibrationPointerUp,
+  handleHotspotCalibrationKeydown,
+  hotspotCalibrationState,
+  isHotspotCalibrationEditMode,
+  isHotspotCalibrationEnabled,
+  selectHotspotForCalibration,
+} from '../ui/hotspots/hotspotCalibration.js';
+import { buildWorkstationHotspotComponents } from './workstation-hotspots.js';
 
 let _frame = 0;
 let _inspectionBindingsAttached = false;
@@ -37,6 +50,8 @@ function currentHitTestOptions() {
   return {
     debug: isRenderDebugEnabled(),
     bakedBackground: isBakedBackgroundActive(loadedAssets),
+    canvasSize: canvas ? { width: canvas.width, height: canvas.height } : undefined,
+    hotspots: getCalibratedHotspots(),
   };
 }
 
@@ -47,6 +62,14 @@ export function initRenderer() {
 
   canvas.addEventListener('mousemove', (event) => {
     const point = eventToCanvasPoint(event);
+    if (isHotspotCalibrationEditMode() && handleHotspotCalibrationPointerMove(point, {
+      altKey: event.altKey,
+      hotspots: getCalibratedHotspots(),
+    })) {
+      canvas.style.cursor = 'grabbing';
+      event.preventDefault?.();
+      return;
+    }
     const hitTestOptions = currentHitTestOptions();
     const hit = updateInspectionHover(
       canvasInspectionState,
@@ -56,6 +79,24 @@ export function initRenderer() {
       hitTestOptions
     );
     canvas.style.cursor = hit ? 'pointer' : 'default';
+  });
+
+  canvas.addEventListener('mousedown', (event) => {
+    const point = eventToCanvasPoint(event);
+    if (handleHotspotCalibrationPointerDown(point, {
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      hotspots: getCalibratedHotspots(),
+    })) {
+      canvas.style.cursor = 'grabbing';
+      event.preventDefault?.();
+    }
+  });
+
+  canvas.addEventListener('mouseup', () => {
+    if (handleHotspotCalibrationPointerUp()) {
+      canvas.style.cursor = 'pointer';
+    }
   });
 
   canvas.addEventListener('mouseleave', () => {
@@ -71,14 +112,21 @@ export function initRenderer() {
 
   canvas.addEventListener('click', (event) => {
     const point = eventToCanvasPoint(event);
-    updateInspectionSelection(
+    const hit = updateInspectionSelection(
       canvasInspectionState,
       _latestComponents,
       point,
       _latestEntityPositions,
       currentHitTestOptions()
     );
+    if (hit?.componentType === 'workstation-hotspot') {
+      selectHotspotForCalibration(hit.entityId);
+    }
   });
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', handleHotspotCalibrationKeydown);
+  }
 
   _inspectionBindingsAttached = true;
 }
@@ -91,6 +139,15 @@ export function renderErrorState() {
 }
 
 export function renderFrame(renderView) {
+  const bootTraceBackground = selectLoadedBackground(loadedAssets);
+  traceRenderBoot('renderer-loop.renderFrame:start', {
+    ctx,
+    frame: _frame,
+    backgroundLoaded: Boolean(bootTraceBackground && bootTraceBackground.image),
+    backgroundSource: bootTraceBackground ? bootTraceBackground.filename : null,
+    bakedBackgroundActive: isBakedBackgroundActive(bootTraceBackground || loadedAssets),
+  });
+
   assertGraphShape(renderView);
   const scene      = buildWorldScene(renderView);
   assertEventDriven(scene);
@@ -99,6 +156,9 @@ export function renderFrame(renderView) {
   _latestComponents = components;
   _latestEntityPositions = entityPositions;
   const hitTestOptions = currentHitTestOptions();
+  const calibratedHotspots = getCalibratedHotspots();
+  const workstationHotspotComponents = buildWorkstationHotspotComponents(calibratedHotspots, components);
+  hitTestOptions.stationComponents = workstationHotspotComponents;
   refreshInspectionSelection(canvasInspectionState, components, entityPositions, hitTestOptions);
 
   if (canvasInspectionState.pointer.inside) {
@@ -123,9 +183,32 @@ export function renderFrame(renderView) {
   }
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  renderAllLayers(ctx, components, _frame);
-  renderInspectionPopover(ctx, resolveInspectionTarget(canvasInspectionState), {
-    debug: isRenderDebugEnabled(),
+  renderAllLayers(ctx, components, _frame, {
+    calibration: isHotspotCalibrationEnabled(),
+  });
+  traceRenderBoot('renderer-loop.renderFrame:after-renderAllLayers', {
+    ctx,
+    frame: _frame,
+    componentCount: components.length,
+    taskChipCount: components.filter((c) => c && c.componentType === 'task-chip').length,
+    agentCount: components.filter((c) => c && c.componentType === 'agent-sprite').length,
+    zoneCount: components.filter((c) => c && c.componentType === 'zone-background').length,
+    backgroundLoaded: Boolean(bootTraceBackground && bootTraceBackground.image),
+    backgroundSource: bootTraceBackground ? bootTraceBackground.filename : null,
+    bakedBackgroundActive: isBakedBackgroundActive(bootTraceBackground || loadedAssets),
+  });
+  renderHotspotHighlights(ctx, canvasInspectionState, {
+    debug: isRenderDebugEnabled() || isHotspotCalibrationEnabled(),
+    frame: _frame,
+    canvasSize: { width: canvas.width, height: canvas.height },
+    hotspots: calibratedHotspots,
+    hotspotComponents: workstationHotspotComponents,
+    calibration: hotspotCalibrationState,
+  });
+  const inspectionTarget = resolveInspectionTarget(canvasInspectionState);
+  renderInspectionPopover(ctx, inspectionTarget, {
+    debug: isRenderDebugEnabled() || isHotspotCalibrationEnabled(),
+    selected: Boolean(canvasInspectionState.selectedHit && inspectionTarget === canvasInspectionState.selectedHit),
   });
   _frame += 1;
 }

@@ -6,7 +6,12 @@
  */
 
 import { ZONE_INDICATOR_ANCHORS } from './scene-anchors.js';
-import { WORKSTATION_HOTSPOTS, componentForHotspot } from './workstation-hotspots.js';
+import { WORKSTATION_HOTSPOTS, buildWorkstationHotspotComponents } from './workstation-hotspots.js';
+import { hitTestWorkstationHotspots, rectContainsPoint } from '../ui/hotspots/hitTestHotspots.js';
+import {
+  buildInteractionTargets,
+  getInteractionTargetAtPoint,
+} from '../ui/interactions/interactionTargets.js';
 
 const TASK_CHIP_BOUNDS = Object.freeze({ width: 36, height: 16 });
 const ZONE_INDICATOR_BOUNDS = Object.freeze({ width: 48, height: 48 });
@@ -47,13 +52,6 @@ function posOf(component, entityPositions) {
   };
 }
 
-function rectContains(rect, point) {
-  return point.x >= rect.x
-    && point.x <= rect.x + rect.width
-    && point.y >= rect.y
-    && point.y <= rect.y + rect.height;
-}
-
 export function getComponentHitBounds(component, entityPositions) {
   if (!component || typeof component !== 'object') {
     return null;
@@ -92,15 +90,6 @@ export function getComponentHitBounds(component, entityPositions) {
   return null;
 }
 
-function isNormalInteractiveAgent(component) {
-  return component
-    && (component.visualState === 'working'
-      || component.visualState === 'processing'
-      || component.visualState === 'error'
-      || Boolean(component.anomaly)
-      || Boolean(component.currentTaskId));
-}
-
 function getZoneIndicatorHitBounds(component) {
   const anchor = component && component.id ? ZONE_INDICATOR_ANCHORS[component.id] : null;
   if (!anchor) {
@@ -133,6 +122,58 @@ function resultForComponent(component, componentType, bounds) {
   };
 }
 
+function boundsFromRectShape(shape) {
+  if (!shape || shape.type !== 'rect') return null;
+  return { x: shape.x, y: shape.y, width: shape.width, height: shape.height };
+}
+
+function resultForInteractionTarget(target) {
+  if (!target) return null;
+  const source = target.source;
+  if (target.type === 'station') {
+    const component = source?.component || null;
+    return {
+      entityId: component?.id || source?.hotspot?.id || null,
+      componentType: 'workstation-hotspot',
+      component,
+      bounds: source?.hotspot?.bounds || boundsFromRectShape(target.hitArea),
+      interactionTarget: target,
+    };
+  }
+  if (target.type === 'taskResult') {
+    const component = {
+      componentType: 'task-result',
+      popoverViewModel: target.viewModel,
+    };
+    return {
+      entityId: target.id,
+      componentType: 'task-result',
+      component,
+      bounds: boundsFromRectShape(target.hitArea),
+      interactionTarget: target,
+    };
+  }
+  if (target.type === 'taskMarker') {
+    return {
+      entityId: source?.id ?? target.id,
+      componentType: 'task-chip',
+      component: source ? { ...source, popoverViewModel: target.viewModel } : { componentType: 'task-chip', popoverViewModel: target.viewModel },
+      bounds: boundsFromRectShape(target.hitArea),
+      interactionTarget: target,
+    };
+  }
+  if (target.type === 'agent') {
+    return {
+      entityId: source?.id ?? target.id,
+      componentType: 'agent-sprite',
+      component: source ? { ...source, agentInspectionViewModel: target.viewModel } : { componentType: 'agent-sprite', agentInspectionViewModel: target.viewModel },
+      bounds: boundsFromRectShape(target.hitArea),
+      interactionTarget: target,
+    };
+  }
+  return null;
+}
+
 export function hitTestRenderableComponents(components, point, entityPositions, options = {}) {
   if (!Array.isArray(components) || !point || !isFiniteNumber(point.x) || !isFiniteNumber(point.y)) {
     return null;
@@ -140,12 +181,26 @@ export function hitTestRenderableComponents(components, point, entityPositions, 
 
   const debug = options && options.debug === true;
   const bakedBackground = options && options.bakedBackground === true;
+  const hotspots = options.hotspots || WORKSTATION_HOTSPOTS;
+  const stationComponents = options.stationComponents || buildWorkstationHotspotComponents(hotspots, components);
+  const interactionTarget = getInteractionTargetAtPoint(
+    buildInteractionTargets(components, {
+      debug,
+      bakedBackground,
+      entityPositions,
+      hotspots,
+      stationComponents,
+      canvasSize: options.canvasSize,
+    }),
+    point
+  );
+  if (interactionTarget) return resultForInteractionTarget(interactionTarget);
 
   for (let i = components.length - 1; i >= 0; i--) {
     const component = components[i];
     if (!component || component.componentType !== 'task-chip') continue;
     const bounds = getComponentHitBounds(component, entityPositions);
-    if (bounds && rectContains(bounds, point)) {
+    if (bounds && rectContainsPoint(bounds, point)) {
       return resultForComponent(component, 'task-chip', bounds);
     }
   }
@@ -153,37 +208,34 @@ export function hitTestRenderableComponents(components, point, entityPositions, 
   for (let i = components.length - 1; i >= 0; i--) {
     const component = components[i];
     if (!component || component.componentType !== 'agent-sprite') continue;
-    if (!debug && bakedBackground) continue;
-    if (!debug && !isNormalInteractiveAgent(component)) continue;
+    if (!debug) continue;
     const bounds = getComponentHitBounds(component, entityPositions);
-    if (bounds && rectContains(bounds, point)) {
+    if (bounds && rectContainsPoint(bounds, point)) {
       return resultForComponent(component, 'agent-sprite', bounds);
     }
   }
 
-  for (let i = WORKSTATION_HOTSPOTS.length - 1; i >= 0; i--) {
-    const hotspot = WORKSTATION_HOTSPOTS[i];
-    if (hotspot.bounds && rectContains(hotspot.bounds, point)) {
-      const component = componentForHotspot(hotspot, components);
-      return resultForComponent(component, 'workstation-hotspot', hotspot.bounds);
-    }
-  }
-
-  for (let i = components.length - 1; i >= 0; i--) {
-    const component = components[i];
-    if (!component || component.componentType !== 'zone-background') continue;
-    const bounds = getZoneIndicatorHitBounds(component);
-    if (bounds && rectContains(bounds, point)) {
-      return resultForComponent(component, 'world-zone-indicator', bounds);
-    }
+  const hotspot = hitTestWorkstationHotspots(point, hotspots, { canvasSize: options.canvasSize });
+  if (hotspot) {
+    const component = stationComponents.find((candidate) => candidate.id === hotspot.id) || null;
+    return resultForComponent(component, 'workstation-hotspot', hotspot.bounds);
   }
 
   if (debug) {
     for (let i = components.length - 1; i >= 0; i--) {
       const component = components[i];
       if (!component || component.componentType !== 'zone-background') continue;
+      const bounds = getZoneIndicatorHitBounds(component);
+      if (bounds && rectContainsPoint(bounds, point)) {
+        return resultForComponent(component, 'world-zone-indicator', bounds);
+      }
+    }
+
+    for (let i = components.length - 1; i >= 0; i--) {
+      const component = components[i];
+      if (!component || component.componentType !== 'zone-background') continue;
       const bounds = getComponentHitBounds(component, entityPositions);
-      if (bounds && rectContains(bounds, point)) {
+      if (bounds && rectContainsPoint(bounds, point)) {
         return resultForComponent(component, 'world-zone-indicator', bounds);
       }
     }

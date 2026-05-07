@@ -10,6 +10,8 @@
  */
 
 import { WORLD_ZONES, WORLD_ZONE_IDS } from '../ui/config/worldZones.js';
+import { BACKGROUND_BOOT_POLICY } from './background-config.js';
+import { traceRenderBoot } from './debug.js';
 
 const CANVAS_BASE = Object.freeze({ width: 1060, height: 520 });
 
@@ -237,6 +239,15 @@ export function renderTreehouseBackdrop(ctx, frame = 0) {
   if (!ctx || !ctx.canvas) return;
   const cw = ctx.canvas.width;
   const ch = ctx.canvas.height;
+  traceRenderBoot('world-background-composition.renderTreehouseBackdrop:procedural-fallback-scene', {
+    ctx,
+    frame,
+    backgroundLoaded: false,
+    backgroundSource: null,
+    drawsDarkBrownGreenBackground: true,
+    drawsCurvedTreeBranchArcs: true,
+    arcFunction: 'ctx.bezierCurveTo',
+  });
 
   const room = ctx.createLinearGradient(0, 0, 0, ch);
   addColorStop(room, 0, '#1d1207');
@@ -288,11 +299,44 @@ export function renderWorldCompositionLayer(ctx, options = {}) {
   if (!ctx) return;
   const debug = options.debug === true;
   const bakedBackground = options.bakedBackground === true;
+  const bootPolicy = options.bootPolicy || null;
   const frame = Number.isFinite(options.frame) ? options.frame : 0;
 
-  if (bakedBackground && !debug) {
+  if (bootPolicy === BACKGROUND_BOOT_POLICY.BAKED_PENDING) {
+    traceRenderBoot('world-background-composition.renderWorldCompositionLayer:skip-baked-pending', {
+      ctx,
+      frame,
+      backgroundLoaded: false,
+      bakedBackgroundActive: false,
+      bootPolicy,
+      debug,
+      zonePropCount: WORLD_COMPOSITION_ZONES.length,
+    });
     return;
   }
+
+  if (bakedBackground && !debug) {
+    traceRenderBoot('world-background-composition.renderWorldCompositionLayer:skip-baked-background', {
+      ctx,
+      frame,
+      backgroundLoaded: true,
+      bakedBackgroundActive: true,
+      debug,
+      zonePropCount: WORLD_COMPOSITION_ZONES.length,
+    });
+    return;
+  }
+
+  traceRenderBoot('world-background-composition.renderWorldCompositionLayer:semantic-zone-props', {
+    ctx,
+    frame,
+    backgroundLoaded: !bakedBackground ? false : null,
+    bakedBackgroundActive: bakedBackground,
+    debug,
+    zonePropCount: WORLD_COMPOSITION_ZONES.length,
+    drawsCentralTealCrystal: true,
+    drawsSimpleShelvesAndDesks: true,
+  });
 
   ctx.save();
   for (const zone of WORLD_COMPOSITION_ZONES) {
