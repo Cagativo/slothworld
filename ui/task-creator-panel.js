@@ -1,11 +1,6 @@
-export function initTaskCreatorPanel() {
-  function getGraphSnapshot() {
-    if (window.controlAPI && typeof window.controlAPI.getGraph === 'function') {
-      return window.controlAPI.getGraph();
-    }
-    return { nodes: [], edges: [], metadata: {} };
-  }
+import { getGraphSnapshot } from './graph-snapshot.js';
 
+export function initTaskCreatorPanel() {
   const FIXED_DISCORD_CHANNEL_ID = '1491500223288184964';
 
   const panelRuntime = {

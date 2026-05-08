@@ -10,6 +10,8 @@
  * - Trigger execution side effects
  */
 
+import { getGraphSnapshot } from './graph-snapshot.js';
+
 
 function stringify(value) {
   try {
@@ -53,6 +55,10 @@ function collectIncidents(graph) {
   return Array.from(byType.values());
 }
 
+function getLeftUiMode() {
+  return document.body.dataset.leftUiMode === 'debug' ? 'debug' : 'normal';
+}
+
 export function initRaccoonFeederPanel() {
   const panel = document.createElement('aside');
   panel.id = 'raccoon-feeder-panel';
@@ -63,8 +69,9 @@ export function initRaccoonFeederPanel() {
     </div>
     <section class="rfp-section">
       <h3>Incident Clusters</h3>
+      <div class="rfp-summary" data-detail="summary">No incidents.</div>
       <ul class="rfp-list" data-list="incidents"></ul>
-      <pre class="rfp-detail" data-detail="incident">Select an incident to inspect details.</pre>
+      <pre class="rfp-detail ui-debug-only" data-detail="incident">Select an incident to inspect details.</pre>
     </section>
   `;
 
@@ -76,15 +83,9 @@ export function initRaccoonFeederPanel() {
   }
 
   const incidentsList = panel.querySelector('[data-list="incidents"]');
+  const summaryDetail = panel.querySelector('[data-detail="summary"]');
   const incidentDetail = panel.querySelector('[data-detail="incident"]');
   let selectedClusterType = null;
-
-  function getGraphSnapshot() {
-    if (window.controlAPI && typeof window.controlAPI.getGraph === 'function') {
-      return window.controlAPI.getGraph();
-    }
-    return { nodes: [], edges: [], metadata: {} };
-  }
 
   panel.addEventListener('click', (event) => {
     const target = event.target;
@@ -102,6 +103,9 @@ export function initRaccoonFeederPanel() {
   });
 
   function renderPanel() {
+    const mode = getLeftUiMode();
+    panel.dataset.uiMode = mode;
+
     const graph = getGraphSnapshot();
     const incidents = collectIncidents(graph)
       .sort((a, b) => {
@@ -112,8 +116,28 @@ export function initRaccoonFeederPanel() {
         return String(a.type || '').localeCompare(String(b.type || ''));
       });
 
+    panel.style.display = mode === 'normal' && incidents.length === 0 ? 'none' : '';
+
     if (!incidents.some((item) => item.type === selectedClusterType)) {
       selectedClusterType = incidents.length ? incidents[0].type : null;
+    }
+
+    if (summaryDetail) {
+      const counts = incidents.reduce((acc, incident) => {
+        const severity = String(incident.severity || 'low').toLowerCase();
+        if (severity === 'high') {
+          acc.high += 1;
+        } else if (severity === 'medium') {
+          acc.medium += 1;
+        } else {
+          acc.low += 1;
+        }
+        return acc;
+      }, { high: 0, medium: 0, low: 0 });
+
+      summaryDetail.textContent = incidents.length
+        ? `Clusters ${incidents.length} | High ${counts.high} | Medium ${counts.medium} | Low ${counts.low}`
+        : 'No incidents.';
     }
 
     incidentsList.innerHTML = '';
@@ -160,6 +184,9 @@ export function initRaccoonFeederPanel() {
 
   renderPanel();
   window.addEventListener('slothworld:graph', () => {
+    renderPanel();
+  });
+  window.addEventListener('slothworld:ui-mode', () => {
     renderPanel();
   });
 }

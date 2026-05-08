@@ -5,6 +5,8 @@
  * events -> deriveWorldState -> selectors -> rendering
  */
 
+import { getGraphSnapshot } from './graph-snapshot.js';
+
 
 
 const panelState = {
@@ -162,11 +164,8 @@ function renderTaskList(listElement, nodes, selectedTaskId) {
   });
 }
 
-function getGraphSnapshot() {
-  if (window.controlAPI && typeof window.controlAPI.getGraph === 'function') {
-    return window.controlAPI.getGraph();
-  }
-  return { nodes: [], edges: [], metadata: {} };
+function getLeftUiMode() {
+  return document.body.dataset.leftUiMode === 'debug' ? 'debug' : 'normal';
 }
 
 function createPanelRoot() {
@@ -180,7 +179,7 @@ function createPanelRoot() {
 
     <section class="ocp-section" data-section="tasks">
       <h3>Tasks (Derived)</h3>
-      <div class="ocp-debug-actions">
+      <div class="ocp-debug-actions ui-debug-only">
         <button type="button" class="ocp-debug-create" data-action="create-test-task">+ Create Test Task</button>
         <span class="ocp-debug-indicator" data-role="create-task-indicator"></span>
       </div>
@@ -198,6 +197,7 @@ function createPanelRoot() {
           </select>
         </label>
       </div>
+      <div class="ocp-compact-summary" data-detail="summary">No tasks yet.</div>
       <div class="ocp-grid-2">
         <div>
           <h4>Queued</h4>
@@ -216,8 +216,8 @@ function createPanelRoot() {
           <ul class="ocp-list" data-list="failed"></ul>
         </div>
       </div>
-      <pre class="ocp-detail" data-detail="task">Click a task to inspect derived details.</pre>
-      <div class="ocp-timeline-wrap">
+      <pre class="ocp-detail ui-debug-only" data-detail="task">Click a task to inspect derived details.</pre>
+      <div class="ocp-timeline-wrap ui-debug-only">
         <h4>Selected Task Timeline</h4>
         <ul class="ocp-list ocp-timeline" data-list="timeline"></ul>
         <pre class="ocp-detail" data-detail="event">Click a timeline event to inspect payload.</pre>
@@ -227,11 +227,11 @@ function createPanelRoot() {
     <section class="ocp-section" data-section="agents">
       <h3>Agents (Derived)</h3>
       <ul class="ocp-list" data-list="agents"></ul>
-      <pre class="ocp-detail" data-detail="agent">Click an agent to inspect derived assignment.</pre>
+      <pre class="ocp-detail ui-debug-only" data-detail="agent">Click an agent to inspect derived assignment.</pre>
     </section>
 
-    <section class="ocp-section" data-section="events">
-      <h3>Event Stream</h3>
+    <section class="ocp-section ui-debug-only" data-section="events">
+      <h3>Transition Stream</h3>
       <div class="ocp-toolbar">
         <label class="ocp-control">
           Show last
@@ -240,7 +240,7 @@ function createPanelRoot() {
             <option value="100" selected>100</option>
             <option value="300">300</option>
           </select>
-          events
+          transitions
         </label>
       </div>
       <ul class="ocp-list" data-list="events"></ul>
@@ -266,6 +266,7 @@ export function initOperatorControlPanel() {
   const timelineList = panel.querySelector('[data-list="timeline"]');
   const agentsList = panel.querySelector('[data-list="agents"]');
   const eventsList = panel.querySelector('[data-list="events"]');
+  const summaryDetail = panel.querySelector('[data-detail="summary"]');
   const taskDetail = panel.querySelector('[data-detail="task"]');
   const agentDetail = panel.querySelector('[data-detail="agent"]');
   const eventDetail = panel.querySelector('[data-detail="event"]');
@@ -340,6 +341,7 @@ export function initOperatorControlPanel() {
   });
 
   function renderPanel() {
+    panel.dataset.uiMode = getLeftUiMode();
     const graph = getGraphSnapshot();
     const allNodes = Array.isArray(graph.nodes) ? graph.nodes : [];
     const graphEdges = Array.isArray(graph.edges) ? graph.edges : [];
@@ -367,6 +369,20 @@ export function initOperatorControlPanel() {
     renderTaskList(activeList, buckets.active, panelState.selectedTaskId);
     renderTaskList(doneList, buckets.done, panelState.selectedTaskId);
     renderTaskList(failedList, buckets.failed, panelState.selectedTaskId);
+
+    if (summaryDetail) {
+      const summary = [
+        `Total ${filteredTaskNodes.length}`,
+        `Queued ${buckets.queued.length}`,
+        `Active ${buckets.active.length}`,
+        `Failed ${buckets.failed.length}`,
+        `Agents ${workerNodes.length}`
+      ];
+      if (panelState.selectedTaskId) {
+        summary.push(`Selected ${panelState.selectedTaskId}`);
+      }
+      summaryDetail.textContent = summary.join(' | ');
+    }
 
     eventsList.innerHTML = '';
     {
@@ -566,6 +582,9 @@ export function initOperatorControlPanel() {
 
   renderPanel();
   window.addEventListener('slothworld:graph', () => {
+    renderPanel();
+  });
+  window.addEventListener('slothworld:ui-mode', () => {
     renderPanel();
   });
 }
