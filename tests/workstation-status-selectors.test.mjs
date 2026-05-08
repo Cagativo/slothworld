@@ -132,3 +132,16 @@ test('workstation status selectors: snapshots are passively threaded into graph 
 
   assert.equal(graph.metadata.workstationSnapshots.research_desk.currentWork.count, 1);
 });
+
+test('workstation status selectors: TREND_RESEARCH claimed work stays at research_desk', () => {
+  const snapshots = buildWorkstationStatusSnapshots({
+    tasks: [
+      { id: 'task-research-claimed', title: 'Trend claim', type: 'TREND_RESEARCH', status: 'claimed', updatedAt: 400 },
+    ],
+    agents: [],
+  });
+
+  assert.equal(snapshots.research_desk.currentWork.count, 1);
+  assert.equal(snapshots.research_desk.currentWork.items[0].taskId, 'task-research-claimed');
+  assert.equal(snapshots.engine_core.currentWork.items.some((item) => item.taskId === 'task-research-claimed'), false);
+});

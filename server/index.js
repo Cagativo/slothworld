@@ -23,6 +23,9 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import { createTaskExecutionWorker } from '../core/workers/taskExecutionWorker.js';
 import { createDiscordNotificationWorker } from '../core/workers/discordNotificationWorker.js';
 import { createTaskEngine } from '../core/engine/taskEngine.js';
+import {
+  TREND_RESEARCH_WORKER_ID
+} from '../core/engine/workerCapabilityPolicy.js';
 import { getCanonicalPipelineLabel, warnLegacyExecutionPath } from '../core/execution-pipeline.js';
 import {
   TASK_TYPE_DISCORD,
@@ -60,6 +63,12 @@ const MAX_EVENTS = 1000;
 const STORE_PATH = path.join(ROOT_DIR, 'bridge-store.json');
 const DISCORD_COMMAND_PREFIX = '!';
 const TREND_RESEARCH_DEFAULT_CHANNEL_ID = '1491500223288184964';
+const WORKER_CAPABILITY_POLICY = Object.freeze({
+  [TASK_TYPE_TREND_RESEARCH]: Object.freeze([
+    TREND_RESEARCH_WORKER_ID,
+    'worker-trend-1'
+  ])
+});
 const TASK_CREATION_WINDOW_MS = 10_000;
 const TASK_CREATION_LIMIT = Number(process.env.TASK_CREATION_LIMIT || 40);
 const TASK_MAX_DEPTH = Number(process.env.TASK_MAX_DEPTH || 3);
@@ -851,16 +860,13 @@ function normalizeTask(input) {
     normalizedPayload.channelId = payloadChannelId || rootChannelId || TREND_RESEARCH_DEFAULT_CHANNEL_ID;
 
     // Ensure workerId is always set for TREND_RESEARCH tasks so the engine
-    // can establish ownership at TASK_CLAIMED. If the caller did not explicitly
-    // provide a worker identity, default to the resolved channelId — the agent
-    // responsible for a channel is the authoritative worker for that channel's
-    // research tasks.
+    // can establish ownership at TASK_CLAIMED with a research-capable worker.
     if (
       !normalizedPayload.workerId
       && !normalizedPayload.agentId
       && !normalizedPayload.assignedAgentId
     ) {
-      normalizedPayload.workerId = normalizedPayload.channelId;
+      normalizedPayload.workerId = TREND_RESEARCH_WORKER_ID;
     }
   }
 
@@ -1215,6 +1221,7 @@ const taskExecutionWorker = createTaskExecutionWorker({
 });
 
 const taskEngine = createTaskEngine({
+  workerCapabilityPolicy: WORKER_CAPABILITY_POLICY,
   executor: async (task) => {
     const execution = await taskExecutionWorker.executeTask(task);
     return {
