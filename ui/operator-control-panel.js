@@ -21,6 +21,8 @@ const panelState = {
   createTaskTone: ''
 };
 
+const NORMAL_AWAITING_ACK_STALE_MS = 2 * 60 * 1000;
+
 function stringify(value) {
   try {
     return JSON.stringify(value, null, 2);
@@ -129,6 +131,163 @@ function bucketNodesByStatus(taskNodes) {
   return { queued, active, done, failed };
 }
 
+function getNodeTimestamp(node) {
+  const meta = node && node.metadata && typeof node.metadata === 'object' ? node.metadata : {};
+  const updatedAt = Number(meta.updatedAt);
+  if (Number.isFinite(updatedAt) && updatedAt > 0) {
+    return updatedAt;
+  }
+  const createdAt = Number(meta.createdAt);
+  if (Number.isFinite(createdAt) && createdAt > 0) {
+    return createdAt;
+  }
+  return 0;
+}
+
+function getTaskTitle(node) {
+  const meta = node && node.metadata && typeof node.metadata === 'object' ? node.metadata : {};
+  if (typeof meta.title === 'string' && meta.title.trim()) {
+    return meta.title.trim();
+  }
+  return node && node.id ? String(node.id) : 'unknown task';
+}
+
+function buildActiveWorkModel(taskNodes, workerNodes) {
+  const activeStatuses = new Set(['claimed', 'executing', 'awaiting_ack']);
+  const activeTasks = (Array.isArray(taskNodes) ? taskNodes : [])
+    .filter((node) => activeStatuses.has(String(node && node.status || '').toLowerCase()))
+    .sort((a, b) => getNodeTimestamp(b) - getNodeTimestamp(a));
+
+  const engagedWorkers = (Array.isArray(workerNodes) ? workerNodes : [])
+    .filter((node) => {
+      const meta = node && node.metadata && typeof node.metadata === 'object' ? node.metadata : {};
+      return typeof meta.currentTaskId === 'string' && meta.currentTaskId.trim();
+    });
+
+  const rows = activeTasks.slice(0, 4).map((node) => {
+    const meta = node && node.metadata && typeof node.metadata === 'object' ? node.metadata : {};
+    return {
+      id: node.id,
+      title: getTaskTitle(node),
+      status: String(node.status || 'unknown'),
+      assignedAgentId: meta.assignedAgentId || null
+    };
+  });
+
+  return {
+    count: activeTasks.length,
+    engagedAgents: engagedWorkers.length,
+    rows
+  };
+}
+
+function buildNeedsAttentionModel(taskNodes) {
+  const now = Date.now();
+  const allTasks = Array.isArray(taskNodes) ? taskNodes : [];
+  const failed = allTasks.filter((node) => {
+    const status = String(node && node.status || '').toLowerCase();
+    return status === 'failed' || status === 'error';
+  });
+
+  const staleAwaitingAck = allTasks.filter((node) => {
+    const status = String(node && node.status || '').toLowerCase();
+    if (status !== 'awaiting_ack') {
+      return false;
+    }
+    const t = getNodeTimestamp(node);
+    return t > 0 && (now - t) >= NORMAL_AWAITING_ACK_STALE_MS;
+  });
+
+  const imageRenderFailures = failed.filter((node) => {
+    const meta = node && node.metadata && typeof node.metadata === 'object' ? node.metadata : {};
+    return meta.taskType === 'image_render';
+  });
+
+  const rows = failed.slice(0, 3).map((node) => ({
+    id: node.id,
+    title: getTaskTitle(node),
+    reason: 'failed'
+  }));
+
+  if (rows.length < 3) {
+    staleAwaitingAck.slice(0, 3 - rows.length).forEach((node) => {
+      rows.push({
+        id: node.id,
+        title: getTaskTitle(node),
+        reason: 'awaiting_ack_stale'
+      });
+    });
+  }
+
+  return {
+    failedCount: failed.length,
+    staleAwaitingAckCount: staleAwaitingAck.length,
+    imageRenderFailureCount: imageRenderFailures.length,
+    rows
+  };
+}
+
+function buildRecentResultsModel(taskNodes, graphEdges) {
+  const edges = Array.isArray(graphEdges) ? graphEdges : [];
+  const fallbackByTaskId = new Map();
+
+  edges.forEach((edge) => {
+    if (!edge || typeof edge.taskId !== 'string') {
+      return;
+    }
+    const edgeTs = Number(edge.toAt) || Number(edge.fromAt) || 0;
+    if (!fallbackByTaskId.has(edge.taskId) || edgeTs > fallbackByTaskId.get(edge.taskId)) {
+      fallbackByTaskId.set(edge.taskId, edgeTs);
+    }
+  });
+
+  const doneStatuses = new Set(['completed', 'acknowledged']);
+  const doneTasks = (Array.isArray(taskNodes) ? taskNodes : [])
+    .filter((node) => doneStatuses.has(String(node && node.status || '').toLowerCase()))
+    .map((node) => {
+      const fallbackTs = fallbackByTaskId.get(node.id) || 0;
+      return {
+        node,
+        ts: Math.max(getNodeTimestamp(node), fallbackTs)
+      };
+    })
+    .sort((a, b) => b.ts - a.ts);
+
+  const rows = doneTasks.slice(0, 5).map((entry) => ({
+    id: entry.node.id,
+    title: getTaskTitle(entry.node),
+    status: String(entry.node.status || 'unknown'),
+    at: entry.ts > 0 ? formatIso(entry.ts) : 'n/a'
+  }));
+
+  return {
+    count: doneTasks.length,
+    rows
+  };
+}
+
+function renderNormalCardRows(listElement, rows, formatter) {
+  if (!listElement) {
+    return;
+  }
+
+  listElement.innerHTML = '';
+  if (!rows.length) {
+    const empty = document.createElement('li');
+    empty.className = 'ocp-empty';
+    empty.textContent = 'none';
+    listElement.appendChild(empty);
+    return;
+  }
+
+  rows.forEach((row) => {
+    const li = document.createElement('li');
+    li.className = 'ocp-normal-card-row';
+    li.textContent = formatter(row);
+    listElement.appendChild(li);
+  });
+}
+
 function renderTaskList(listElement, nodes, selectedTaskId) {
   listElement.innerHTML = '';
 
@@ -179,11 +338,39 @@ function createPanelRoot() {
 
     <section class="ocp-section" data-section="tasks">
       <h3>Tasks (Derived)</h3>
+      <div class="ocp-normal-cards ui-normal-only">
+        <article class="ocp-normal-card" data-card="active-work">
+          <header>
+            <h4>Active Work</h4>
+            <span class="ocp-normal-card-count" data-card-count="active-work">0</span>
+          </header>
+          <p class="ocp-normal-card-meta" data-card-meta="active-work">Engaged agents: 0</p>
+          <ul class="ocp-list ocp-normal-card-list" data-card-list="active-work"></ul>
+        </article>
+
+        <article class="ocp-normal-card" data-card="needs-attention">
+          <header>
+            <h4>Needs Attention</h4>
+            <span class="ocp-normal-card-count" data-card-count="needs-attention">0</span>
+          </header>
+          <p class="ocp-normal-card-meta" data-card-meta="needs-attention">Failed: 0 | Stale ACK: 0 | Image failures: 0</p>
+          <ul class="ocp-list ocp-normal-card-list" data-card-list="needs-attention"></ul>
+        </article>
+
+        <article class="ocp-normal-card" data-card="recent-results">
+          <header>
+            <h4>Recent Results</h4>
+            <span class="ocp-normal-card-count" data-card-count="recent-results">0</span>
+          </header>
+          <p class="ocp-normal-card-meta" data-card-meta="recent-results">Latest completed/acknowledged tasks</p>
+          <ul class="ocp-list ocp-normal-card-list" data-card-list="recent-results"></ul>
+        </article>
+      </div>
       <div class="ocp-debug-actions ui-debug-only">
         <button type="button" class="ocp-debug-create" data-action="create-test-task">+ Create Test Task</button>
         <span class="ocp-debug-indicator" data-role="create-task-indicator"></span>
       </div>
-      <div class="ocp-toolbar">
+      <div class="ocp-toolbar ui-debug-only">
         <label class="ocp-control">
           <input type="checkbox" data-control="active-only" />
           Active tasks only
@@ -198,7 +385,7 @@ function createPanelRoot() {
         </label>
       </div>
       <div class="ocp-compact-summary" data-detail="summary">No tasks yet.</div>
-      <div class="ocp-grid-2">
+      <div class="ocp-grid-2 ui-debug-only">
         <div>
           <h4>Queued</h4>
           <ul class="ocp-list" data-list="queued"></ul>
@@ -224,7 +411,7 @@ function createPanelRoot() {
       </div>
     </section>
 
-    <section class="ocp-section" data-section="agents">
+    <section class="ocp-section ui-debug-only" data-section="agents">
       <h3>Agents (Derived)</h3>
       <ul class="ocp-list" data-list="agents"></ul>
       <pre class="ocp-detail ui-debug-only" data-detail="agent">Click an agent to inspect derived assignment.</pre>
@@ -270,6 +457,15 @@ export function initOperatorControlPanel() {
   const taskDetail = panel.querySelector('[data-detail="task"]');
   const agentDetail = panel.querySelector('[data-detail="agent"]');
   const eventDetail = panel.querySelector('[data-detail="event"]');
+  const activeWorkCount = panel.querySelector('[data-card-count="active-work"]');
+  const activeWorkMeta = panel.querySelector('[data-card-meta="active-work"]');
+  const activeWorkList = panel.querySelector('[data-card-list="active-work"]');
+  const needsAttentionCount = panel.querySelector('[data-card-count="needs-attention"]');
+  const needsAttentionMeta = panel.querySelector('[data-card-meta="needs-attention"]');
+  const needsAttentionList = panel.querySelector('[data-card-list="needs-attention"]');
+  const recentResultsCount = panel.querySelector('[data-card-count="recent-results"]');
+  const recentResultsMeta = panel.querySelector('[data-card-meta="recent-results"]');
+  const recentResultsList = panel.querySelector('[data-card-list="recent-results"]');
   const activeOnlyInput = panel.querySelector('[data-control="active-only"]');
   const recentSecondsSelect = panel.querySelector('[data-control="recent-seconds"]');
   const maxEventsSelect = panel.querySelector('[data-control="max-events"]');
@@ -348,6 +544,49 @@ export function initOperatorControlPanel() {
 
     const taskNodes = allNodes.filter((n) => n && n.type === 'task');
     const workerNodes = allNodes.filter((n) => n && n.type === 'worker');
+
+    const activeWorkModel = buildActiveWorkModel(taskNodes, workerNodes);
+    const needsAttentionModel = buildNeedsAttentionModel(taskNodes);
+    const recentResultsModel = buildRecentResultsModel(taskNodes, graphEdges);
+
+    if (activeWorkCount) {
+      activeWorkCount.textContent = String(activeWorkModel.count);
+    }
+    if (activeWorkMeta) {
+      activeWorkMeta.textContent = `Engaged agents: ${activeWorkModel.engagedAgents}`;
+    }
+    renderNormalCardRows(
+      activeWorkList,
+      activeWorkModel.rows,
+      (row) => `${taskIcon(row.status)} ${row.title} | ${row.status}${row.assignedAgentId ? ` | ${row.assignedAgentId}` : ''}`
+    );
+
+    if (needsAttentionCount) {
+      const count = needsAttentionModel.failedCount + needsAttentionModel.staleAwaitingAckCount;
+      needsAttentionCount.textContent = String(count);
+    }
+    if (needsAttentionMeta) {
+      needsAttentionMeta.textContent = `Failed: ${needsAttentionModel.failedCount} | Stale ACK: ${needsAttentionModel.staleAwaitingAckCount} | Image failures: ${needsAttentionModel.imageRenderFailureCount}`;
+    }
+    renderNormalCardRows(
+      needsAttentionList,
+      needsAttentionModel.rows,
+      (row) => `! ${row.title} | ${row.reason}`
+    );
+
+    if (recentResultsCount) {
+      recentResultsCount.textContent = String(recentResultsModel.count);
+    }
+    if (recentResultsMeta) {
+      recentResultsMeta.textContent = recentResultsModel.rows.length
+        ? 'Latest completed/acknowledged tasks'
+        : 'No completed tasks yet';
+    }
+    renderNormalCardRows(
+      recentResultsList,
+      recentResultsModel.rows,
+      (row) => `${taskIcon(row.status)} ${row.title} | ${row.status} | ${row.at}`
+    );
 
     // Apply filters using already-computed node.status — no derivation from events.
     let filteredTaskNodes = taskNodes;
