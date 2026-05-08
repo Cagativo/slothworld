@@ -49,6 +49,61 @@ body {
   border-bottom: 1px solid #4a3520;
 }
 
+#left-ui-mode-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 6px 7px;
+  border: 1px solid #4a3520;
+  background: rgba(26, 13, 4, 0.6);
+}
+
+.left-ui-mode-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #b8a88a;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.left-ui-mode-buttons {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.left-ui-mode-button {
+  border: 1px solid #5c3d1e;
+  background: #2a1808;
+  color: #b8a88a;
+  font: 10px monospace;
+  padding: 3px 7px;
+  cursor: pointer;
+}
+
+.left-ui-mode-button.is-active {
+  border-color: #00b8a9;
+  color: #e8d5b0;
+  box-shadow: inset 0 0 0 1px rgba(0, 184, 169, 0.3);
+}
+
+.left-ui-mode-button:hover {
+  border-color: #8b6347;
+}
+
+body[data-left-ui-mode="normal"] .ui-debug-only {
+  display: none !important;
+}
+
+body[data-left-ui-mode="debug"] .ui-debug-only {
+  display: block;
+}
+
+body[data-left-ui-mode="debug"] .ocp-debug-actions.ui-debug-only {
+  display: flex;
+}
+
 #control-panels-stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -177,6 +232,15 @@ canvas {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.ocp-compact-summary {
+  margin: 0 0 8px;
+  padding: 5px 7px;
+  font: 9px/1.35 monospace;
+  color: #b8a88a;
+  border: 1px solid #4a3520;
+  background: #1a0d04;
 }
 
 .ocp-toolbar {
@@ -639,6 +703,15 @@ canvas {
   list-style: none;
   max-height: 150px;
   overflow-y: auto;
+}
+
+.rfp-summary {
+  margin: 0 0 8px;
+  padding: 5px 7px;
+  font: 9px/1.35 monospace;
+  color: #b8a88a;
+  border: 1px solid #4a3520;
+  background: #1a0d04;
 }
 
 .rfp-item {
