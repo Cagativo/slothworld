@@ -187,7 +187,9 @@ export function hitTestRenderableComponents(components, point, entityPositions, 
   const debug = options && options.debug === true;
   const bakedBackground = options && options.bakedBackground === true;
   const hotspots = options.hotspots || WORKSTATION_HOTSPOTS;
-  const stationComponents = options.stationComponents || buildWorkstationHotspotComponents(hotspots, components);
+  const stationComponents = options.stationComponents || buildWorkstationHotspotComponents(hotspots, components, {
+    stationSnapshots: options.stationSnapshots,
+  });
   const interactionTarget = getInteractionTargetAtPoint(
     buildInteractionTargets(components, {
       debug,

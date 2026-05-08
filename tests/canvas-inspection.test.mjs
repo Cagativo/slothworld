@@ -588,6 +588,48 @@ test('canvas inspection: task result interaction target beats overlapping statio
   assert.equal(hit.type, 'taskResult');
 });
 
+test('canvas inspection: Research Desk trend result suppresses generic taskResult target', () => {
+  const components = [{
+    componentType: 'agent-sprite',
+    id: 'agent-result',
+    x: 700,
+    y: 430,
+    visualState: 'working',
+    worldZoneId: 'researchDesk',
+    deskId: 'desk-0',
+    currentTaskId: 'task-result',
+    trendPanelState: {
+      taskId: 'task-result',
+      keyword: 'cozy',
+      status: 'done',
+      results: [{ item: 'Tree lamp', score: 0.95 }],
+    },
+  }];
+  const stationComponents = buildWorkstationHotspotComponents(WORKSTATION_HOTSPOTS, components, {
+    stationSnapshots: {
+      research_desk: {
+        stationId: 'research_desk',
+        label: 'Research Desk',
+        currentWork: { count: 0, items: [] },
+        lastResult: null,
+        latestFailure: null,
+        trendResult: {
+          taskId: 'task-result',
+          keyword: 'cozy',
+          rows: [{ item: 'Tree lamp', score: 0.95 }],
+        },
+      },
+    },
+  });
+  const targets = buildInteractionTargets(components, {
+    hotspots: WORKSTATION_HOTSPOTS,
+    stationComponents,
+    bakedBackground: true,
+  });
+
+  assert.equal(targets.some((target) => target.type === 'taskResult'), false);
+});
+
 test('canvas inspection: task marker interaction target beats overlapping station', () => {
   const components = [{
     componentType: 'task-chip',

@@ -17,6 +17,12 @@
  */
 
 import { registerTaskEngineCallerKey, runInTaskEngineExecutionContext } from './enforcementRuntime.js';
+import {
+  DEFAULT_WORKER_CAPABILITY_POLICY,
+  canWorkerClaimTaskType,
+  normalizeWorkerCapabilityPolicy,
+  resolveWorkerForTaskType
+} from './workerCapabilityPolicy.js';
 const DEFAULT_NOW = () => Date.now();
 
 const TASK_ENGINE_CALLER_KEY = Symbol('TASK_ENGINE_CALLER_KEY');
@@ -52,6 +58,9 @@ export function createTaskEngine(options = {}) {
   const tasks = new Map();
   const queue = [];
   const running = new Map();
+  const workerCapabilityPolicy = normalizeWorkerCapabilityPolicy(
+    options.workerCapabilityPolicy || DEFAULT_WORKER_CAPABILITY_POLICY
+  );
 
   const now = typeof options.now === 'function' ? options.now : DEFAULT_NOW;
   const executor = typeof options.executor === 'function'
@@ -121,6 +130,42 @@ export function createTaskEngine(options = {}) {
     }
   }
 
+  function hasWorkerRestriction(taskType) {
+    return Boolean(taskType && workerCapabilityPolicy.has(taskType));
+  }
+
+  function resolveInitialAssignedAgentId(task) {
+    if (hasWorkerRestriction(task && task.type)) {
+      return null;
+    }
+
+    return resolveAssignedAgentId(task);
+  }
+
+  function resolveClaimingWorkerId(task, workerId) {
+    const explicitWorkerId = typeof workerId === 'string' && workerId.trim()
+      ? workerId.trim()
+      : null;
+    const taskType = task && task.type;
+
+    if (explicitWorkerId) {
+      return canWorkerClaimTaskType(workerCapabilityPolicy, explicitWorkerId, taskType)
+        ? explicitWorkerId
+        : null;
+    }
+
+    if (hasWorkerRestriction(taskType)) {
+      return resolveWorkerForTaskType(taskType, resolveAssignedAgentId(task), workerCapabilityPolicy);
+    }
+
+    return resolveAssignedAgentId(task);
+  }
+
+  function canClaimTask(task, workerId) {
+    return Boolean(workerId || !hasWorkerRestriction(task && task.type))
+      && canWorkerClaimTaskType(workerCapabilityPolicy, workerId, task && task.type);
+  }
+
   function canRetry(task, result) {
     const retryable = result.retryable === true;
     return retryable && task.attempts < task.maxRetries;
@@ -142,7 +187,7 @@ export function createTaskEngine(options = {}) {
 
     const stored = {
       ...task,
-      assignedAgentId: resolveAssignedAgentId(task),
+      assignedAgentId: resolveInitialAssignedAgentId(task),
       status: 'created',
       attempts: 0,
       maxRetries: typeof task.maxRetries === 'number' ? Math.max(0, task.maxRetries) : 3,
@@ -182,26 +227,42 @@ export function createTaskEngine(options = {}) {
 
   function claimTask(taskId, workerId) {
     let claimed = null;
+    let claimingWorkerId = null;
 
     if (typeof taskId === 'string') {
       const task = resolveTask(taskId);
       if (task.status !== 'queued') {
         return null;
       }
+      claimingWorkerId = resolveClaimingWorkerId(task, workerId);
+      if (!canClaimTask(task, claimingWorkerId)) {
+        return null;
+      }
       removeFromQueue(task.id);
       claimed = task;
     } else {
-      while (queue.length > 0) {
-        const nextId = queue.shift();
+      for (let index = 0; index < queue.length;) {
+        const nextId = queue[index];
         if (!nextId) {
+          queue.splice(index, 1);
           continue;
         }
 
         const nextTask = tasks.get(nextId);
-        if (nextTask && nextTask.status === 'queued') {
+        if (!nextTask || nextTask.status !== 'queued') {
+          queue.splice(index, 1);
+          continue;
+        }
+
+        const nextClaimingWorkerId = resolveClaimingWorkerId(nextTask, workerId);
+        if (canClaimTask(nextTask, nextClaimingWorkerId)) {
+          queue.splice(index, 1);
           claimed = nextTask;
+          claimingWorkerId = nextClaimingWorkerId;
           break;
         }
+
+        index += 1;
       }
     }
 
@@ -209,12 +270,10 @@ export function createTaskEngine(options = {}) {
       return null;
     }
 
-      // Ownership is set at TASK_CLAIMED. The explicit workerId from the claimer
-      // is authoritative. Fall back to resolveAssignedAgentId only when no
-      // claimer workerId was provided (e.g. direct claimTask calls in tests).
-      claimed.assignedAgentId =
-        (typeof workerId === 'string' && workerId.trim() ? workerId.trim() : null)
-        || resolveAssignedAgentId(claimed);
+    // Ownership is set at TASK_CLAIMED. The explicit workerId from the claimer
+    // is authoritative. Fall back to resolveAssignedAgentId only when no
+    // claimer workerId was provided (e.g. direct claimTask calls in tests).
+    claimed.assignedAgentId = claimingWorkerId;
 
     claimed.status = 'claimed';
     claimed.claimedAt = now();
@@ -268,14 +327,22 @@ export function createTaskEngine(options = {}) {
     }
 
     if (task.status === 'queued') {
-      claimTask(task.id, options.workerId);
+      const claimedTask = claimTask(task.id, options.workerId);
+      if (!claimedTask) {
+        return {
+          success: false,
+          error: 'task_not_claimable',
+          retryable: false
+        };
+      }
     }
 
     task.status = 'executing';
     task.attempts += 1;
     task.executedAt = now();
-      // Preserve ownership set at TASK_CLAIMED; only re-resolve if still unset.
-      task.assignedAgentId = task.assignedAgentId || resolveAssignedAgentId(task);
+      // Preserve ownership set at TASK_CLAIMED; only unrestricted tasks may
+      // fall back to pre-existing payload ownership.
+      task.assignedAgentId = task.assignedAgentId || resolveInitialAssignedAgentId(task);
 
     emit('TASK_EXECUTE_STARTED', task.id, {
       attempts: task.attempts,
@@ -370,7 +437,9 @@ export function createTaskEngine(options = {}) {
       throw new Error('ENGINE_ENFORCEMENT_VIOLATION');
     }
 
-    task.assignedAgentId = resolveAssignedAgentId(task);
+    task.assignedAgentId = hasWorkerRestriction(task.type)
+      ? task.assignedAgentId
+      : resolveAssignedAgentId(task);
 
     task.lastResult = task.executionRecord.result;
 

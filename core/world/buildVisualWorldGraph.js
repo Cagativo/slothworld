@@ -49,6 +49,9 @@ export function buildVisualWorldGraph(input, options) {
   const incidents    = (input && Array.isArray(input.incidents))  ? input.incidents  : [];
   const systemEvents = (input && input.systemEvents)              ? input.systemEvents : {};
   const withOverlay  = !!(options && options.observability);
+  const workstationSnapshots = options && options.workstationSnapshots && typeof options.workstationSnapshots === 'object'
+    ? options.workstationSnapshots
+    : null;
 
   // Reverse index: taskId → array of { clusterType, severity } references.
   // Built once from selector output; no clustering logic is applied here.
@@ -172,7 +175,9 @@ export function buildVisualWorldGraph(input, options) {
   return {
     nodes,
     edges,
-    metadata: {},
+    metadata: {
+      workstationSnapshots,
+    },
     observability
   };
 }

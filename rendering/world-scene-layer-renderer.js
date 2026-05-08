@@ -194,5 +194,6 @@ export function renderAllLayers(ctx, components, frame, options = {}) {
     bakedBackground: bakedBackgroundActive,
     bootPolicy,
     allowOverlayDuringBakedPending: options.allowOverlayDuringBakedPending === true,
+    stationSnapshots: options.stationSnapshots || null,
   });
 }

@@ -122,9 +122,19 @@ export function summarizeHotspotFromComponents(hotspot, components) {
   return Object.freeze(summary);
 }
 
-export function componentForHotspot(hotspot, components) {
+function resolveStationSnapshot(hotspot, stationSnapshots) {
+  if (!stationSnapshots || typeof stationSnapshots !== 'object') return null;
+  const semantics = getWorkstationSemanticMetadata(hotspot?.id);
+  const stationKey = semantics?.stationKey;
+  if (!stationKey) return null;
+  const snapshot = stationSnapshots[stationKey];
+  return snapshot && typeof snapshot === 'object' ? snapshot : null;
+}
+
+export function componentForHotspot(hotspot, components, options = {}) {
   const summary = summarizeHotspotFromComponents(hotspot, components);
   const stationWorkItems = safeStationWorkItems(hotspot, components);
+  const stationSnapshot = resolveStationSnapshot(hotspot, options.stationSnapshots);
   const component = {
     componentType: 'workstation-hotspot',
     id: hotspot.id,
@@ -136,6 +146,7 @@ export function componentForHotspot(hotspot, components) {
     zoneId: hotspot.zoneIds[0] || null,
     summary,
     stationWorkItems,
+    stationSnapshot,
   };
   const visualStateViewModel = buildWorkstationVisualStateViewModel(component);
   const enrichedComponent = {
@@ -149,9 +160,9 @@ export function componentForHotspot(hotspot, components) {
   });
 }
 
-export function buildWorkstationHotspotComponents(hotspots, components) {
+export function buildWorkstationHotspotComponents(hotspots, components, options = {}) {
   const sourceHotspots = Array.isArray(hotspots) ? hotspots : WORKSTATION_HOTSPOTS;
-  return Object.freeze(sourceHotspots.map((hotspot) => componentForHotspot(hotspot, components)));
+  return Object.freeze(sourceHotspots.map((hotspot) => componentForHotspot(hotspot, components, options)));
 }
 
 export function renderWorkstationHotspotDebug(ctx) {

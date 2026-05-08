@@ -28,6 +28,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { TREND_RESEARCH_WORKER_ID } from '../core/engine/workerCapabilityPolicy.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -406,8 +407,8 @@ test('POST /task — happy paths', async (t) => {
     assert.equal(completedEvent.payload.requestId, requestId, 'TREND_RESEARCH_COMPLETED must carry requestId');
     assert.equal(completedEvent.payload.taskId, requestId, 'TREND_RESEARCH_COMPLETED must carry taskId');
     assert.equal(completedEvent.payload.keyword, 'hoodie', 'TREND_RESEARCH_COMPLETED must carry keyword');
-    assert.equal(completedEvent.payload.assignedAgentId, workerId, 'TREND_RESEARCH_COMPLETED must carry assignedAgentId');
-    assert.equal(completedEvent.payload.workerId, workerId, 'TREND_RESEARCH_COMPLETED must carry workerId for indexedWorld');
+    assert.equal(completedEvent.payload.assignedAgentId, TREND_RESEARCH_WORKER_ID, 'TREND_RESEARCH_COMPLETED must carry canonical assignedAgentId');
+    assert.equal(completedEvent.payload.workerId, TREND_RESEARCH_WORKER_ID, 'TREND_RESEARCH_COMPLETED must carry canonical workerId for indexedWorld');
     assert.ok(completedEvent.payload.result && Array.isArray(completedEvent.payload.result.ranked), 'TREND_RESEARCH_COMPLETED must carry ranked result payload');
   });
 

@@ -104,7 +104,9 @@ export function refreshInspectionSelection(state, components, entityPositions, o
 
   if (state.selectedTargetId) {
     const hotspots = options.hotspots || WORKSTATION_HOTSPOTS;
-    const stationComponents = options.stationComponents || buildWorkstationHotspotComponents(hotspots, components);
+    const stationComponents = options.stationComponents || buildWorkstationHotspotComponents(hotspots, components, {
+      stationSnapshots: options.stationSnapshots,
+    });
     const targets = buildInteractionTargets(components, {
       ...options,
       hotspots,
@@ -150,7 +152,9 @@ export function refreshInspectionSelection(state, components, entityPositions, o
     state.selectedHit = {
       entityId: hotspot.id,
       componentType: 'workstation-hotspot',
-      component: componentForHotspot(hotspot, components),
+      component: componentForHotspot(hotspot, components, {
+        stationSnapshots: options.stationSnapshots,
+      }),
       bounds: hotspot.bounds,
     };
     state.selectedHotspotId = hotspot.id;

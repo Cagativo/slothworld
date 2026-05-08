@@ -96,8 +96,16 @@ body[data-left-ui-mode="normal"] .ui-debug-only {
   display: none !important;
 }
 
+body[data-left-ui-mode="normal"] .ui-normal-only {
+  display: block;
+}
+
 body[data-left-ui-mode="debug"] .ui-debug-only {
   display: block;
+}
+
+body[data-left-ui-mode="debug"] .ui-normal-only {
+  display: none !important;
 }
 
 body[data-left-ui-mode="debug"] .ocp-debug-actions.ui-debug-only {
@@ -241,6 +249,60 @@ canvas {
   color: #b8a88a;
   border: 1px solid #4a3520;
   background: #1a0d04;
+}
+
+.ocp-normal-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.ocp-normal-card {
+  border: 1px solid #4a3520;
+  background: #1a0d04;
+  padding: 7px;
+}
+
+.ocp-normal-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 4px;
+}
+
+.ocp-normal-card h4 {
+  margin: 0;
+  font-size: 10px;
+  color: #c8a87c;
+}
+
+.ocp-normal-card-count {
+  display: inline-block;
+  min-width: 18px;
+  text-align: center;
+  padding: 1px 4px;
+  border: 1px solid #5c3d1e;
+  font: 700 10px monospace;
+  color: #e8d5b0;
+  background: rgba(50, 28, 10, 0.8);
+}
+
+.ocp-normal-card-meta {
+  margin: 0 0 5px;
+  font-size: 9px;
+  color: #b8a88a;
+}
+
+.ocp-normal-card-list {
+  max-height: 80px;
+}
+
+.ocp-normal-card-row {
+  font-size: 9px;
+  color: #d4b896;
+  padding: 2px 0;
 }
 
 .ocp-toolbar {
