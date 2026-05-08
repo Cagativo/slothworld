@@ -20,7 +20,8 @@ import { registerTaskEngineCallerKey, runInTaskEngineExecutionContext } from './
 import {
   DEFAULT_WORKER_CAPABILITY_POLICY,
   canWorkerClaimTaskType,
-  normalizeWorkerCapabilityPolicy
+  normalizeWorkerCapabilityPolicy,
+  resolveWorkerForTaskType
 } from './workerCapabilityPolicy.js';
 const DEFAULT_NOW = () => Date.now();
 
@@ -129,13 +130,40 @@ export function createTaskEngine(options = {}) {
     }
   }
 
+  function hasWorkerRestriction(taskType) {
+    return Boolean(taskType && workerCapabilityPolicy.has(taskType));
+  }
+
+  function resolveInitialAssignedAgentId(task) {
+    if (hasWorkerRestriction(task && task.type)) {
+      return null;
+    }
+
+    return resolveAssignedAgentId(task);
+  }
+
   function resolveClaimingWorkerId(task, workerId) {
-    return (typeof workerId === 'string' && workerId.trim() ? workerId.trim() : null)
-      || resolveAssignedAgentId(task);
+    const explicitWorkerId = typeof workerId === 'string' && workerId.trim()
+      ? workerId.trim()
+      : null;
+    const taskType = task && task.type;
+
+    if (explicitWorkerId) {
+      return canWorkerClaimTaskType(workerCapabilityPolicy, explicitWorkerId, taskType)
+        ? explicitWorkerId
+        : null;
+    }
+
+    if (hasWorkerRestriction(taskType)) {
+      return resolveWorkerForTaskType(taskType, resolveAssignedAgentId(task), workerCapabilityPolicy);
+    }
+
+    return resolveAssignedAgentId(task);
   }
 
   function canClaimTask(task, workerId) {
-    return canWorkerClaimTaskType(workerCapabilityPolicy, workerId, task && task.type);
+    return Boolean(workerId || !hasWorkerRestriction(task && task.type))
+      && canWorkerClaimTaskType(workerCapabilityPolicy, workerId, task && task.type);
   }
 
   function canRetry(task, result) {
@@ -159,7 +187,7 @@ export function createTaskEngine(options = {}) {
 
     const stored = {
       ...task,
-      assignedAgentId: resolveAssignedAgentId(task),
+      assignedAgentId: resolveInitialAssignedAgentId(task),
       status: 'created',
       attempts: 0,
       maxRetries: typeof task.maxRetries === 'number' ? Math.max(0, task.maxRetries) : 3,
@@ -312,8 +340,9 @@ export function createTaskEngine(options = {}) {
     task.status = 'executing';
     task.attempts += 1;
     task.executedAt = now();
-      // Preserve ownership set at TASK_CLAIMED; only re-resolve if still unset.
-      task.assignedAgentId = task.assignedAgentId || resolveAssignedAgentId(task);
+      // Preserve ownership set at TASK_CLAIMED; only unrestricted tasks may
+      // fall back to pre-existing payload ownership.
+      task.assignedAgentId = task.assignedAgentId || resolveInitialAssignedAgentId(task);
 
     emit('TASK_EXECUTE_STARTED', task.id, {
       attempts: task.attempts,
@@ -408,7 +437,9 @@ export function createTaskEngine(options = {}) {
       throw new Error('ENGINE_ENFORCEMENT_VIOLATION');
     }
 
-    task.assignedAgentId = resolveAssignedAgentId(task);
+    task.assignedAgentId = hasWorkerRestriction(task.type)
+      ? task.assignedAgentId
+      : resolveAssignedAgentId(task);
 
     task.lastResult = task.executionRecord.result;
 

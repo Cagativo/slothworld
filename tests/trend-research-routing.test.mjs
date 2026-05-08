@@ -50,8 +50,53 @@ test('TaskEngine routing: TREND_RESEARCH can be claimed by research-capable work
   assert.equal(claimedEvent.payload.workerId, TREND_RESEARCH_WORKER_ID);
 });
 
-test('TaskEngine routing: TREND_RESEARCH does not use channelId as worker fallback', () => {
-  const engine = createTaskEngine();
+test('TaskEngine routing: TREND_RESEARCH with random payload.workerId claims as research worker', () => {
+  const emittedEvents = [];
+  const engine = createTaskEngine({
+    emitEvent: (event) => emittedEvents.push(event)
+  });
+
+  engine.enqueueTask({
+    id: 'trend-random-worker-payload',
+    type: 'TREND_RESEARCH',
+    payload: { keyword: 'hoodie', workerId: 'random-worker' }
+  });
+
+  const result = engine.claimTask('trend-random-worker-payload');
+  const claimedEvent = emittedEvents.find((event) => event.event === 'TASK_CLAIMED');
+
+  assert.ok(result);
+  assert.equal(result.assignedAgentId, TREND_RESEARCH_WORKER_ID);
+  assert.equal(claimedEvent.payload.assignedAgentId, TREND_RESEARCH_WORKER_ID);
+  assert.equal(claimedEvent.payload.workerId, TREND_RESEARCH_WORKER_ID);
+});
+
+test('TaskEngine routing: TREND_RESEARCH with random payload.agentId claims as research worker', () => {
+  const emittedEvents = [];
+  const engine = createTaskEngine({
+    emitEvent: (event) => emittedEvents.push(event)
+  });
+
+  engine.enqueueTask({
+    id: 'trend-random-agent-payload',
+    type: 'TREND_RESEARCH',
+    payload: { keyword: 'hoodie', agentId: 'random-agent' }
+  });
+
+  const result = engine.claimTask('trend-random-agent-payload');
+  const claimedEvent = emittedEvents.find((event) => event.event === 'TASK_CLAIMED');
+
+  assert.ok(result);
+  assert.equal(result.assignedAgentId, TREND_RESEARCH_WORKER_ID);
+  assert.equal(claimedEvent.payload.assignedAgentId, TREND_RESEARCH_WORKER_ID);
+  assert.equal(claimedEvent.payload.workerId, TREND_RESEARCH_WORKER_ID);
+});
+
+test('TaskEngine routing: TREND_RESEARCH with channelId only claims as research worker', () => {
+  const emittedEvents = [];
+  const engine = createTaskEngine({
+    emitEvent: (event) => emittedEvents.push(event)
+  });
 
   engine.enqueueTask({
     id: 'trend-channel-not-worker',
@@ -60,24 +105,12 @@ test('TaskEngine routing: TREND_RESEARCH does not use channelId as worker fallba
   });
 
   const result = engine.claimTask('trend-channel-not-worker');
-
-  assert.equal(result, null);
-  assert.equal(engine.getTask('trend-channel-not-worker').status, 'queued');
-});
-
-test('TaskEngine routing: TREND_RESEARCH can use configured default research worker', () => {
-  const engine = createTaskEngine();
-
-  engine.enqueueTask({
-    id: 'trend-default-worker',
-    type: 'TREND_RESEARCH',
-    payload: { keyword: 'hoodie', workerId: TREND_RESEARCH_WORKER_ID }
-  });
-
-  const result = engine.claimTask('trend-default-worker');
+  const claimedEvent = emittedEvents.find((event) => event.event === 'TASK_CLAIMED');
 
   assert.ok(result);
   assert.equal(result.assignedAgentId, TREND_RESEARCH_WORKER_ID);
+  assert.equal(claimedEvent.payload.assignedAgentId, TREND_RESEARCH_WORKER_ID);
+  assert.equal(claimedEvent.payload.workerId, TREND_RESEARCH_WORKER_ID);
 });
 
 test('TaskEngine routing: generic task behavior still works', () => {

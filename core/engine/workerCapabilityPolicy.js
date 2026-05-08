@@ -6,6 +6,14 @@ export const DEFAULT_WORKER_CAPABILITY_POLICY = Object.freeze({
   [TASK_TYPE_TREND_RESEARCH]: Object.freeze([TREND_RESEARCH_WORKER_ID])
 });
 
+export function getDefaultWorkerForTaskType(taskType) {
+  if (taskType === TASK_TYPE_TREND_RESEARCH) {
+    return TREND_RESEARCH_WORKER_ID;
+  }
+
+  return null;
+}
+
 export function normalizeWorkerCapabilityPolicy(policy = DEFAULT_WORKER_CAPABILITY_POLICY) {
   const normalized = new Map();
 
@@ -38,4 +46,22 @@ export function canWorkerClaimTaskType(policy, workerId, taskType) {
   }
 
   return typeof workerId === 'string' && policy.get(taskType).has(workerId.trim());
+}
+
+export function isWorkerEligibleForTaskType(workerId, taskType, policy = DEFAULT_WORKER_CAPABILITY_POLICY) {
+  const normalizedPolicy = policy instanceof Map
+    ? policy
+    : normalizeWorkerCapabilityPolicy(policy);
+  return canWorkerClaimTaskType(normalizedPolicy, workerId, taskType);
+}
+
+export function resolveWorkerForTaskType(taskType, candidateWorkerId, policy = DEFAULT_WORKER_CAPABILITY_POLICY) {
+  const candidate = typeof candidateWorkerId === 'string' && candidateWorkerId.trim()
+    ? candidateWorkerId.trim()
+    : null;
+  if (candidate && isWorkerEligibleForTaskType(candidate, taskType, policy)) {
+    return candidate;
+  }
+
+  return getDefaultWorkerForTaskType(taskType);
 }

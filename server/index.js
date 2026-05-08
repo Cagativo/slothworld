@@ -24,7 +24,9 @@ import { createTaskExecutionWorker } from '../core/workers/taskExecutionWorker.j
 import { createDiscordNotificationWorker } from '../core/workers/discordNotificationWorker.js';
 import { createTaskEngine } from '../core/engine/taskEngine.js';
 import {
-  TREND_RESEARCH_WORKER_ID
+  TREND_RESEARCH_WORKER_ID,
+  getDefaultWorkerForTaskType,
+  isWorkerEligibleForTaskType
 } from '../core/engine/workerCapabilityPolicy.js';
 import { getCanonicalPipelineLabel, warnLegacyExecutionPath } from '../core/execution-pipeline.js';
 import {
@@ -65,8 +67,7 @@ const DISCORD_COMMAND_PREFIX = '!';
 const TREND_RESEARCH_DEFAULT_CHANNEL_ID = '1491500223288184964';
 const WORKER_CAPABILITY_POLICY = Object.freeze({
   [TASK_TYPE_TREND_RESEARCH]: Object.freeze([
-    TREND_RESEARCH_WORKER_ID,
-    'worker-trend-1'
+    TREND_RESEARCH_WORKER_ID
   ])
 });
 const TASK_CREATION_WINDOW_MS = 10_000;
@@ -861,13 +862,25 @@ function normalizeTask(input) {
 
     // Ensure workerId is always set for TREND_RESEARCH tasks so the engine
     // can establish ownership at TASK_CLAIMED with a research-capable worker.
-    if (
-      !normalizedPayload.workerId
-      && !normalizedPayload.agentId
-      && !normalizedPayload.assignedAgentId
-    ) {
-      normalizedPayload.workerId = TREND_RESEARCH_WORKER_ID;
+    const incomingWorkerId =
+      typeof normalizedPayload.workerId === 'string' && normalizedPayload.workerId.trim()
+        ? normalizedPayload.workerId.trim()
+        : typeof normalizedPayload.agentId === 'string' && normalizedPayload.agentId.trim()
+          ? normalizedPayload.agentId.trim()
+          : typeof normalizedPayload.assignedAgentId === 'string' && normalizedPayload.assignedAgentId.trim()
+            ? normalizedPayload.assignedAgentId.trim()
+            : null;
+    const canonicalWorkerId = getDefaultWorkerForTaskType(TASK_TYPE_TREND_RESEARCH) || TREND_RESEARCH_WORKER_ID;
+    const eligibleIncomingWorker = incomingWorkerId
+      && isWorkerEligibleForTaskType(incomingWorkerId, TASK_TYPE_TREND_RESEARCH, WORKER_CAPABILITY_POLICY);
+    if (incomingWorkerId && !eligibleIncomingWorker) {
+      delete normalizedPayload.workerId;
+      delete normalizedPayload.agentId;
+      delete normalizedPayload.assignedAgentId;
     }
+    normalizedPayload.agentId = canonicalWorkerId;
+    normalizedPayload.assignedAgentId = canonicalWorkerId;
+    normalizedPayload.workerId = canonicalWorkerId;
   }
 
   return {
@@ -1308,7 +1321,9 @@ async function autoExecuteAndAck(taskId) {
       source: taskSource,
       engineStatusAfterEnsure: ensuredTask ? ensuredTask.status : null
     });
-    const claimingWorkerId = getTrendResearchAssignedAgentId(existing, null);
+    const claimingWorkerId = existing.type === TASK_TYPE_TREND_RESEARCH
+      ? (getDefaultWorkerForTaskType(TASK_TYPE_TREND_RESEARCH) || TREND_RESEARCH_WORKER_ID)
+      : getTrendResearchAssignedAgentId(existing, null);
     const taskResult = await taskEngine.executeTask(taskId, { workerId: claimingWorkerId || undefined });
     const execution = mapTaskResultToExecution(taskResult);
     const executionCompletedAt = Date.now();
