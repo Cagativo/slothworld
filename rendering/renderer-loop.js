@@ -33,6 +33,7 @@ let _frame = 0;
 let _inspectionBindingsAttached = false;
 let _latestComponents = [];
 let _latestEntityPositions = new Map();
+let _latestWorkstationSnapshots = null;
 
 function eventToCanvasPoint(event) {
   const rect = canvas.getBoundingClientRect();
@@ -52,6 +53,7 @@ function currentHitTestOptions() {
     bakedBackground: isBakedBackgroundActive(loadedAssets),
     canvasSize: canvas ? { width: canvas.width, height: canvas.height } : undefined,
     hotspots: getCalibratedHotspots(),
+    stationSnapshots: _latestWorkstationSnapshots,
   };
 }
 
@@ -152,12 +154,17 @@ export function renderFrame(renderView) {
   const scene      = buildWorldScene(renderView);
   assertEventDriven(scene);
   const components = toRenderableComponents(scene);
+  _latestWorkstationSnapshots = renderView?.metadata?.workstationSnapshots && typeof renderView.metadata.workstationSnapshots === 'object'
+    ? renderView.metadata.workstationSnapshots
+    : null;
   const entityPositions = buildEntityPositionMap(components);
   _latestComponents = components;
   _latestEntityPositions = entityPositions;
   const hitTestOptions = currentHitTestOptions();
   const calibratedHotspots = getCalibratedHotspots();
-  const workstationHotspotComponents = buildWorkstationHotspotComponents(calibratedHotspots, components);
+  const workstationHotspotComponents = buildWorkstationHotspotComponents(calibratedHotspots, components, {
+    stationSnapshots: _latestWorkstationSnapshots,
+  });
   hitTestOptions.stationComponents = workstationHotspotComponents;
   refreshInspectionSelection(canvasInspectionState, components, entityPositions, hitTestOptions);
 

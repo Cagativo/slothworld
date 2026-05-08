@@ -133,6 +133,42 @@ function genericActiveLine(summary, metadata) {
   return `${active} ${label} ${plural(active, 'active', 'active')}`;
 }
 
+function snapshotCurrentWorkLines(snapshot, metadata) {
+  if (!snapshot || !snapshot.currentWork || snapshot.currentWork.count <= 0) return [];
+  const countValue = Number.isFinite(snapshot.currentWork.count) ? snapshot.currentWork.count : 0;
+  const label = metadata?.statusLabel || 'task';
+  const lines = [`${countValue} ${label} active`];
+  const firstItem = Array.isArray(snapshot.currentWork.items) ? snapshot.currentWork.items[0] : null;
+  if (firstItem && typeof firstItem.summary === 'string' && firstItem.summary.trim()) {
+    lines.push(firstItem.summary.trim());
+  } else if (firstItem && typeof firstItem.title === 'string' && firstItem.title.trim()) {
+    lines.push(firstItem.title.trim());
+  }
+  return lines;
+}
+
+function snapshotLastResultLines(snapshot) {
+  if (!snapshot || !snapshot.lastResult) return [];
+  const lines = [];
+  const status = snapshot.lastResult.status ? titleCaseToken(snapshot.lastResult.status) : 'Completed';
+  lines.push(`Last result: ${status}`);
+  if (typeof snapshot.lastResult.summary === 'string' && snapshot.lastResult.summary.trim()) {
+    lines.push(snapshot.lastResult.summary.trim());
+  } else if (typeof snapshot.lastResult.title === 'string' && snapshot.lastResult.title.trim()) {
+    lines.push(snapshot.lastResult.title.trim());
+  }
+  return lines;
+}
+
+function buildSnapshotPreferredLines(component, metadata) {
+  const snapshot = component?.stationSnapshot && typeof component.stationSnapshot === 'object'
+    ? component.stationSnapshot
+    : null;
+  const currentLines = snapshotCurrentWorkLines(snapshot, metadata);
+  if (currentLines.length > 0) return currentLines;
+  return snapshotLastResultLines(snapshot);
+}
+
 function buildStatusLines(hotspotId, summary, metadata) {
   const lines = [];
 
@@ -177,7 +213,10 @@ export function buildWorkstationPopoverViewModel(component) {
   const hotspotId = component?.id || null;
   const metadata = getWorkstationSemanticMetadata(hotspotId);
   const summary = component?.summary && typeof component.summary === 'object' ? component.summary : {};
-  const lines = buildStatusLines(hotspotId, summary, metadata);
+  const snapshotLines = buildSnapshotPreferredLines(component, metadata);
+  const lines = snapshotLines.length > 0
+    ? snapshotLines.slice(0, MAX_BODY_LINES)
+    : buildStatusLines(hotspotId, summary, metadata);
   const fallback = metadata?.idleText || metadata?.purpose || component?.purpose || 'Workstation is idle';
 
   if (lines.length === 0) pushLine(lines, fallback);
