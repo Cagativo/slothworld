@@ -140,6 +140,14 @@ canvas {
   height: auto;
 }
 
+#game.slothworld-cursor {
+  cursor: url("./assets/slothworldassets/arrow.png") 0 0, auto;
+}
+
+#game.slothworld-cursor.slothworld-cursor-clicking {
+  cursor: url("./assets/slothworldassets/arrowClick.png") 0 0, pointer;
+}
+
 /* ─────────────────────────────────────────────────────────────────
    Operator Control Panel
    Surface: warmest/lightest of the three panels — primary ops

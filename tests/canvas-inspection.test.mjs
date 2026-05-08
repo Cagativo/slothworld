@@ -27,6 +27,7 @@ import {
 } from '../rendering/connection-renderer.js';
 import { renderWorldCompositionLayer } from '../rendering/world-background-composition.js';
 import { renderUIOverlayLayer } from '../rendering/world-scene-asset-renderer.js';
+import { initCanvasCursor } from '../rendering/canvas-cursor.js';
 import {
   WORKSTATION_HOTSPOTS,
   buildWorkstationHotspotComponents,
@@ -58,6 +59,36 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
+
+function createEventTargetMock() {
+  const listeners = new Map();
+  return {
+    addEventListener(type, handler) {
+      if (!listeners.has(type)) listeners.set(type, []);
+      listeners.get(type).push(handler);
+    },
+    removeEventListener(type, handler) {
+      const handlers = listeners.get(type) || [];
+      listeners.set(type, handlers.filter((candidate) => candidate !== handler));
+    },
+    dispatch(type) {
+      for (const handler of listeners.get(type) || []) handler({ type });
+    },
+  };
+}
+
+function createCursorCanvasMock() {
+  const target = createEventTargetMock();
+  const classes = new Set();
+  return {
+    ...target,
+    classList: {
+      add(value) { classes.add(value); },
+      remove(value) { classes.delete(value); },
+      contains(value) { return classes.has(value); },
+    },
+  };
+}
 
 const COMPONENTS = Object.freeze([
   Object.freeze({
@@ -146,6 +177,30 @@ test('canvas inspection: hit-test returns stable result for known component posi
   assert.equal(hit.entityId, 'task-1');
   assert.equal(hit.componentType, 'task-chip');
   assert.deepStrictEqual(hit.bounds, taskBounds);
+});
+
+test('canvas cursor: toggles custom cursor classes on click lifecycle', () => {
+  const canvas = createCursorCanvasMock();
+  const win = createEventTargetMock();
+
+  const cleanup = initCanvasCursor(canvas, win);
+
+  assert.equal(canvas.classList.contains('slothworld-cursor'), true);
+  assert.equal(canvas.classList.contains('slothworld-cursor-clicking'), false);
+
+  canvas.dispatch('pointerdown');
+  assert.equal(canvas.classList.contains('slothworld-cursor-clicking'), true);
+
+  canvas.dispatch('pointerup');
+  assert.equal(canvas.classList.contains('slothworld-cursor-clicking'), false);
+
+  canvas.dispatch('mousedown');
+  assert.equal(canvas.classList.contains('slothworld-cursor-clicking'), true);
+
+  win.dispatch('blur');
+  assert.equal(canvas.classList.contains('slothworld-cursor-clicking'), false);
+
+  cleanup();
 });
 
 test('canvas inspection: normal mode hits task-chip but excludes default agent sprites', () => {

@@ -16,6 +16,7 @@ import { isRenderDebugEnabled, traceRenderBoot } from './debug.js';
 import { loadedAssets } from './assets.js';
 import { isBakedBackgroundActive, selectLoadedBackground } from './background-config.js';
 import { renderHotspotHighlights } from './hotspot-highlight-renderer.js';
+import { initCanvasCursor } from './canvas-cursor.js';
 import {
   getCalibratedHotspots,
   handleHotspotCalibrationPointerDown,
@@ -62,13 +63,14 @@ export function initRenderer() {
     return;
   }
 
+  initCanvasCursor(canvas);
+
   canvas.addEventListener('mousemove', (event) => {
     const point = eventToCanvasPoint(event);
     if (isHotspotCalibrationEditMode() && handleHotspotCalibrationPointerMove(point, {
       altKey: event.altKey,
       hotspots: getCalibratedHotspots(),
     })) {
-      canvas.style.cursor = 'grabbing';
       event.preventDefault?.();
       return;
     }
@@ -80,7 +82,6 @@ export function initRenderer() {
       _latestEntityPositions,
       hitTestOptions
     );
-    canvas.style.cursor = hit ? 'pointer' : 'default';
   });
 
   canvas.addEventListener('mousedown', (event) => {
@@ -90,15 +91,12 @@ export function initRenderer() {
       altKey: event.altKey,
       hotspots: getCalibratedHotspots(),
     })) {
-      canvas.style.cursor = 'grabbing';
       event.preventDefault?.();
     }
   });
 
   canvas.addEventListener('mouseup', () => {
-    if (handleHotspotCalibrationPointerUp()) {
-      canvas.style.cursor = 'pointer';
-    }
+    handleHotspotCalibrationPointerUp();
   });
 
   canvas.addEventListener('mouseleave', () => {
@@ -109,7 +107,6 @@ export function initRenderer() {
       _latestEntityPositions,
       currentHitTestOptions()
     );
-    canvas.style.cursor = 'default';
   });
 
   canvas.addEventListener('click', (event) => {
