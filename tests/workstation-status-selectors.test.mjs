@@ -145,3 +145,67 @@ test('workstation status selectors: TREND_RESEARCH claimed work stays at researc
   assert.equal(snapshots.research_desk.currentWork.items[0].taskId, 'task-research-claimed');
   assert.equal(snapshots.engine_core.currentWork.items.some((item) => item.taskId === 'task-research-claimed'), false);
 });
+
+test('workstation status selectors: research_desk snapshot includes trend result rows', () => {
+  const snapshots = buildWorkstationStatusSnapshots({
+    tasks: [
+      { id: 'task-research-done', title: 'Trend report', type: 'TREND_RESEARCH', status: 'completed', updatedAt: 500 },
+    ],
+    agents: [
+      {
+        id: 'trend-research-worker',
+        trendPanelState: {
+          taskId: 'task-research-done',
+          keyword: 'cozy',
+          results: [
+            { item: 'Tree lamp', score: 0.95 },
+            { item: 'Moss shelf', score: 0.82 },
+          ],
+        },
+      },
+    ],
+  });
+
+  assert.equal(snapshots.research_desk.trendResult.taskId, 'task-research-done');
+  assert.equal(snapshots.research_desk.trendResult.keyword, 'cozy');
+  assert.deepEqual(
+    snapshots.research_desk.trendResult.rows.map((row) => row.item),
+    ['Tree lamp', 'Moss shelf']
+  );
+  assert.ok(Object.isFrozen(snapshots.research_desk.trendResult.rows));
+  assert.ok(!('actions' in snapshots.research_desk));
+  assert.ok(!('buttons' in snapshots.research_desk));
+});
+
+test('workstation popover: selected Research Desk renders trend result rows', () => {
+  const hotspot = WORKSTATION_HOTSPOTS.find((candidate) => candidate.id === 'researchMonitorHotspot');
+  const component = componentForHotspot(hotspot, [], {
+    stationSnapshots: {
+      research_desk: {
+        stationId: 'research_desk',
+        label: 'Research Desk',
+        currentWork: { count: 0, items: [] },
+        lastResult: null,
+        latestFailure: null,
+        trendResult: {
+          taskId: 'task-research-done',
+          keyword: 'cozy',
+          rows: [
+            { item: 'Tree lamp', score: 0.95 },
+            { item: 'Moss shelf', score: 0.82 },
+          ],
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(component.popoverViewModel.lines, ['Top trends: cozy', 'Tree lamp 0.95']);
+  assert.equal(component.inspectionViewModel.statusLabel, 'Trend results');
+  assert.ok(component.inspectionViewModel.lines.includes('Trend: cozy'));
+  assert.ok(component.inspectionViewModel.taskSummaries.includes('Tree lamp 0.95'));
+  assert.ok(component.inspectionViewModel.taskSummaries.includes('Moss shelf 0.82'));
+  assert.ok(!('actions' in component.popoverViewModel));
+  assert.ok(!('buttons' in component.popoverViewModel));
+  assert.ok(!('actions' in component.inspectionViewModel));
+  assert.ok(!('buttons' in component.inspectionViewModel));
+});

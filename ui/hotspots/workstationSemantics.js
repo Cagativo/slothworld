@@ -160,12 +160,43 @@ function snapshotLastResultLines(snapshot) {
   return lines;
 }
 
+function trendResultRows(snapshot, limit = 3) {
+  const trendResult = snapshot?.trendResult && typeof snapshot.trendResult === 'object'
+    ? snapshot.trendResult
+    : null;
+  const rows = Array.isArray(trendResult?.rows) ? trendResult.rows : [];
+  return rows
+    .map((row) => {
+      const item = typeof row?.item === 'string' && row.item.trim() ? row.item.trim() : null;
+      if (!item) return null;
+      return Number.isFinite(row.score) ? `${item} ${row.score.toFixed(2)}` : item;
+    })
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function snapshotTrendResultLines(snapshot) {
+  const trendResult = snapshot?.trendResult && typeof snapshot.trendResult === 'object'
+    ? snapshot.trendResult
+    : null;
+  const rows = trendResultRows(snapshot, 1);
+  if (!trendResult || rows.length === 0) return [];
+  const keyword = typeof trendResult.keyword === 'string' && trendResult.keyword.trim()
+    ? trendResult.keyword.trim()
+    : 'latest scan';
+  return [`Top trends: ${keyword}`, rows[0]];
+}
+
 function buildSnapshotPreferredLines(component, metadata) {
   const snapshot = component?.stationSnapshot && typeof component.stationSnapshot === 'object'
     ? component.stationSnapshot
     : null;
   const currentLines = snapshotCurrentWorkLines(snapshot, metadata);
   if (currentLines.length > 0) return currentLines;
+  const trendLines = metadata?.stationKey === 'research_desk'
+    ? snapshotTrendResultLines(snapshot)
+    : [];
+  if (trendLines.length > 0) return trendLines;
   return snapshotLastResultLines(snapshot);
 }
 
@@ -396,7 +427,22 @@ function idleInspectionLine(metadata) {
 
 function buildInspectionLines(component, metadata, visualModelValue, taskSummaries) {
   const summary = component?.summary || {};
+  const snapshot = component?.stationSnapshot && typeof component.stationSnapshot === 'object'
+    ? component.stationSnapshot
+    : null;
+  const trendRows = metadata?.stationKey === 'research_desk'
+    ? trendResultRows(snapshot, MAX_TASK_SUMMARIES)
+    : [];
   const lines = [];
+
+  if (trendRows.length > 0) {
+    const keyword = typeof snapshot?.trendResult?.keyword === 'string' && snapshot.trendResult.keyword.trim()
+      ? snapshot.trendResult.keyword.trim()
+      : 'latest scan';
+    pushInspectionLine(lines, `Trend: ${keyword}`);
+    return lines.slice(0, MAX_INSPECTION_LINES);
+  }
+
   if (visualModelValue.visualState === 'idle' && taskSummaries.length === 0) {
     pushInspectionLine(lines, idleInspectionLine(metadata));
     return lines.slice(0, MAX_INSPECTION_LINES);
@@ -432,14 +478,22 @@ export function buildWorkstationInspectionViewModel(component) {
   const metadata = getWorkstationSemanticMetadata(hotspotId);
   const visualState = component?.visualStateViewModel || buildWorkstationVisualStateViewModel(component);
   const summary = component?.summary && typeof component.summary === 'object' ? component.summary : {};
-  const taskSummaries = buildTaskSummaries(component?.stationWorkItems, metadata);
+  const snapshot = component?.stationSnapshot && typeof component.stationSnapshot === 'object'
+    ? component.stationSnapshot
+    : null;
+  const trendRows = metadata?.stationKey === 'research_desk'
+    ? trendResultRows(snapshot, MAX_TASK_SUMMARIES)
+    : [];
+  const taskSummaries = trendRows.length > 0
+    ? trendRows
+    : buildTaskSummaries(component?.stationWorkItems, metadata);
   const lines = buildInspectionLines(component, metadata, visualState, taskSummaries);
 
   return Object.freeze({
     stationId: metadata?.stationKey || hotspotId,
     hotspotId,
     title: metadata?.title || component?.title || component?.label || 'Workstation',
-    statusLabel: statusLabelForInspection(hotspotId, visualState, summary),
+    statusLabel: trendRows.length > 0 ? 'Trend results' : statusLabelForInspection(hotspotId, visualState, summary),
     tone: metadata?.tone || 'quiet',
     lines: Object.freeze(lines.slice(0, MAX_INSPECTION_LINES)),
     taskSummaries: Object.freeze(taskSummaries.slice(0, MAX_TASK_SUMMARIES)),

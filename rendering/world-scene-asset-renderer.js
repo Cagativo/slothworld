@@ -971,6 +971,12 @@ export function renderUIOverlayLayer(ctx, components, entityPositions, options =
   const bootPolicy = options.bootPolicy
     || (options.bakedBackground === true ? BACKGROUND_BOOT_POLICY.BAKED_READY : getBackgroundBootPolicy(loadedAssets, options));
   const allowPendingOverlay = options.allowOverlayDuringBakedPending === true || options.debug === true;
+  const researchTrendTaskId = options.stationSnapshots
+    && options.stationSnapshots.research_desk
+    && options.stationSnapshots.research_desk.trendResult
+    && typeof options.stationSnapshots.research_desk.trendResult.taskId === 'string'
+    ? options.stationSnapshots.research_desk.trendResult.taskId
+    : null;
 
   // ── Pass 1: collect panels currently reported by selectors ───────────────
   // taskId → { results, keyword, agentX, agentY, status }
@@ -988,6 +994,7 @@ export function renderUIOverlayLayer(ctx, components, entityPositions, options =
       ? panel.taskId
       : null;
     if (!panelTaskId) continue;
+    if (researchTrendTaskId && panelTaskId === researchTrendTaskId) continue;
 
     const panelResults = Array.isArray(panel.results) ? panel.results : [];
     const normalizedItems = panelResults

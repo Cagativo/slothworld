@@ -192,6 +192,7 @@ export function renderFrame(renderView) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   renderAllLayers(ctx, components, _frame, {
     calibration: isHotspotCalibrationEnabled(),
+    stationSnapshots: _latestWorkstationSnapshots,
   });
   traceRenderBoot('renderer-loop.renderFrame:after-renderAllLayers', {
     ctx,

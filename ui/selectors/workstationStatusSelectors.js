@@ -151,6 +151,58 @@ function toFailureModel(task) {
   });
 }
 
+function normalizeTrendRows(results) {
+  return safeArray(results)
+    .map((entry) => {
+      if (entry && typeof entry === 'object') {
+        const item = safeString(entry.item);
+        if (!item) return null;
+        return Object.freeze({
+          item,
+          score: Number.isFinite(entry.score) ? Number(entry.score) : null,
+        });
+      }
+
+      const item = safeString(entry);
+      return item ? Object.freeze({ item, score: null }) : null;
+    })
+    .filter(Boolean);
+}
+
+function buildTrendResultModel(agent, tasksById) {
+  const panel = agent?.trendPanelState && typeof agent.trendPanelState === 'object'
+    ? agent.trendPanelState
+    : null;
+  if (!panel) return null;
+
+  const taskId = safeString(panel.taskId);
+  const rows = normalizeTrendRows(panel.results);
+  if (!taskId || rows.length === 0) return null;
+
+  const task = tasksById.get(taskId) || null;
+  return Object.freeze({
+    taskId,
+    keyword: safeString(panel.keyword),
+    status: normalizeStatus(panel.status || task?.status),
+    updatedAt: safeTimestamp(panel.lastUpdated) ?? safeTimestamp(task?.updatedAt),
+    rows: Object.freeze(rows.slice(0, 5)),
+  });
+}
+
+function latestTrendResult(agents, tasksById) {
+  const candidates = safeArray(agents)
+    .map((agent) => buildTrendResultModel(agent, tasksById))
+    .filter(Boolean)
+    .sort((a, b) => {
+      const at = safeTimestamp(a?.updatedAt) ?? -1;
+      const bt = safeTimestamp(b?.updatedAt) ?? -1;
+      if (at !== bt) return bt - at;
+      return String(a?.taskId || '').localeCompare(String(b?.taskId || ''));
+    });
+
+  return candidates[0] || null;
+}
+
 function sortByUpdatedDesc(a, b) {
   const at = safeTimestamp(a?.updatedAt) ?? -1;
   const bt = safeTimestamp(b?.updatedAt) ?? -1;
@@ -165,6 +217,7 @@ function emptySnapshot(def) {
     currentWork: { count: 0, items: [] },
     lastResult: null,
     latestFailure: null,
+    trendResult: null,
   };
 }
 
@@ -178,6 +231,7 @@ function freezeSnapshot(snapshot) {
     }),
     lastResult: snapshot.lastResult || null,
     latestFailure: snapshot.latestFailure || null,
+    trendResult: snapshot.trendResult || null,
   });
 }
 
@@ -191,12 +245,12 @@ function freezeSnapshot(snapshot) {
  *   currentWork: { count: number, items: ReadonlyArray<object> },
  *   lastResult: { title: string, status: string, summary: string, taskId: string|null, completedAt: number|null } | null,
  *   latestFailure: { title: string, summary: string, taskId: string|null } | null,
+ *   trendResult: { taskId: string, keyword: string|null, status: string, updatedAt: number|null, rows: ReadonlyArray<object> } | null,
  * }>>}
  */
 export function buildWorkstationStatusSnapshots(input = {}) {
   const tasks = safeArray(input.tasks);
-  // Agents are accepted for selector-shape parity, but snapshots remain task-derived.
-  void safeArray(input.agents);
+  const agents = safeArray(input.agents);
 
   const byStation = new Map();
   for (const def of STATION_DEFS) {
@@ -204,7 +258,10 @@ export function buildWorkstationStatusSnapshots(input = {}) {
   }
 
   const tasksByStation = new Map();
+  const tasksById = new Map();
   for (const task of tasks) {
+    const taskId = safeString(task?.id);
+    if (taskId) tasksById.set(taskId, task);
     const stationId = taskToStationId(task);
     if (!tasksByStation.has(stationId)) tasksByStation.set(stationId, []);
     tasksByStation.get(stationId).push(task);
@@ -271,6 +328,9 @@ export function buildWorkstationStatusSnapshots(input = {}) {
     };
     snapshot.lastResult = terminal.length > 0 ? toResultModel(terminal[0]) : null;
     snapshot.latestFailure = failed.length > 0 ? toFailureModel(failed[0]) : null;
+    if (def.stationId === 'research_desk') {
+      snapshot.trendResult = latestTrendResult(agents, tasksById);
+    }
   }
 
   const result = {};

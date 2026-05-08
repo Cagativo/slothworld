@@ -109,6 +109,16 @@ function taskResultTarget(component, entityPositions) {
   );
 }
 
+function stationOwnsTrendResult(stationComponents, taskId) {
+  if (!taskId || !Array.isArray(stationComponents)) return false;
+  return stationComponents.some((component) => {
+    const snapshot = component?.stationSnapshot;
+    return component?.id === 'researchMonitorHotspot'
+      && snapshot?.trendResult
+      && snapshot.trendResult.taskId === taskId;
+  });
+}
+
 function validAgentInspectionViewModel(model) {
   return Boolean(model
     && typeof model === 'object'
@@ -155,9 +165,14 @@ export function buildInteractionTargets(components, options = {}) {
   const targets = [];
   const entityPositions = options.entityPositions || null;
   const debug = options.debug === true;
+  const stationComponents = Array.isArray(options.stationComponents) ? options.stationComponents : [];
 
   for (const component of safeComponents) {
     if (!component || component.componentType !== 'agent-sprite') continue;
+    const panelTaskId = typeof component.trendPanelState?.taskId === 'string'
+      ? component.trendPanelState.taskId
+      : null;
+    if (stationOwnsTrendResult(stationComponents, panelTaskId)) continue;
     const result = taskResultTarget(component, entityPositions);
     if (result) targets.push(result);
   }
@@ -173,7 +188,6 @@ export function buildInteractionTargets(components, options = {}) {
   }
 
   const hotspots = Array.isArray(options.hotspots) ? options.hotspots : [];
-  const stationComponents = Array.isArray(options.stationComponents) ? options.stationComponents : [];
   const stationById = new Map(stationComponents.map((component) => [component.id, component]));
   for (const hotspot of hotspots) {
     if (hotspot?.id) targets.push(stationTarget(hotspot, stationById.get(hotspot.id), options.canvasSize));
