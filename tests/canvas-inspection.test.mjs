@@ -1206,7 +1206,7 @@ test('canvas inspection: Research Desk result card wraps and clamps row text', (
   assert.ok(lines.every((line) => ctx.measureText(line).width <= 210));
 });
 
-test('canvas inspection: Research Desk result card stays popover sized', () => {
+test('canvas inspection: Research Desk result card stays compact tooltip sized', () => {
   const ctx = createMockContext();
   const layout = computeResearchCardLayout(ctx, {
     title: 'Research Desk',
@@ -1217,14 +1217,14 @@ test('canvas inspection: Research Desk result card stays popover sized', () => {
     ],
   });
 
-  assert.ok(layout.cardW >= 420);
-  assert.ok(layout.cardW <= 520);
-  assert.ok(layout.cardH >= 180);
-  assert.ok(layout.cardH <= 260);
-  assert.ok(layout.titleFontPx >= 24 && layout.titleFontPx <= 30);
-  assert.ok(layout.bodyFontPx >= 16 && layout.bodyFontPx <= 20);
-  assert.ok(layout.wrappedRows.length <= 3);
+  assert.ok(layout.cardW >= 320);
+  assert.ok(layout.cardW <= 360);
+  assert.ok(layout.cardH <= 190);
+  assert.ok(layout.titleFontPx >= 18 && layout.titleFontPx <= 22);
+  assert.ok(layout.bodyFontPx >= 12 && layout.bodyFontPx <= 14);
+  assert.ok(layout.wrappedRows.length <= 2);
   assert.ok(layout.wrappedRows.every((row) => row.lines.length <= 2));
+  assert.equal(layout.hasFooter, true);
   assert.ok(layout.cardX < 220, 'card should anchor near the Research Desk side of the scene');
 });
 
@@ -1273,7 +1273,8 @@ test('canvas inspection: hovered Research Desk renders polished analysis card', 
   assert.ok(textCalls.includes('Research Desk'));
   assert.ok(textCalls.some((text) => String(text).startsWith('Trend results:')));
   assert.ok(textCalls.some((text) => String(text).startsWith('Recommendation:')));
-  assert.ok(textCalls.some((text) => String(text).startsWith('Top signal:')));
+  assert.ok(textCalls.includes('Top signal ready'));
+  assert.ok(!textCalls.some((text) => String(text).startsWith('Top signal:')));
   assert.ok(!textCalls.some((text) => /TASK_|task-research|ollama_timeout/.test(String(text))));
   assert.ok(ctx.calls.some((call) => call[0] === 'ellipse'), 'leaf/bullet accents should render');
 });
@@ -1293,7 +1294,8 @@ test('canvas inspection: selected Research Desk renders polished analysis card',
   assert.ok(textCalls.includes('Research Desk'));
   assert.ok(textCalls.some((text) => String(text).startsWith('Trend results:')));
   assert.ok(textCalls.some((text) => String(text).startsWith('Recommendation:')));
-  assert.ok(textCalls.some((text) => String(text).startsWith('Top signal:')));
+  assert.ok(textCalls.includes('Top signal ready'));
+  assert.ok(!textCalls.some((text) => String(text).startsWith('Top signal:')));
   assert.ok(!textCalls.some((text) => /TASK_|task-research|ollama_timeout/.test(String(text))));
   assert.ok(ctx.calls.some((call) => call[0] === 'ellipse'), 'leaf/bullet accents should render');
 });
