@@ -1,5 +1,26 @@
 import { getGraphSnapshot } from './graph-snapshot.js';
 
+const LOCAL_BRAIN_DEFAULT_PROMPT = 'Reply with a short friendly hello from the local Slothworld brain.';
+const LOCAL_BRAIN_SYSTEM_PROMPT = 'You are a concise local assistant running inside Slothworld.';
+
+export function buildLocalBrainTaskPayload({ title = '', prompt = '' } = {}) {
+  const normalizedTitle = typeof title === 'string' ? title.trim() : '';
+  const normalizedPrompt = typeof prompt === 'string' && prompt.trim()
+    ? prompt.trim()
+    : LOCAL_BRAIN_DEFAULT_PROMPT;
+
+  return {
+    type: 'local_llm',
+    title: normalizedTitle || 'Local Brain Test',
+    payload: {
+      source: 'task_creator_panel',
+      prompt: normalizedPrompt,
+      system: LOCAL_BRAIN_SYSTEM_PROMPT,
+      model: ''
+    }
+  };
+}
+
 export function initTaskCreatorPanel() {
   const FIXED_DISCORD_CHANNEL_ID = '1491500223288184964';
 
@@ -22,6 +43,7 @@ export function initTaskCreatorPanel() {
                 <option value="discord">Discord</option>
                 <option value="shopify">Shopify</option>
                 <option value="trendresearch">TrendResearch</option>
+                <option value="local_llm">Local Brain Test</option>
               </select>
               <span class="tcp-chevron" aria-hidden="true">&#9662;</span>
             </div>
@@ -60,19 +82,20 @@ export function initTaskCreatorPanel() {
 
     function applyType(type) {
       const isTrendResearch = type === 'trendresearch';
+      const isLocalBrain = type === 'local_llm';
       const isDiscord = type === 'discord';
-      contentGroup.style.display = (isDiscord || isTrendResearch) ? '' : 'none';
+      contentGroup.style.display = (isDiscord || isTrendResearch || isLocalBrain) ? '' : 'none';
       channelGroup.style.display = isDiscord ? '' : 'none';
       if (selectWrap) {
         selectWrap.dataset.type = type;
       }
       if (contentLabel) {
-        contentLabel.textContent = isTrendResearch ? 'Keyword' : 'Message';
+        contentLabel.textContent = isTrendResearch ? 'Keyword' : (isLocalBrain ? 'Prompt' : 'Message');
       }
       if (contentTextarea) {
         contentTextarea.placeholder = isTrendResearch
           ? 'enter keyword e.g. fitness supplements\u2026'
-          : 'write message content\u2026';
+          : (isLocalBrain ? LOCAL_BRAIN_DEFAULT_PROMPT : 'write message content\u2026');
       }
     }
 
@@ -158,7 +181,7 @@ export function initTaskCreatorPanel() {
       const content = contentInput.value.trim();
       const channelId = FIXED_DISCORD_CHANNEL_ID;
 
-      if (!title && type !== 'trendresearch') {
+      if (!title && type !== 'trendresearch' && type !== 'local_llm') {
         statusDiv.textContent = 'Error: Title is required';
         statusDiv.className = 'tcp-status tcp-error';
         return;
@@ -210,6 +233,43 @@ export function initTaskCreatorPanel() {
         statusDiv.textContent = `Error: ${trendResult && trendResult.error ? trendResult.error : 'Task creation failed'}`;
         statusDiv.className = 'tcp-status tcp-error';
         return;
+      }
+
+      if (type === 'local_llm') {
+        try {
+          statusDiv.textContent = 'sending...';
+          statusDiv.className = 'tcp-status';
+
+          const localBrainResult = await window.controlAPI.injectTask(
+            buildLocalBrainTaskPayload({ title, prompt: content })
+          );
+
+          if (localBrainResult && localBrainResult.success) {
+            const taskId = localBrainResult && localBrainResult.data && localBrainResult.data.id
+              ? String(localBrainResult.data.id)
+              : null;
+            panelRuntime.pendingTaskId = taskId;
+
+            statusDiv.textContent = taskId
+              ? `waiting for engine... task ${taskId}`
+              : 'waiting for engine...';
+            statusDiv.className = 'tcp-status';
+            form.reset();
+            typeSelect.value = 'discord';
+            typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            channelIdInput.value = FIXED_DISCORD_CHANNEL_ID;
+            panel.classList.remove('is-dropdown-open');
+            return;
+          }
+
+          statusDiv.textContent = `Error: ${localBrainResult && localBrainResult.error ? localBrainResult.error : 'Task creation failed'}`;
+          statusDiv.className = 'tcp-status tcp-error';
+          return;
+        } catch (error) {
+          statusDiv.textContent = `Error: ${error.message}`;
+          statusDiv.className = 'tcp-status tcp-error';
+          return;
+        }
       }
 
       try {
