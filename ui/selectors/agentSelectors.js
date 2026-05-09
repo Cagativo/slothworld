@@ -148,7 +148,9 @@ function normalizeTrendAnalysis(analysis) {
           ? analysis.confidence.trim().toLowerCase()
           : null),
     provider: typeof analysis.provider === 'string' && analysis.provider.trim() ? analysis.provider.trim() : null,
-    model: typeof analysis.model === 'string' && analysis.model.trim() ? analysis.model.trim() : null
+    model: typeof analysis.model === 'string' && analysis.model.trim() ? analysis.model.trim() : null,
+    unavailable: analysis.unavailable === true,
+    reason: typeof analysis.reason === 'string' && analysis.reason.trim() ? analysis.reason.trim() : null
   };
 }
 

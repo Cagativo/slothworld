@@ -141,6 +141,8 @@ const SHIMMER_DURATION_MS = 1200;   // full shimmer cycle duration
 const STATUS_DOT_RADIUS = 4;        // px
 const STATUS_WORKING_COLOR = '#e8a838';
 const STATUS_DONE_COLOR = '#6daa45';
+const RESEARCH_CARD_MAX_ROWS = 3;
+const RESEARCH_CARD_MAX_LINES_PER_ROW = 2;
 const trendPanelUIState = new Map();
 
 /**
@@ -178,6 +180,197 @@ function truncateText(ctx, text, maxWidth) {
   }
 
   return truncated + ellipsis;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  const cr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + cr, y);
+  ctx.lineTo(x + w - cr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + cr);
+  ctx.lineTo(x + w, y + h - cr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - cr, y + h);
+  ctx.lineTo(x + cr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - cr);
+  ctx.lineTo(x, y + cr);
+  ctx.quadraticCurveTo(x, y, x + cr, y);
+  ctx.closePath();
+}
+
+function cleanCardText(value) {
+  return typeof value === 'string'
+    ? value.replace(/\s+/g, ' ').trim()
+    : '';
+}
+
+export function wrapResearchCardText(ctx, text, maxWidth, maxLines = RESEARCH_CARD_MAX_LINES_PER_ROW) {
+  const source = cleanCardText(text);
+  if (!source) return [];
+
+  const words = source.split(' ');
+  const lines = [];
+  let current = '';
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (ctx.measureText(next).width <= maxWidth) {
+      current = next;
+      continue;
+    }
+
+    if (current) {
+      lines.push(current);
+      current = word;
+    } else {
+      lines.push(truncateText(ctx, word, maxWidth));
+      current = '';
+    }
+
+    if (lines.length >= maxLines) break;
+  }
+
+  if (current && lines.length < maxLines) {
+    lines.push(current);
+  }
+
+  if (lines.length > maxLines) {
+    return lines.slice(0, maxLines);
+  }
+
+  if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length) {
+    lines[lines.length - 1] = truncateText(ctx, lines[lines.length - 1], maxWidth);
+  }
+
+  return lines;
+}
+
+function findResearchDeskCardModel(components) {
+  if (!Array.isArray(components)) return null;
+  const component = components.find((entry) => entry
+    && entry.componentType === 'workstation-hotspot'
+    && entry.id === 'researchMonitorHotspot'
+    && entry.resultCardViewModel
+    && typeof entry.resultCardViewModel === 'object'
+    && Array.isArray(entry.resultCardViewModel.rows));
+  return component ? component.resultCardViewModel : null;
+}
+
+function drawLeafIcon(ctx, x, y, size) {
+  ctx.save();
+  ctx.fillStyle = '#42f1cf';
+  ctx.strokeStyle = 'rgba(180, 255, 235, 0.72)';
+  ctx.lineWidth = 1;
+
+  ctx.beginPath();
+  ctx.ellipse(x - size * 0.18, y, size * 0.28, size * 0.48, -0.72, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(x + size * 0.18, y, size * 0.28, size * 0.48, 0.72, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x, y + size * 0.38);
+  ctx.lineTo(x, y + size * 0.82);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function renderResearchDeskResultCard(ctx, model, options = {}) {
+  if (!model || !Array.isArray(model.rows) || model.rows.length === 0) return;
+
+  const canvasW = Number.isFinite(ctx?.canvas?.width) ? ctx.canvas.width : 1060;
+  const canvasH = Number.isFinite(ctx?.canvas?.height) ? ctx.canvas.height : 520;
+  const scale = Math.max(0.82, Math.min(1.35, canvasW / 1060));
+  const cardW = Math.min(canvasW - 48, Math.max(420, 620 * scale));
+  const cardX = Math.max(24, Math.min(canvasW - cardW - 24, 86 * scale));
+  const cardY = Math.max(42, Math.min(canvasH - 230, 150 * scale));
+  const padX = 34 * scale;
+  const padY = 28 * scale;
+  const headerH = 56 * scale;
+  const rowGap = 12 * scale;
+  const bulletGap = 18 * scale;
+  const bodyFontPx = Math.max(17, 22 * scale);
+  const titleFontPx = Math.max(25, 34 * scale);
+  const lineH = bodyFontPx * 1.25;
+  const rows = model.rows.slice(0, RESEARCH_CARD_MAX_ROWS);
+
+  ctx.save();
+  ctx.font = `${bodyFontPx}px sans-serif`;
+  const textMaxW = cardW - padX * 2 - bulletGap - 18 * scale;
+  const wrappedRows = rows.map((row) => ({
+    label: cleanCardText(row.label),
+    lines: wrapResearchCardText(ctx, `${row.label}: ${row.text}`, textMaxW, RESEARCH_CARD_MAX_LINES_PER_ROW),
+  }));
+  const bodyLines = wrappedRows.reduce((sum, row) => sum + Math.max(1, row.lines.length), 0);
+  const cardH = Math.min(
+    canvasH - cardY - 24,
+    Math.max(
+      250 * scale,
+      padY * 2 + headerH + 24 * scale + bodyLines * lineH + (wrappedRows.length - 1) * rowGap
+    )
+  );
+
+  ctx.globalAlpha = options.alpha ?? 1;
+  ctx.shadowColor = 'rgba(31, 249, 216, 0.42)';
+  ctx.shadowBlur = 16 * scale;
+  ctx.shadowOffsetY = 0;
+  roundRect(ctx, cardX, cardY, cardW, cardH, 24 * scale);
+  ctx.fillStyle = 'rgba(7, 23, 20, 0.78)';
+  ctx.fill();
+
+  ctx.shadowColor = 'transparent';
+  ctx.lineWidth = 1.5 * scale;
+  ctx.strokeStyle = 'rgba(65, 244, 218, 0.95)';
+  roundRect(ctx, cardX, cardY, cardW, cardH, 24 * scale);
+  ctx.stroke();
+
+  drawLeafIcon(ctx, cardX + padX + 18 * scale, cardY + padY + 16 * scale, 28 * scale);
+
+  ctx.fillStyle = '#fff4cf';
+  ctx.font = `700 ${titleFontPx}px sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(model.title || 'Research Desk', cardX + padX + 66 * scale, cardY + padY + 18 * scale);
+
+  const dividerY = cardY + padY + headerH;
+  const dividerGradient = ctx.createLinearGradient(cardX + padX, dividerY, cardX + cardW - padX, dividerY);
+  dividerGradient.addColorStop(0, 'rgba(65, 244, 218, 0.05)');
+  dividerGradient.addColorStop(0.5, 'rgba(65, 244, 218, 0.85)');
+  dividerGradient.addColorStop(1, 'rgba(65, 244, 218, 0.05)');
+  ctx.strokeStyle = dividerGradient;
+  ctx.lineWidth = 1.2 * scale;
+  ctx.beginPath();
+  ctx.moveTo(cardX + padX, dividerY);
+  ctx.lineTo(cardX + cardW - padX, dividerY);
+  ctx.stroke();
+
+  ctx.font = `${bodyFontPx}px sans-serif`;
+  ctx.fillStyle = '#fff6d8';
+  ctx.textBaseline = 'top';
+
+  let rowY = dividerY + 24 * scale;
+  for (const row of wrappedRows) {
+    if (rowY > cardY + cardH - padY - lineH) break;
+    ctx.save();
+    ctx.shadowColor = 'rgba(65, 244, 218, 0.7)';
+    ctx.shadowBlur = 8 * scale;
+    ctx.fillStyle = '#43f3d4';
+    ctx.beginPath();
+    ctx.ellipse(cardX + padX + 9 * scale, rowY + lineH * 0.48, 6 * scale, 10 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    const textX = cardX + padX + bulletGap + 18 * scale;
+    for (const line of row.lines) {
+      if (rowY > cardY + cardH - padY - lineH) break;
+      ctx.fillText(line, textX, rowY);
+      rowY += lineH;
+    }
+    rowY += rowGap;
+  }
+
+  ctx.restore();
 }
 
 /**
@@ -1036,6 +1229,10 @@ export function renderUIOverlayLayer(ctx, components, entityPositions, options =
 
   if (bootPolicy === BACKGROUND_BOOT_POLICY.BAKED_PENDING && !allowPendingOverlay) {
     return;
+  }
+
+  if (options.debug !== true) {
+    renderResearchDeskResultCard(ctx, findResearchDeskCardModel(components));
   }
 
   // ── Pass 2: update renderer-local state ──────────────────────────────────

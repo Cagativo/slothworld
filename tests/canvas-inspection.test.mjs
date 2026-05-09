@@ -26,7 +26,11 @@ import {
   renderConnection,
 } from '../rendering/connection-renderer.js';
 import { renderWorldCompositionLayer } from '../rendering/world-background-composition.js';
-import { renderUIOverlayLayer } from '../rendering/world-scene-asset-renderer.js';
+import {
+  renderUIOverlayLayer,
+  wrapResearchCardText,
+} from '../rendering/world-scene-asset-renderer.js';
+import { BACKGROUND_BOOT_POLICY } from '../rendering/background-config.js';
 import { initCanvasCursor } from '../rendering/canvas-cursor.js';
 import {
   WORKSTATION_HOTSPOTS,
@@ -1185,6 +1189,50 @@ test('canvas inspection: debug mode still renders world composition diagnostics 
 
   assert.ok(ctx.calls.length > 0);
   assert.ok(ctx.calls.some((call) => call[0] === 'fillText'));
+});
+
+test('canvas inspection: Research Desk result card wraps and clamps row text', () => {
+  const ctx = createMockContext();
+  ctx.font = '20px sans-serif';
+  const lines = wrapResearchCardText(
+    ctx,
+    'Trend results: This is a deliberately long research summary that should wrap safely without overflowing the polished card surface.',
+    210,
+    2
+  );
+
+  assert.ok(lines.length <= 2);
+  assert.ok(lines.every((line) => ctx.measureText(line).width <= 210));
+});
+
+test('canvas inspection: normal mode renders polished Research Desk analysis card', () => {
+  const ctx = createMockContext();
+  const components = [{
+    componentType: 'workstation-hotspot',
+    id: 'researchMonitorHotspot',
+    resultCardViewModel: {
+      title: 'Research Desk',
+      rows: [
+        { label: 'Trend results', text: 'Mixed trends in fitness and nutrition.' },
+        { label: 'Recommendation', text: 'Monitor growth and habits.' },
+        { label: 'Top signal', text: 'Fitness routine 0.91' },
+      ],
+    },
+  }];
+
+  renderUIOverlayLayer(ctx, components, new Map(), {
+    bakedBackground: true,
+    debug: false,
+    bootPolicy: BACKGROUND_BOOT_POLICY.BAKED_READY,
+  });
+
+  const textCalls = ctx.calls.filter((call) => call[0] === 'fillText').map((call) => call[1]);
+  assert.ok(textCalls.includes('Research Desk'));
+  assert.ok(textCalls.some((text) => String(text).startsWith('Trend results:')));
+  assert.ok(textCalls.some((text) => String(text).startsWith('Recommendation:')));
+  assert.ok(textCalls.some((text) => String(text).startsWith('Top signal:')));
+  assert.ok(!textCalls.some((text) => /TASK_|task-research|ollama_timeout/.test(String(text))));
+  assert.ok(ctx.calls.some((call) => call[0] === 'ellipse'), 'leaf/bullet accents should render');
 });
 
 test('canvas inspection: fallback background mode still renders world composition layers', () => {

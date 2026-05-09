@@ -203,6 +203,8 @@ function normalizeTrendAnalysis(analysis) {
           : null),
     provider: safeString(analysis.provider),
     model: safeString(analysis.model),
+    unavailable: analysis.unavailable === true,
+    reason: safeString(analysis.reason),
   });
 }
 

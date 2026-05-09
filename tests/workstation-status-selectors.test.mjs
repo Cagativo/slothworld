@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildWorkstationStatusSnapshots } from '../ui/selectors/workstationStatusSelectors.js';
-import { buildWorkstationPopoverViewModel } from '../ui/hotspots/workstationSemantics.js';
+import {
+  buildResearchDeskResultCardViewModel,
+  buildWorkstationPopoverViewModel,
+} from '../ui/hotspots/workstationSemantics.js';
 import {
   WORKSTATION_HOTSPOTS,
   buildWorkstationHotspotComponents,
@@ -234,9 +237,9 @@ test('workstation popover: selected Research Desk renders trend result rows', ()
     },
   });
 
-  assert.deepEqual(component.popoverViewModel.lines, ['Top trends: cozy', 'Tree lamp 0.95']);
+  assert.deepEqual(component.popoverViewModel.lines, ['Top signal: Tree lamp 0.95']);
   assert.equal(component.inspectionViewModel.statusLabel, 'Trend results');
-  assert.ok(component.inspectionViewModel.lines.includes('Trend: cozy'));
+  assert.ok(component.inspectionViewModel.lines.includes('Top signal: Tree lamp 0.95'));
   assert.ok(component.inspectionViewModel.taskSummaries.includes('Tree lamp 0.95'));
   assert.ok(component.inspectionViewModel.taskSummaries.includes('Moss shelf 0.82'));
   assert.ok(!('actions' in component.popoverViewModel));
@@ -273,17 +276,69 @@ test('workstation popover: Research Desk prioritizes trend analysis before ranke
   });
 
   assert.deepEqual(component.popoverViewModel.lines, [
-    'Analysis: Cozy home products are the strongest cluster.',
+    'Trend results: Cozy home products are the strongest cluster.',
     'Recommendation: Lead with compact room comfort.'
   ]);
   assert.equal(component.inspectionViewModel.statusLabel, 'Trend results');
   assert.deepEqual(component.inspectionViewModel.lines, [
-    'Analysis: Cozy home products are the strongest cluster.',
-    'Recommendation: Lead with compact room comfort.'
+    'Trend results: Cozy home products are the strongest cluster.',
+    'Recommendation: Lead with compact room comfort.',
+    'Top signal: Tree lamp 0.95'
   ]);
   assert.deepEqual(component.inspectionViewModel.taskSummaries, [
-    'Analysis: Cozy home products are the strongest cluster.',
+    'Trend results: Cozy home products are the strongest cluster.',
     'Recommendation: Lead with compact room comfort.',
-    'Tree lamp 0.95'
+    'Top signal: Tree lamp 0.95'
+  ]);
+  assert.deepEqual(component.resultCardViewModel.rows.map((row) => `${row.label}: ${row.text}`), [
+    'Trend results: Cozy home products are the strongest cluster.',
+    'Recommendation: Lead with compact room comfort.',
+    'Top signal: Tree lamp 0.95'
+  ]);
+});
+
+test('workstation semantics: Research Desk result card deduplicates repeated analysis lines', () => {
+  const card = buildResearchDeskResultCardViewModel({
+    trendResult: {
+      taskId: 'task-research-done',
+      keyword: 'cozy',
+      analysis: {
+        summary: 'Mixed trends in fitness.',
+        recommendation: 'Mixed trends in fitness.',
+      },
+      rows: [
+        { item: 'Mixed trends in fitness.', score: null },
+        { item: 'Monitor growth and habits', score: 0.82 },
+      ],
+    },
+  });
+
+  assert.ok(card);
+  assert.deepEqual(card.rows.map((row) => `${row.label}: ${row.text}`), [
+    'Trend results: Mixed trends in fitness.',
+    'Top signal: Monitor growth and habits 0.82'
+  ]);
+});
+
+test('workstation semantics: Research Desk unavailable analysis falls back to ranked evidence', () => {
+  const card = buildResearchDeskResultCardViewModel({
+    trendResult: {
+      taskId: 'task-research-done',
+      keyword: 'cozy',
+      analysis: {
+        summary: 'Trend analysis was skipped because the local model did not respond in time.',
+        recommendation: 'Use ranked trend evidence for now, or retry with a smaller/faster local model.',
+        unavailable: true,
+      },
+      rows: [
+        { item: 'Tree lamp', score: 0.95 },
+      ],
+    },
+  });
+
+  assert.ok(card);
+  assert.deepEqual(card.rows.map((row) => `${row.label}: ${row.text}`), [
+    'Trend results: Ranked evidence ready. Local AI summary unavailable.',
+    'Top signal: Tree lamp 0.95'
   ]);
 });

@@ -13,6 +13,7 @@ import {
   buildWorkstationNormalSummaryRows,
   buildWorkstationInspectionViewModel,
   buildWorkstationPopoverViewModel,
+  buildResearchDeskResultCardViewModel,
   buildWorkstationVisualStateViewModel,
   getWorkstationSemanticMetadata,
 } from '../ui/hotspots/workstationSemantics.js';
@@ -153,6 +154,7 @@ export function componentForHotspot(hotspot, components, options = {}) {
     ...component,
     popoverViewModel: buildWorkstationPopoverViewModel(component),
     visualStateViewModel,
+    resultCardViewModel: buildResearchDeskResultCardViewModel(stationSnapshot),
   };
   return Object.freeze({
     ...enrichedComponent,

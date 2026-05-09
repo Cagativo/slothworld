@@ -103,6 +103,7 @@ export function getWorkstationSemanticMetadata(hotspotId) {
 }
 
 const MAX_BODY_LINES = 2;
+const MAX_RESEARCH_CARD_ROWS = 3;
 
 function count(summary, key) {
   const value = summary?.[key];
@@ -115,6 +116,32 @@ function pushLine(lines, text) {
 
 function pushInspectionLine(lines, text) {
   if (text && lines.length < MAX_INSPECTION_LINES) lines.push(text);
+}
+
+function compactText(value) {
+  return typeof value === 'string'
+    ? value.replace(/\s+/g, ' ').trim()
+    : '';
+}
+
+function normalizeDedupeKey(value) {
+  return compactText(value)
+    .toLowerCase()
+    .replace(/^(analysis|summary|trend results|recommendation|top signal|trend):\s*/i, '')
+    .replace(/[.。]+$/g, '')
+    .trim();
+}
+
+function pushUniqueRow(rows, seen, label, value) {
+  const text = compactText(value);
+  if (!text || rows.length >= MAX_RESEARCH_CARD_ROWS) return;
+  const key = normalizeDedupeKey(text);
+  if (!key || seen.has(key)) return;
+  seen.add(key);
+  rows.push(Object.freeze({
+    label,
+    text,
+  }));
 }
 
 function plural(countValue, singular, pluralValue = `${singular}s`) {
@@ -175,27 +202,56 @@ function trendResultRows(snapshot, limit = 3) {
     .slice(0, limit);
 }
 
-function trendAnalysisLines(snapshot, limit = 2) {
+function trendResultHasRows(snapshot) {
   const trendResult = snapshot?.trendResult && typeof snapshot.trendResult === 'object'
     ? snapshot.trendResult
     : null;
-  const analysis = trendResult?.analysis && typeof trendResult.analysis === 'object'
+  return Array.isArray(trendResult?.rows) && trendResult.rows.length > 0;
+}
+
+export function buildResearchDeskResultCardViewModel(snapshot) {
+  const trendResult = snapshot?.trendResult && typeof snapshot.trendResult === 'object'
+    ? snapshot.trendResult
+    : null;
+  if (!trendResult) return null;
+
+  const analysis = trendResult.analysis && typeof trendResult.analysis === 'object'
     ? trendResult.analysis
     : null;
-  if (!analysis) return [];
+  const rows = [];
+  const seen = new Set();
+  const hasRankedEvidence = trendResultHasRows(snapshot);
 
-  const lines = [];
-  if (typeof analysis.summary === 'string' && analysis.summary.trim()) {
-    lines.push(`Analysis: ${analysis.summary.trim()}`);
-  }
-  if (typeof analysis.recommendation === 'string' && analysis.recommendation.trim()) {
-    lines.push(`Recommendation: ${analysis.recommendation.trim()}`);
-  } else if (Array.isArray(analysis.opportunities) && analysis.opportunities.length > 0) {
-    const firstOpportunity = analysis.opportunities.find((entry) => typeof entry === 'string' && entry.trim());
-    if (firstOpportunity) lines.push(`Opportunity: ${firstOpportunity.trim()}`);
+  if (analysis) {
+    if (analysis.unavailable === true && hasRankedEvidence) {
+      pushUniqueRow(rows, seen, 'Trend results', 'Ranked evidence ready. Local AI summary unavailable.');
+    } else {
+      pushUniqueRow(rows, seen, 'Trend results', analysis.summary);
+      pushUniqueRow(rows, seen, 'Recommendation', analysis.recommendation);
+    }
   }
 
-  return lines.slice(0, limit);
+  for (const topSignal of trendResultRows(snapshot, MAX_RESEARCH_CARD_ROWS)) {
+    const previousCount = rows.length;
+    pushUniqueRow(rows, seen, 'Top signal', topSignal);
+    if (rows.length > previousCount || rows.length >= MAX_RESEARCH_CARD_ROWS) break;
+  }
+
+  if (rows.length === 0) return null;
+
+  return Object.freeze({
+    title: 'Research Desk',
+    tone: 'research',
+    rows: Object.freeze(rows),
+  });
+}
+
+function trendAnalysisLines(snapshot, limit = 2) {
+  const card = buildResearchDeskResultCardViewModel(snapshot);
+  if (!card) return [];
+  return card.rows
+    .map((row) => `${row.label}: ${row.text}`)
+    .slice(0, limit);
 }
 
 function snapshotTrendResultLines(snapshot) {
