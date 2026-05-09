@@ -73,10 +73,12 @@ function withTrendEnv(fn) {
   const previousBaseUrl = process.env.OLLAMA_BASE_URL;
   const previousModel = process.env.OLLAMA_MODEL;
   const previousLiveMode = process.env.TREND_SIGNALS_LIVE_MODE;
+  const previousTimeout = process.env.SLOTHWORLD_TREND_ANALYSIS_TIMEOUT_MS;
 
   process.env.OLLAMA_BASE_URL = 'http://ollama.test:11434';
   process.env.OLLAMA_MODEL = 'llama3.1:8b';
   process.env.TREND_SIGNALS_LIVE_MODE = 'false';
+  delete process.env.SLOTHWORLD_TREND_ANALYSIS_TIMEOUT_MS;
 
   return Promise.resolve()
     .then(fn)
@@ -89,6 +91,9 @@ function withTrendEnv(fn) {
 
       if (previousLiveMode === undefined) delete process.env.TREND_SIGNALS_LIVE_MODE;
       else process.env.TREND_SIGNALS_LIVE_MODE = previousLiveMode;
+
+      if (previousTimeout === undefined) delete process.env.SLOTHWORLD_TREND_ANALYSIS_TIMEOUT_MS;
+      else process.env.SLOTHWORLD_TREND_ANALYSIS_TIMEOUT_MS = previousTimeout;
     });
 }
 
@@ -106,11 +111,7 @@ test('TREND_RESEARCH executes Ollama analysis through TaskExecutionWorker and pr
         response: JSON.stringify({
           summary: 'Cozy products are gaining broad signal support.',
           recommendation: 'Prioritize the top cozy cluster.',
-          opportunities: ['Bundle cozy accessories'],
-          risks: ['Signal freshness should be watched'],
-          audienceSignals: ['Home comfort shoppers'],
-          contentAngles: ['Small space comfort'],
-          confidence: 0.82
+          confidence: 'high'
         }),
         done: true,
         eval_count: 12
@@ -151,13 +152,20 @@ test('TREND_RESEARCH executes Ollama analysis through TaskExecutionWorker and pr
     const request = JSON.parse(fetchCalls[0].options.body);
     assert.equal(request.model, 'llama3.1:8b');
     assert.equal(request.stream, false);
-    assert.equal(request.options.temperature, 0.2);
-    assert.match(request.system, /local trend research analyst/i);
+    assert.deepEqual(request.options, {
+      num_predict: 120,
+      temperature: 0.2,
+      top_p: 0.8,
+      num_ctx: 1024
+    });
+    assert.match(request.system, /tiny JSON/i);
     assert.match(request.prompt, /"keyword":"cozy"/);
-    assert.match(request.prompt, /"trendFacts"/);
+    assert.match(request.prompt, /"facts"/);
     assert.doesNotMatch(request.prompt, /"rawSignals"/);
     assert.doesNotMatch(request.prompt, /"normalizedSignals"/);
-    assert.ok(request.prompt.length < 6000, 'prompt should stay compact for local Ollama models');
+    assert.doesNotMatch(request.prompt, /"metrics"/);
+    assert.doesNotMatch(request.prompt, /"evidence"/);
+    assert.ok(Buffer.byteLength(request.prompt, 'utf8') < 1600, 'prompt should stay below the safe byte threshold');
 
     await engine.ackTask('trend-ollama-ok');
     assert.deepEqual(
@@ -269,7 +277,7 @@ test('analyzeTrendsWorker skips provider and returns fallback analysis when cand
   }));
 });
 
-test('TREND_RESEARCH returns structured worker failure when Ollama analysis fails', async () => {
+test('TREND_RESEARCH uses fallback analysis and still succeeds when Ollama returns 500', async () => {
   await withTrendEnv(() => withFetch(async () => ({
     ok: false,
     status: 503,
@@ -294,12 +302,70 @@ test('TREND_RESEARCH returns structured worker failure when Ollama analysis fail
     engine.enqueueTask('trend-ollama-fail');
 
     const execution = await engine.executeTask('trend-ollama-fail');
-    assert.equal(execution.success, false);
-    assert.equal(execution.error, 'ollama_request_failed:503');
-    assert.equal(execution.output.provider, 'ollama');
-    assert.equal(execution.output.code, 'ollama_request_failed');
-    assert.equal(execution.output.status, 503);
+    assert.equal(execution.success, true);
+    assert.ok(Array.isArray(execution.output.ranked), 'ranked output must remain present');
+    assert.ok(Array.isArray(execution.output.scored), 'scored output must remain present');
+    assert.ok(Array.isArray(execution.output.candidates), 'candidates output must remain present');
+    assert.ok(execution.output.evidence && Array.isArray(execution.output.evidence.rawSignals), 'evidence must remain present');
+    assert.equal(execution.output.analysis.unavailable, true);
+    assert.equal(execution.output.analysis.reason, 'ollama_request_failed');
+    assert.equal(
+      execution.output.analysis.summary,
+      'Trend analysis was skipped because the local model did not respond in time.'
+    );
   }));
+});
+
+test('TREND_RESEARCH uses timeout fallback and still succeeds when Ollama is too slow', async () => {
+  let observedAbort = false;
+
+  await withTrendEnv(() => {
+    process.env.SLOTHWORLD_TREND_ANALYSIS_TIMEOUT_MS = '5';
+
+    return withFetch(async (_url, options = {}) => new Promise((resolve, reject) => {
+      if (options.signal && typeof options.signal.addEventListener === 'function') {
+        options.signal.addEventListener('abort', () => {
+          observedAbort = true;
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
+        });
+      }
+
+      setTimeout(() => resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          model: 'llama3.1:8b',
+          response: '{"summary":"late","recommendation":"late","confidence":"low"}',
+          done: true
+        })
+      }), 100);
+    }), async () => {
+      const engine = createTaskEngine({
+        executor: createExecutionAdapter()
+      });
+
+      engine.createTask({
+        id: 'trend-ollama-timeout',
+        type: TASK_TYPE_TREND_RESEARCH,
+        payload: {
+          keyword: 'cozy'
+        }
+      });
+      engine.enqueueTask('trend-ollama-timeout');
+
+      const execution = await engine.executeTask('trend-ollama-timeout');
+      assert.equal(execution.success, true);
+      assert.equal(observedAbort, true);
+      assert.equal(execution.output.analysis.unavailable, true);
+      assert.equal(execution.output.analysis.reason, 'ollama_timeout');
+      assert.ok(Array.isArray(execution.output.ranked), 'ranked output must remain present');
+      assert.ok(Array.isArray(execution.output.scored), 'scored output must remain present');
+      assert.ok(Array.isArray(execution.output.candidates), 'candidates output must remain present');
+      assert.ok(execution.output.evidence && Array.isArray(execution.output.evidence.scoredSignals), 'evidence must remain present');
+    });
+  });
 });
 
 test('UI files do not import or call the Ollama provider for TrendResearch analysis', () => {

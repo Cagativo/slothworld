@@ -40,6 +40,12 @@ function normalizeTemperature(temperature) {
   return Number.isFinite(value) ? value : undefined;
 }
 
+function normalizeOptions(options) {
+  return options && typeof options === 'object' && !Array.isArray(options)
+    ? { ...options }
+    : {};
+}
+
 function createOllamaError({ code, message, status = null, detail = null, cause = null }) {
   const error = new Error(message || code || 'ollama_error');
   error.name = 'OllamaProviderError';
@@ -72,7 +78,7 @@ async function readResponseDetail(response) {
   }
 }
 
-function buildGenerateRequest({ prompt, system, model, temperature }) {
+function buildGenerateRequest({ prompt, system, model, temperature, options }) {
   const request = {
     model: resolveModel(model),
     prompt: normalizePrompt(prompt),
@@ -84,10 +90,13 @@ function buildGenerateRequest({ prompt, system, model, temperature }) {
   }
 
   const normalizedTemperature = normalizeTemperature(temperature);
+  const normalizedOptions = normalizeOptions(options);
   if (normalizedTemperature !== undefined) {
-    request.options = {
-      temperature: normalizedTemperature
-    };
+    normalizedOptions.temperature = normalizedTemperature;
+  }
+
+  if (Object.keys(normalizedOptions).length > 0) {
+    request.options = normalizedOptions;
   }
 
   return request;
@@ -148,16 +157,17 @@ export const ollamaProvider = Object.freeze({
     };
   },
 
-  async generateText({ prompt, system, model, temperature } = {}) {
+  async generateText({ prompt, system, model, temperature, options, signal } = {}) {
     const baseUrl = resolveBaseUrl();
-    const request = buildGenerateRequest({ prompt, system, model, temperature });
+    const request = buildGenerateRequest({ prompt, system, model, temperature, options });
     const response = await fetchJson(`${baseUrl}/api/generate`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(request)
+      body: JSON.stringify(request),
+      ...(signal ? { signal } : {})
     });
 
     const text = typeof response.response === 'string' ? response.response : '';

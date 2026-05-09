@@ -3,35 +3,24 @@ import { assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
 
 const MAX_CANDIDATES = 3;
 const MAX_TREND_FACTS = 5;
-const MAX_TEXT_LENGTH = 160;
+const MAX_TEXT_LENGTH = 120;
+const DEFAULT_TREND_ANALYSIS_TIMEOUT_MS = 15000;
 const FALLBACK_RECOMMENDATION = 'Review ranked trend evidence before action.';
+const TIMEOUT_SUMMARY = 'Trend analysis was skipped because the local model did not respond in time.';
+const UNAVAILABLE_RECOMMENDATION = 'Use ranked trend evidence for now, or retry with a smaller/faster local model.';
+
+const TREND_ANALYSIS_OPTIONS = Object.freeze({
+  num_predict: 120,
+  temperature: 0.2,
+  top_p: 0.8,
+  num_ctx: 1024
+});
 
 const SYSTEM_PROMPT = [
-  'You are a local trend research analyst.',
-  'Analyze only the provided scored signals and evidence.',
-  'Do not invent sources, do not create follow-up tasks, and do not mention task lifecycle.',
-  'Return compact JSON only.'
+  'Return only tiny JSON.',
+  'Use only provided trend facts.',
+  'No prose outside JSON.'
 ].join(' ');
-
-function fail(error) {
-  const message = error instanceof Error ? error.message : String(error || 'trend_analysis_failed');
-
-  return {
-    success: false,
-    result: {
-      provider: 'ollama',
-      code: error && typeof error === 'object' && error.code ? error.code : 'trend_analysis_failed',
-      status: error && typeof error === 'object' && Object.prototype.hasOwnProperty.call(error, 'status')
-        ? error.status
-        : null,
-      detail: error && typeof error === 'object' && Object.prototype.hasOwnProperty.call(error, 'detail')
-        ? error.detail
-        : null,
-      message
-    },
-    error: message
-  };
-}
 
 function compactText(value, maxLength = MAX_TEXT_LENGTH) {
   const text = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
@@ -43,8 +32,10 @@ function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
-function numericOrNull(value) {
-  return Number.isFinite(value) ? Number(value) : null;
+function roundedNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.round(number * 1000) / 1000;
 }
 
 function sourceKey(value) {
@@ -65,105 +56,77 @@ function topCandidates(candidates, scoredSignals) {
   return source.slice(0, MAX_CANDIDATES);
 }
 
-function findMatchingRawSignal(item, source, rawSignals) {
-  const normalizedItem = compactText(item).toLowerCase();
-  const normalizedSource = sourceKey(source);
-  return normalizeArray(rawSignals).find((signal) => {
-    const text = compactText(signal?.text).toLowerCase();
-    const sourceMatches = !normalizedSource || signal?.source === normalizedSource;
-    return sourceMatches && text && normalizedItem && text.includes(normalizedItem);
-  }) || normalizeArray(rawSignals).find((signal) => signal?.source === normalizedSource) || null;
+function relevanceLabel(score) {
+  const number = Number(score);
+  if (!Number.isFinite(number)) return 'unknown';
+  if (number >= 0.75) return 'high';
+  if (number >= 0.35) return 'medium';
+  return 'low';
 }
 
-function findMatchingNormalizedSignal(item, source, normalizedSignals) {
-  const normalizedItem = compactText(item).toLowerCase();
-  const normalizedSource = sourceKey(source);
-  return normalizeArray(normalizedSignals).find((signal) => {
-    const signalItem = compactText(signal?.item).toLowerCase();
-    const sourceMatches = !normalizedSource || signal?.source === normalizedSource;
-    return sourceMatches && signalItem === normalizedItem;
-  }) || null;
+function shortReason(candidate) {
+  const explanation = candidate?.explanation && typeof candidate.explanation === 'object'
+    ? candidate.explanation
+    : {};
+  const inputs = explanation.inputs && typeof explanation.inputs === 'object' ? explanation.inputs : {};
+  const parts = [];
+  const growth = roundedNumber(inputs.normalized_growth);
+  const volume = roundedNumber(inputs.normalized_volume);
+  const engagement = roundedNumber(inputs.normalized_engagement);
+  const intent = roundedNumber(inputs.normalized_commercial_intent);
+
+  if (growth !== null) parts.push(`growth ${growth}`);
+  if (volume !== null) parts.push(`volume ${volume}`);
+  if (engagement !== null) parts.push(`engagement ${engagement}`);
+  if (intent !== null) parts.push(`intent ${intent}`);
+  if (parts.length === 0) parts.push(`score ${roundedNumber(candidate?.score) ?? 'unknown'}`);
+  return compactText(parts.slice(0, 2).join(', '), MAX_TEXT_LENGTH);
 }
 
-function compactTrendFacts({ candidates, scoredSignals, rawSignals, normalizedSignals } = {}) {
+function compactTrendFacts({ candidates, scoredSignals } = {}) {
   return topCandidates(candidates, scoredSignals)
     .slice(0, MAX_TREND_FACTS)
     .map((candidate) => {
-      const item = compactText(candidate?.item);
+      const item = compactText(candidate?.item, MAX_TEXT_LENGTH);
       if (!item) return null;
 
       const source = sourceKey(candidate?.source);
-      const raw = findMatchingRawSignal(item, source, rawSignals);
-      const normalized = findMatchingNormalizedSignal(item, source, normalizedSignals);
-      const metrics = raw?.metrics && typeof raw.metrics === 'object' ? raw.metrics : {};
-      const normalizedMetrics = normalized?.normalizedMetrics && typeof normalized.normalizedMetrics === 'object'
-        ? normalized.normalizedMetrics
-        : {};
-      const explanation = candidate?.explanation && typeof candidate.explanation === 'object'
-        ? candidate.explanation
-        : {};
-
       return {
-        item,
+        topic: item,
         source,
-        score: numericOrNull(candidate?.score),
-        evidence: compactText(raw?.text || item),
-        metrics: {
-          popularity: numericOrNull(metrics.popularity),
-          engagement: numericOrNull(metrics.engagement),
-          velocity: numericOrNull(metrics.velocity),
-          reliability: numericOrNull(normalizedMetrics.reliabilityWeight),
-          growth: numericOrNull(explanation?.inputs?.normalized_growth),
-          volume: numericOrNull(explanation?.inputs?.normalized_volume),
-          commercialIntent: numericOrNull(explanation?.inputs?.normalized_commercial_intent)
-        }
+        score: roundedNumber(candidate?.score),
+        relevance: relevanceLabel(candidate?.score),
+        reason: shortReason(candidate)
       };
     })
     .filter(Boolean);
 }
 
-function sourceCounts(rawSignals) {
-  const counts = {};
-  for (const signal of normalizeArray(rawSignals)) {
-    const source = sourceKey(signal?.source) || 'unknown';
-    counts[source] = (counts[source] || 0) + 1;
+function trendAnalysisTimeoutMs() {
+  const value = Number(process.env.SLOTHWORLD_TREND_ANALYSIS_TIMEOUT_MS);
+  if (!Number.isFinite(value) || value <= 0) {
+    return DEFAULT_TREND_ANALYSIS_TIMEOUT_MS;
   }
-  return counts;
+  return Math.max(1, Math.floor(value));
 }
 
 export function buildTrendAnalysisPrompt({
   keyword,
   candidates,
-  scoredSignals,
-  rawSignals,
-  normalizedSignals,
-  context
+  scoredSignals
 } = {}) {
   const trendFacts = compactTrendFacts({
     candidates,
-    scoredSignals,
-    rawSignals,
-    normalizedSignals
+    scoredSignals
   });
   const payload = {
     keyword: compactText(keyword, 120),
-    context: context && typeof context === 'object' ? context : {},
-    sourceCounts: sourceCounts(rawSignals),
-    trendFacts,
-    outputContract: {
-      summary: 'short grounded synthesis',
-      recommendation: 'one practical recommendation',
-      opportunities: ['opportunity'],
-      risks: ['risk'],
-      audienceSignals: ['audience signal'],
-      contentAngles: ['content angle'],
-      confidence: 'low | medium | high'
-    }
+    facts: trendFacts
   };
 
   return [
-    'Analyze these collected and scored trend signals.',
-    'Use only trendFacts as evidence. Return JSON only, with keys matching outputContract.',
+    'Analyze trends in <=80 words.',
+    'Return strict JSON: {"summary":"...","recommendation":"...","confidence":"low|medium|high"}',
     JSON.stringify(payload)
   ].join('\n\n');
 }
@@ -218,6 +181,22 @@ function fallbackAnalysis({ summary, providerResult = null, rawText = null, mode
   };
 }
 
+function unavailableAnalysis({ reason, model = null }) {
+  return {
+    summary: TIMEOUT_SUMMARY,
+    recommendation: UNAVAILABLE_RECOMMENDATION,
+    opportunities: [],
+    risks: [],
+    audienceSignals: [],
+    contentAngles: [],
+    confidence: 'low',
+    provider: 'ollama',
+    model,
+    unavailable: true,
+    reason: reason || 'ollama_unavailable'
+  };
+}
+
 export function buildEmptyTrendAnalysis(model = null) {
   return {
     summary: 'No strong trend candidates were found.',
@@ -256,6 +235,26 @@ function normalizeAnalysis(parsed, providerResult, rawText) {
   };
 }
 
+async function withTimeout(fn, timeoutMs) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fn(controller.signal);
+  } catch (error) {
+    if (timedOut) {
+      error.code = 'ollama_timeout';
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function runAnalyzeTrendsWorker({
   keyword,
   candidates,
@@ -270,9 +269,7 @@ export async function runAnalyzeTrendsWorker({
 
   const facts = compactTrendFacts({
     candidates,
-    scoredSignals,
-    rawSignals,
-    normalizedSignals
+    scoredSignals
   });
 
   if (facts.length === 0) {
@@ -286,18 +283,17 @@ export async function runAnalyzeTrendsWorker({
     const prompt = buildTrendAnalysisPrompt({
       keyword,
       candidates,
-      scoredSignals,
-      rawSignals,
-      normalizedSignals,
-      context
+      scoredSignals
     });
 
-    const providerResult = await ollamaProvider.generateText({
+    const timeoutMs = trendAnalysisTimeoutMs();
+    const providerResult = await withTimeout((signal) => ollamaProvider.generateText({
       prompt,
       system: SYSTEM_PROMPT,
       model,
-      temperature
-    });
+      options: TREND_ANALYSIS_OPTIONS,
+      signal
+    }), timeoutMs);
 
     const rawText = typeof providerResult.text === 'string' ? providerResult.text.trim() : '';
     let parsed = null;
@@ -312,6 +308,12 @@ export async function runAnalyzeTrendsWorker({
       result: normalizeAnalysis(parsed, providerResult, rawText)
     };
   } catch (error) {
-    return fail(error);
+    return {
+      success: true,
+      result: unavailableAnalysis({
+        reason: error && typeof error === 'object' && error.code ? error.code : 'ollama_unavailable',
+        model: typeof model === 'string' && model.trim() ? model.trim() : null
+      })
+    };
   }
 }
