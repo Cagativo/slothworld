@@ -284,40 +284,82 @@ function drawLeafIcon(ctx, x, y, size) {
   ctx.restore();
 }
 
-function renderResearchDeskResultCard(ctx, model, options = {}) {
-  if (!model || !Array.isArray(model.rows) || model.rows.length === 0) return;
-
+export function computeResearchCardLayout(ctx, model) {
   const canvasW = Number.isFinite(ctx?.canvas?.width) ? ctx.canvas.width : 1060;
   const canvasH = Number.isFinite(ctx?.canvas?.height) ? ctx.canvas.height : 520;
   const scale = Math.max(0.82, Math.min(1.35, canvasW / 1060));
-  const cardW = Math.min(canvasW - 48, Math.max(420, 620 * scale));
-  const cardX = Math.max(24, Math.min(canvasW - cardW - 24, 86 * scale));
-  const cardY = Math.max(42, Math.min(canvasH - 230, 150 * scale));
-  const padX = 34 * scale;
-  const padY = 28 * scale;
-  const headerH = 56 * scale;
-  const rowGap = 12 * scale;
-  const bulletGap = 18 * scale;
-  const bodyFontPx = Math.max(17, 22 * scale);
-  const titleFontPx = Math.max(25, 34 * scale);
+  const cardW = Math.min(canvasW - 32, Math.max(420, 460 * scale));
+  const cardX = Math.max(16, Math.min(canvasW - cardW - 16, 124 * scale));
+  const cardY = Math.max(38, Math.min(canvasH - 200, 186 * scale));
+  const padX = 22 * scale;
+  const padY = 18 * scale;
+  const headerH = 38 * scale;
+  const rowGap = 7 * scale;
+  const bulletGap = 12 * scale;
+  const bodyFontPx = Math.max(16, 18 * scale);
+  const titleFontPx = Math.max(24, 28 * scale);
   const lineH = bodyFontPx * 1.25;
-  const rows = model.rows.slice(0, RESEARCH_CARD_MAX_ROWS);
 
-  ctx.save();
   ctx.font = `${bodyFontPx}px sans-serif`;
   const textMaxW = cardW - padX * 2 - bulletGap - 18 * scale;
+  const rows = model.rows.slice(0, RESEARCH_CARD_MAX_ROWS);
   const wrappedRows = rows.map((row) => ({
     label: cleanCardText(row.label),
     lines: wrapResearchCardText(ctx, `${row.label}: ${row.text}`, textMaxW, RESEARCH_CARD_MAX_LINES_PER_ROW),
   }));
   const bodyLines = wrappedRows.reduce((sum, row) => sum + Math.max(1, row.lines.length), 0);
   const cardH = Math.min(
-    canvasH - cardY - 24,
+    260 * scale,
+    canvasH - cardY - 16,
     Math.max(
-      250 * scale,
-      padY * 2 + headerH + 24 * scale + bodyLines * lineH + (wrappedRows.length - 1) * rowGap
+      180 * scale,
+      padY * 2 + headerH + 16 * scale + bodyLines * lineH + (wrappedRows.length - 1) * rowGap
     )
   );
+
+  return {
+    canvasW,
+    canvasH,
+    scale,
+    cardW,
+    cardX,
+    cardY,
+    cardH,
+    padX,
+    padY,
+    headerH,
+    rowGap,
+    bulletGap,
+    bodyFontPx,
+    titleFontPx,
+    lineH,
+    textMaxW,
+    rows,
+    wrappedRows,
+  };
+}
+
+function renderResearchDeskResultCard(ctx, model, options = {}) {
+  if (!model || !Array.isArray(model.rows) || model.rows.length === 0) return;
+
+  ctx.save();
+  const {
+    scale,
+    cardW,
+    cardX,
+    cardY,
+    cardH,
+    padX,
+    padY,
+    headerH,
+    rowGap,
+    bulletGap,
+    bodyFontPx,
+    titleFontPx,
+    lineH,
+    rows,
+    wrappedRows,
+  } = computeResearchCardLayout(ctx, model);
   traceResearchCard('[RESEARCH_CARD_DRAW_CALLED]', {
     x: cardX,
     y: cardY,
@@ -330,23 +372,23 @@ function renderResearchDeskResultCard(ctx, model, options = {}) {
   ctx.shadowColor = 'rgba(31, 249, 216, 0.42)';
   ctx.shadowBlur = 16 * scale;
   ctx.shadowOffsetY = 0;
-  roundRect(ctx, cardX, cardY, cardW, cardH, 24 * scale);
+  roundRect(ctx, cardX, cardY, cardW, cardH, 16 * scale);
   ctx.fillStyle = 'rgba(7, 23, 20, 0.78)';
   ctx.fill();
 
   ctx.shadowColor = 'transparent';
   ctx.lineWidth = 1.5 * scale;
   ctx.strokeStyle = 'rgba(65, 244, 218, 0.95)';
-  roundRect(ctx, cardX, cardY, cardW, cardH, 24 * scale);
+  roundRect(ctx, cardX, cardY, cardW, cardH, 16 * scale);
   ctx.stroke();
 
-  drawLeafIcon(ctx, cardX + padX + 18 * scale, cardY + padY + 16 * scale, 28 * scale);
+  drawLeafIcon(ctx, cardX + padX + 12 * scale, cardY + padY + 12 * scale, 20 * scale);
 
   ctx.fillStyle = '#fff4cf';
   ctx.font = `700 ${titleFontPx}px sans-serif`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(model.title || 'Research Desk', cardX + padX + 66 * scale, cardY + padY + 18 * scale);
+  ctx.fillText(model.title || 'Research Desk', cardX + padX + 44 * scale, cardY + padY + 12 * scale);
 
   const dividerY = cardY + padY + headerH;
   const dividerGradient = ctx.createLinearGradient(cardX + padX, dividerY, cardX + cardW - padX, dividerY);
@@ -364,7 +406,7 @@ function renderResearchDeskResultCard(ctx, model, options = {}) {
   ctx.fillStyle = '#fff6d8';
   ctx.textBaseline = 'top';
 
-  let rowY = dividerY + 24 * scale;
+  let rowY = dividerY + 16 * scale;
   for (const row of wrappedRows) {
     if (rowY > cardY + cardH - padY - lineH) break;
     ctx.save();
@@ -372,7 +414,7 @@ function renderResearchDeskResultCard(ctx, model, options = {}) {
     ctx.shadowBlur = 8 * scale;
     ctx.fillStyle = '#43f3d4';
     ctx.beginPath();
-    ctx.ellipse(cardX + padX + 9 * scale, rowY + lineH * 0.48, 6 * scale, 10 * scale, 0, 0, Math.PI * 2);
+    ctx.ellipse(cardX + padX + 6 * scale, rowY + lineH * 0.48, 4 * scale, 7 * scale, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 

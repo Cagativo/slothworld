@@ -27,6 +27,7 @@ import {
 } from '../rendering/connection-renderer.js';
 import { renderWorldCompositionLayer } from '../rendering/world-background-composition.js';
 import {
+  computeResearchCardLayout,
   renderUIOverlayLayer,
   wrapResearchCardText,
 } from '../rendering/world-scene-asset-renderer.js';
@@ -1203,6 +1204,28 @@ test('canvas inspection: Research Desk result card wraps and clamps row text', (
 
   assert.ok(lines.length <= 2);
   assert.ok(lines.every((line) => ctx.measureText(line).width <= 210));
+});
+
+test('canvas inspection: Research Desk result card stays popover sized', () => {
+  const ctx = createMockContext();
+  const layout = computeResearchCardLayout(ctx, {
+    title: 'Research Desk',
+    rows: [
+      { label: 'Trend results', text: 'Mixed trends in fitness and nutrition.' },
+      { label: 'Recommendation', text: 'Monitor growth and habits.' },
+      { label: 'Top signal', text: 'Long descriptive top signal that still needs to wrap cleanly inside the smaller workstation card.' },
+    ],
+  });
+
+  assert.ok(layout.cardW >= 420);
+  assert.ok(layout.cardW <= 520);
+  assert.ok(layout.cardH >= 180);
+  assert.ok(layout.cardH <= 260);
+  assert.ok(layout.titleFontPx >= 24 && layout.titleFontPx <= 30);
+  assert.ok(layout.bodyFontPx >= 16 && layout.bodyFontPx <= 20);
+  assert.ok(layout.wrappedRows.length <= 3);
+  assert.ok(layout.wrappedRows.every((row) => row.lines.length <= 2));
+  assert.ok(layout.cardX < 220, 'card should anchor near the Research Desk side of the scene');
 });
 
 function makeResearchDeskCardComponent() {
