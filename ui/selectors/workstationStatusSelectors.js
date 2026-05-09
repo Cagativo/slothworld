@@ -196,7 +196,11 @@ function normalizeTrendAnalysis(analysis) {
     risks: Object.freeze(risks),
     audienceSignals: Object.freeze(audienceSignals),
     contentAngles: Object.freeze(contentAngles),
-    confidence: Number.isFinite(analysis.confidence) ? Number(analysis.confidence) : null,
+    confidence: Number.isFinite(analysis.confidence)
+      ? Number(analysis.confidence)
+      : (typeof analysis.confidence === 'string' && analysis.confidence.trim()
+          ? analysis.confidence.trim().toLowerCase()
+          : null),
     provider: safeString(analysis.provider),
     model: safeString(analysis.model),
   });

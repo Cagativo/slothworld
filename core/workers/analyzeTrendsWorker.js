@@ -1,10 +1,10 @@
 import { ollamaProvider } from '../../integrations/llm/providers/ollamaProvider.js';
 import { assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
 
-const MAX_SCORED_SIGNALS = 8;
-const MAX_RAW_SIGNALS = 8;
-const MAX_NORMALIZED_SIGNALS = 8;
-const MAX_TEXT_LENGTH = 220;
+const MAX_CANDIDATES = 3;
+const MAX_TREND_FACTS = 5;
+const MAX_TEXT_LENGTH = 160;
+const FALLBACK_RECOMMENDATION = 'Review ranked trend evidence before action.';
 
 const SYSTEM_PROMPT = [
   'You are a local trend research analyst.',
@@ -43,84 +43,113 @@ function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
-function boundedScoredSignals(scoredSignals) {
-  return normalizeArray(scoredSignals)
-    .slice(0, MAX_SCORED_SIGNALS)
-    .map((signal) => ({
-      item: compactText(signal?.item),
-      source: typeof signal?.source === 'string' ? signal.source : null,
-      score: Number.isFinite(signal?.score) ? Number(signal.score) : null,
-      explanation: signal?.explanation && typeof signal.explanation === 'object'
-        ? {
-            inputs: signal.explanation.inputs || null,
-            contributions: signal.explanation.contributions || null,
-            finalScore: Number.isFinite(signal.explanation.finalScore)
-              ? Number(signal.explanation.finalScore)
-              : null
-          }
-        : null
-    }))
-    .filter((signal) => signal.item);
+function numericOrNull(value) {
+  return Number.isFinite(value) ? Number(value) : null;
 }
 
-function boundedRawSignals(rawSignals) {
-  return normalizeArray(rawSignals)
-    .slice(0, MAX_RAW_SIGNALS)
-    .map((signal) => ({
-      source: typeof signal?.source === 'string' ? signal.source : null,
-      sourceItemId: typeof signal?.sourceItemId === 'string' ? signal.sourceItemId : null,
-      text: compactText(signal?.text),
-      url: typeof signal?.url === 'string' ? signal.url : null,
-      metrics: signal?.metrics && typeof signal.metrics === 'object'
-        ? {
-            popularity: Number.isFinite(signal.metrics.popularity) ? Number(signal.metrics.popularity) : null,
-            engagement: Number.isFinite(signal.metrics.engagement) ? Number(signal.metrics.engagement) : null,
-            velocity: Number.isFinite(signal.metrics.velocity) ? Number(signal.metrics.velocity) : null
-          }
-        : null
-    }))
-    .filter((signal) => signal.text);
+function sourceKey(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-function boundedNormalizedSignals(normalizedSignals) {
-  return normalizeArray(normalizedSignals)
-    .slice(0, MAX_NORMALIZED_SIGNALS)
-    .map((signal) => ({
-      item: compactText(signal?.item),
-      source: typeof signal?.source === 'string' ? signal.source : null,
-      normalizedMetrics: signal?.normalizedMetrics && typeof signal.normalizedMetrics === 'object'
-        ? {
-            reliabilityWeight: Number.isFinite(signal.normalizedMetrics.reliabilityWeight)
-              ? Number(signal.normalizedMetrics.reliabilityWeight)
-              : null,
-            weightedPopularity: Number.isFinite(signal.normalizedMetrics.weightedPopularity)
-              ? Number(signal.normalizedMetrics.weightedPopularity)
-              : null,
-            weightedEngagement: Number.isFinite(signal.normalizedMetrics.weightedEngagement)
-              ? Number(signal.normalizedMetrics.weightedEngagement)
-              : null,
-            weightedVelocity: Number.isFinite(signal.normalizedMetrics.weightedVelocity)
-              ? Number(signal.normalizedMetrics.weightedVelocity)
-              : null
-          }
-        : null
-    }))
-    .filter((signal) => signal.item);
+function topCandidates(candidates, scoredSignals) {
+  if (Array.isArray(candidates)) {
+    return candidates
+      .filter((entry) => compactText(entry?.item))
+      .slice(0, MAX_CANDIDATES);
+  }
+
+  const source = normalizeArray(scoredSignals)
+    .slice()
+    .sort((a, b) => (Number(b?.score) || 0) - (Number(a?.score) || 0));
+
+  return source.slice(0, MAX_CANDIDATES);
+}
+
+function findMatchingRawSignal(item, source, rawSignals) {
+  const normalizedItem = compactText(item).toLowerCase();
+  const normalizedSource = sourceKey(source);
+  return normalizeArray(rawSignals).find((signal) => {
+    const text = compactText(signal?.text).toLowerCase();
+    const sourceMatches = !normalizedSource || signal?.source === normalizedSource;
+    return sourceMatches && text && normalizedItem && text.includes(normalizedItem);
+  }) || normalizeArray(rawSignals).find((signal) => signal?.source === normalizedSource) || null;
+}
+
+function findMatchingNormalizedSignal(item, source, normalizedSignals) {
+  const normalizedItem = compactText(item).toLowerCase();
+  const normalizedSource = sourceKey(source);
+  return normalizeArray(normalizedSignals).find((signal) => {
+    const signalItem = compactText(signal?.item).toLowerCase();
+    const sourceMatches = !normalizedSource || signal?.source === normalizedSource;
+    return sourceMatches && signalItem === normalizedItem;
+  }) || null;
+}
+
+function compactTrendFacts({ candidates, scoredSignals, rawSignals, normalizedSignals } = {}) {
+  return topCandidates(candidates, scoredSignals)
+    .slice(0, MAX_TREND_FACTS)
+    .map((candidate) => {
+      const item = compactText(candidate?.item);
+      if (!item) return null;
+
+      const source = sourceKey(candidate?.source);
+      const raw = findMatchingRawSignal(item, source, rawSignals);
+      const normalized = findMatchingNormalizedSignal(item, source, normalizedSignals);
+      const metrics = raw?.metrics && typeof raw.metrics === 'object' ? raw.metrics : {};
+      const normalizedMetrics = normalized?.normalizedMetrics && typeof normalized.normalizedMetrics === 'object'
+        ? normalized.normalizedMetrics
+        : {};
+      const explanation = candidate?.explanation && typeof candidate.explanation === 'object'
+        ? candidate.explanation
+        : {};
+
+      return {
+        item,
+        source,
+        score: numericOrNull(candidate?.score),
+        evidence: compactText(raw?.text || item),
+        metrics: {
+          popularity: numericOrNull(metrics.popularity),
+          engagement: numericOrNull(metrics.engagement),
+          velocity: numericOrNull(metrics.velocity),
+          reliability: numericOrNull(normalizedMetrics.reliabilityWeight),
+          growth: numericOrNull(explanation?.inputs?.normalized_growth),
+          volume: numericOrNull(explanation?.inputs?.normalized_volume),
+          commercialIntent: numericOrNull(explanation?.inputs?.normalized_commercial_intent)
+        }
+      };
+    })
+    .filter(Boolean);
+}
+
+function sourceCounts(rawSignals) {
+  const counts = {};
+  for (const signal of normalizeArray(rawSignals)) {
+    const source = sourceKey(signal?.source) || 'unknown';
+    counts[source] = (counts[source] || 0) + 1;
+  }
+  return counts;
 }
 
 export function buildTrendAnalysisPrompt({
   keyword,
+  candidates,
   scoredSignals,
   rawSignals,
   normalizedSignals,
   context
 } = {}) {
+  const trendFacts = compactTrendFacts({
+    candidates,
+    scoredSignals,
+    rawSignals,
+    normalizedSignals
+  });
   const payload = {
     keyword: compactText(keyword, 120),
     context: context && typeof context === 'object' ? context : {},
-    scoredSignals: boundedScoredSignals(scoredSignals),
-    rawSignals: boundedRawSignals(rawSignals),
-    normalizedSignals: boundedNormalizedSignals(normalizedSignals),
+    sourceCounts: sourceCounts(rawSignals),
+    trendFacts,
     outputContract: {
       summary: 'short grounded synthesis',
       recommendation: 'one practical recommendation',
@@ -128,14 +157,14 @@ export function buildTrendAnalysisPrompt({
       risks: ['risk'],
       audienceSignals: ['audience signal'],
       contentAngles: ['content angle'],
-      confidence: 0.0
+      confidence: 'low | medium | high'
     }
   };
 
   return [
     'Analyze these collected and scored trend signals.',
-    'Use only this evidence. Return valid JSON matching outputContract.',
-    JSON.stringify(payload, null, 2)
+    'Use only trendFacts as evidence. Return JSON only, with keys matching outputContract.',
+    JSON.stringify(payload)
   ].join('\n\n');
 }
 
@@ -162,16 +191,60 @@ function stringArray(value) {
 }
 
 function normalizeConfidence(value) {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'low' || normalized === 'medium' || normalized === 'high') {
+      return normalized;
+    }
+  }
+
   const number = Number(value);
   if (!Number.isFinite(number)) return null;
   return Math.max(0, Math.min(1, number));
 }
 
+function fallbackAnalysis({ summary, providerResult = null, rawText = null, model = null }) {
+  return {
+    summary: compactText(summary, 500),
+    recommendation: FALLBACK_RECOMMENDATION,
+    opportunities: [],
+    risks: [],
+    audienceSignals: [],
+    contentAngles: [],
+    confidence: 'low',
+    provider: providerResult?.provider || 'ollama',
+    model: providerResult?.metadata?.model || model || null,
+    ...(rawText ? { rawText } : {})
+  };
+}
+
+export function buildEmptyTrendAnalysis(model = null) {
+  return {
+    summary: 'No strong trend candidates were found.',
+    recommendation: 'Collect more signals before acting.',
+    opportunities: [],
+    risks: [],
+    audienceSignals: [],
+    contentAngles: [],
+    confidence: 'low',
+    provider: 'deterministic',
+    model
+  };
+}
+
 function normalizeAnalysis(parsed, providerResult, rawText) {
   const source = parsed && typeof parsed === 'object' ? parsed : {};
+  if (!parsed) {
+    return fallbackAnalysis({
+      summary: rawText || 'Ollama returned prose instead of structured JSON.',
+      providerResult,
+      rawText
+    });
+  }
+
   return {
-    summary: compactText(source.summary, 500),
-    recommendation: compactText(source.recommendation, 500),
+    summary: compactText(source.summary, 500) || compactText(rawText, 500),
+    recommendation: compactText(source.recommendation, 500) || FALLBACK_RECOMMENDATION,
     opportunities: stringArray(source.opportunities),
     risks: stringArray(source.risks),
     audienceSignals: stringArray(source.audienceSignals),
@@ -185,6 +258,7 @@ function normalizeAnalysis(parsed, providerResult, rawText) {
 
 export async function runAnalyzeTrendsWorker({
   keyword,
+  candidates,
   scoredSignals,
   rawSignals,
   normalizedSignals,
@@ -194,9 +268,24 @@ export async function runAnalyzeTrendsWorker({
 } = {}) {
   assertWorkerExecutionContext();
 
+  const facts = compactTrendFacts({
+    candidates,
+    scoredSignals,
+    rawSignals,
+    normalizedSignals
+  });
+
+  if (facts.length === 0) {
+    return {
+      success: true,
+      result: buildEmptyTrendAnalysis(typeof model === 'string' && model.trim() ? model.trim() : null)
+    };
+  }
+
   try {
     const prompt = buildTrendAnalysisPrompt({
       keyword,
+      candidates,
       scoredSignals,
       rawSignals,
       normalizedSignals,
@@ -226,4 +315,3 @@ export async function runAnalyzeTrendsWorker({
     return fail(error);
   }
 }
-

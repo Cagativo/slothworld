@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { TASK_TYPE_TREND_RESEARCH } from '../core/constants.js';
 import { createTaskEngine } from '../core/engine/taskEngine.js';
 import { createTaskExecutionWorker } from '../core/workers/taskExecutionWorker.js';
+import { runAnalyzeTrendsWorker } from '../core/workers/analyzeTrendsWorker.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const UI_DIR = join(ROOT, 'ui');
@@ -32,6 +33,20 @@ function createExecutionAdapter() {
 
   return async (task) => {
     const execution = await worker.executeTask(task);
+    return {
+      success: execution && execution.success === true,
+      output: execution && Object.prototype.hasOwnProperty.call(execution, 'result')
+        ? execution.result
+        : execution,
+      error: execution && execution.error ? execution.error : undefined,
+      retryable: false
+    };
+  };
+}
+
+function createAnalysisExecutionAdapter(analysisInput) {
+  return async () => {
+    const execution = await runAnalyzeTrendsWorker(analysisInput);
     return {
       success: execution && execution.success === true,
       output: execution && Object.prototype.hasOwnProperty.call(execution, 'result')
@@ -138,10 +153,11 @@ test('TREND_RESEARCH executes Ollama analysis through TaskExecutionWorker and pr
     assert.equal(request.stream, false);
     assert.equal(request.options.temperature, 0.2);
     assert.match(request.system, /local trend research analyst/i);
-    assert.match(request.prompt, /"keyword": "cozy"/);
-    assert.match(request.prompt, /"scoredSignals"/);
-    assert.match(request.prompt, /"rawSignals"/);
-    assert.match(request.prompt, /"normalizedSignals"/);
+    assert.match(request.prompt, /"keyword":"cozy"/);
+    assert.match(request.prompt, /"trendFacts"/);
+    assert.doesNotMatch(request.prompt, /"rawSignals"/);
+    assert.doesNotMatch(request.prompt, /"normalizedSignals"/);
+    assert.ok(request.prompt.length < 6000, 'prompt should stay compact for local Ollama models');
 
     await engine.ackTask('trend-ollama-ok');
     assert.deepEqual(
@@ -156,6 +172,100 @@ test('TREND_RESEARCH executes Ollama analysis through TaskExecutionWorker and pr
       ]
     );
     assert.equal(emittedEvents.filter((event) => event.event === 'TASK_CREATED').length, 1);
+  }));
+});
+
+test('analyzeTrendsWorker wraps prose Ollama output as fallback analysis', async () => {
+  const fetchCalls = [];
+
+  await withTrendEnv(() => withFetch(async (url, options) => {
+    fetchCalls.push({ url, options });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        model: 'llama3.1:8b',
+        response: 'The cozy cluster is promising, but the evidence is still thin.',
+        done: true
+      })
+    };
+  }, async () => {
+    const engine = createTaskEngine({
+      executor: createAnalysisExecutionAdapter({
+        keyword: 'cozy',
+        candidates: [
+          { item: 'cozy blanket', source: 'reddit', score: 0.74 }
+        ],
+        scoredSignals: [
+          { item: 'cozy blanket', source: 'reddit', score: 0.74 }
+        ],
+        rawSignals: [
+          {
+            source: 'reddit',
+            text: 'cozy blanket discussion',
+            metrics: { popularity: 4, engagement: 8, velocity: 1 }
+          }
+        ],
+        normalizedSignals: [
+          {
+            item: 'cozy blanket',
+            source: 'reddit',
+            normalizedMetrics: { reliabilityWeight: 0.7 }
+          }
+        ]
+      })
+    });
+
+    engine.createTask({
+      id: 'trend-analysis-prose',
+      type: 'analysis_probe',
+      payload: {}
+    });
+    engine.enqueueTask('trend-analysis-prose');
+
+    const execution = await engine.executeTask('trend-analysis-prose');
+    assert.equal(execution.success, true);
+    assert.equal(execution.output.summary, 'The cozy cluster is promising, but the evidence is still thin.');
+    assert.equal(execution.output.recommendation, 'Review ranked trend evidence before action.');
+    assert.equal(execution.output.confidence, 'low');
+    assert.equal(execution.output.rawText, 'The cozy cluster is promising, but the evidence is still thin.');
+    assert.equal(fetchCalls.length, 1);
+  }));
+});
+
+test('analyzeTrendsWorker skips provider and returns fallback analysis when candidates are empty', async () => {
+  let fetchCalled = false;
+
+  await withTrendEnv(() => withFetch(async () => {
+    fetchCalled = true;
+    throw new Error('fetch should not be called');
+  }, async () => {
+    const engine = createTaskEngine({
+      executor: createAnalysisExecutionAdapter({
+        keyword: 'quiet',
+        candidates: [],
+        scoredSignals: [
+          { item: 'quiet desk', source: 'reddit', score: 0.5 }
+        ],
+        rawSignals: [],
+        normalizedSignals: []
+      })
+    });
+
+    engine.createTask({
+      id: 'trend-analysis-empty',
+      type: 'analysis_probe',
+      payload: {}
+    });
+    engine.enqueueTask('trend-analysis-empty');
+
+    const execution = await engine.executeTask('trend-analysis-empty');
+    assert.equal(execution.success, true);
+    assert.equal(execution.output.summary, 'No strong trend candidates were found.');
+    assert.equal(execution.output.recommendation, 'Collect more signals before acting.');
+    assert.equal(execution.output.confidence, 'low');
+    assert.equal(execution.output.provider, 'deterministic');
+    assert.equal(fetchCalled, false);
   }));
 });
 
@@ -199,4 +309,3 @@ test('UI files do not import or call the Ollama provider for TrendResearch analy
     assert.equal(/integrations\/llm\/providers\/ollamaProvider|ollamaProvider|127\.0\.0\.1:11434|\/api\/generate/.test(source), false, relPath);
   }
 });
-

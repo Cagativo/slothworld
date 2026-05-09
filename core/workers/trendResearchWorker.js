@@ -79,8 +79,15 @@ export async function runTrendResearchTaskWorker(input) {
     return failure(scoreStep.error, 2, scoreStep.result || null);
   }
 
+  const candidateStep = runSelectCandidatesWorker({ scored: scoreStep.result.scored });
+  if (!candidateStep.success) {
+    return failure(candidateStep.error, 3, candidateStep.result || null);
+  }
+
+  const candidates = enrichCandidates(candidateStep.result.candidates, scoreStep.result.scored);
   const analysisStep = await runAnalyzeTrendsWorker({
     keyword,
+    candidates,
     scoredSignals: scoreStep.result.scored,
     rawSignals: collectStep.result.rawSignals,
     normalizedSignals: normalizedStep.result.normalizedSignals,
@@ -89,15 +96,9 @@ export async function runTrendResearchTaskWorker(input) {
     temperature: payload.temperature
   });
   if (!analysisStep.success) {
-    return failure(analysisStep.error, 3, analysisStep.result || null);
+    return failure(analysisStep.error, 4, analysisStep.result || null);
   }
 
-  const candidateStep = runSelectCandidatesWorker({ scored: scoreStep.result.scored });
-  if (!candidateStep.success) {
-    return failure(candidateStep.error, 4, candidateStep.result || null);
-  }
-
-  const candidates = enrichCandidates(candidateStep.result.candidates, scoreStep.result.scored);
   const finalStep = runProduceFinalOutputWorker({ candidates });
   if (!finalStep.success) {
     return failure(finalStep.error, 5, finalStep.result || null);
@@ -121,4 +122,3 @@ export async function runTrendResearchTaskWorker(input) {
     }
   };
 }
-

@@ -142,7 +142,11 @@ function normalizeTrendAnalysis(analysis) {
     risks,
     audienceSignals,
     contentAngles,
-    confidence: Number.isFinite(analysis.confidence) ? Number(analysis.confidence) : null,
+    confidence: Number.isFinite(analysis.confidence)
+      ? Number(analysis.confidence)
+      : (typeof analysis.confidence === 'string' && analysis.confidence.trim()
+          ? analysis.confidence.trim().toLowerCase()
+          : null),
     provider: typeof analysis.provider === 'string' && analysis.provider.trim() ? analysis.provider.trim() : null,
     model: typeof analysis.model === 'string' && analysis.model.trim() ? analysis.model.trim() : null
   };
