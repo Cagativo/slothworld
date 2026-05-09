@@ -244,15 +244,23 @@ export function wrapResearchCardText(ctx, text, maxWidth, maxLines = RESEARCH_CA
   return lines;
 }
 
-function findResearchDeskCardModel(components) {
+function findResearchDeskCardComponent(components) {
   if (!Array.isArray(components)) return null;
-  const component = components.find((entry) => entry
+  return components.find((entry) => entry
     && entry.componentType === 'workstation-hotspot'
     && entry.id === 'researchMonitorHotspot'
     && entry.resultCardViewModel
     && typeof entry.resultCardViewModel === 'object'
-    && Array.isArray(entry.resultCardViewModel.rows));
-  return component ? component.resultCardViewModel : null;
+    && Array.isArray(entry.resultCardViewModel.rows)) || null;
+}
+
+function shouldRenderWorkstationResultCard(component, options = {}) {
+  if (!component?.resultCardViewModel) return false;
+  if (options.debug === true) return false;
+  return component.isHovered === true
+    || component.isSelected === true
+    || options.selectedHotspotId === component.id
+    || options.hoveredHotspotId === component.id;
 }
 
 function drawLeafIcon(ctx, x, y, size) {
@@ -1177,11 +1185,15 @@ export function renderUIOverlayLayer(ctx, components, entityPositions, options =
     && typeof options.stationSnapshots.research_desk.trendResult.taskId === 'string'
     ? options.stationSnapshots.research_desk.trendResult.taskId
     : null;
-  const researchCardModel = findResearchDeskCardModel(components);
+  const researchCardComponent = findResearchDeskCardComponent(components);
+  const hasResearchResultCard = Boolean(researchCardComponent?.resultCardViewModel);
+  const researchCardModel = shouldRenderWorkstationResultCard(researchCardComponent, options)
+    ? researchCardComponent.resultCardViewModel
+    : null;
   const hasResearchCardModel = Boolean(researchCardModel);
   traceResearchCard('[RESEARCH_CARD_RENDER_INPUT]', {
     stationId: 'research_desk',
-    hasResultCardViewModel: hasResearchCardModel,
+    hasResultCardViewModel: hasResearchResultCard,
     debugMode: options.debug === true,
     selected: options.selectedHotspotId === 'researchMonitorHotspot',
     hovered: options.hoveredHotspotId === 'researchMonitorHotspot',
@@ -1193,7 +1205,7 @@ export function renderUIOverlayLayer(ctx, components, entityPositions, options =
 
   for (const c of components) {
     if (c.componentType !== 'agent-sprite') continue;
-    if (hasResearchCardModel && options.debug !== true) continue;
+    if (hasResearchResultCard && options.debug !== true) continue;
 
     const panel = c.trendPanelState && typeof c.trendPanelState === 'object'
       ? c.trendPanelState

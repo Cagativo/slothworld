@@ -1205,9 +1205,8 @@ test('canvas inspection: Research Desk result card wraps and clamps row text', (
   assert.ok(lines.every((line) => ctx.measureText(line).width <= 210));
 });
 
-test('canvas inspection: normal mode renders polished Research Desk analysis card', () => {
-  const ctx = createMockContext();
-  const components = [{
+function makeResearchDeskCardComponent() {
+  return {
     componentType: 'workstation-hotspot',
     id: 'researchMonitorHotspot',
     resultCardViewModel: {
@@ -1218,12 +1217,53 @@ test('canvas inspection: normal mode renders polished Research Desk analysis car
         { label: 'Top signal', text: 'Fitness routine 0.91' },
       ],
     },
-  }];
+  };
+}
+
+test('canvas inspection: Research Desk card VM does not draw without hover or selection', () => {
+  const ctx = createMockContext();
+  const components = [makeResearchDeskCardComponent()];
 
   renderUIOverlayLayer(ctx, components, new Map(), {
     bakedBackground: true,
     debug: false,
     bootPolicy: BACKGROUND_BOOT_POLICY.BAKED_READY,
+  });
+
+  const textCalls = ctx.calls.filter((call) => call[0] === 'fillText').map((call) => call[1]);
+  assert.ok(!textCalls.includes('Research Desk'));
+  assert.ok(!textCalls.some((text) => String(text).startsWith('Trend results:')));
+});
+
+test('canvas inspection: hovered Research Desk renders polished analysis card', () => {
+  const ctx = createMockContext();
+  const components = [makeResearchDeskCardComponent()];
+
+  renderUIOverlayLayer(ctx, components, new Map(), {
+    bakedBackground: true,
+    debug: false,
+    bootPolicy: BACKGROUND_BOOT_POLICY.BAKED_READY,
+    hoveredHotspotId: 'researchMonitorHotspot',
+  });
+
+  const textCalls = ctx.calls.filter((call) => call[0] === 'fillText').map((call) => call[1]);
+  assert.ok(textCalls.includes('Research Desk'));
+  assert.ok(textCalls.some((text) => String(text).startsWith('Trend results:')));
+  assert.ok(textCalls.some((text) => String(text).startsWith('Recommendation:')));
+  assert.ok(textCalls.some((text) => String(text).startsWith('Top signal:')));
+  assert.ok(!textCalls.some((text) => /TASK_|task-research|ollama_timeout/.test(String(text))));
+  assert.ok(ctx.calls.some((call) => call[0] === 'ellipse'), 'leaf/bullet accents should render');
+});
+
+test('canvas inspection: selected Research Desk renders polished analysis card', () => {
+  const ctx = createMockContext();
+  const components = [makeResearchDeskCardComponent()];
+
+  renderUIOverlayLayer(ctx, components, new Map(), {
+    bakedBackground: true,
+    debug: false,
+    bootPolicy: BACKGROUND_BOOT_POLICY.BAKED_READY,
+    selectedHotspotId: 'researchMonitorHotspot',
   });
 
   const textCalls = ctx.calls.filter((call) => call[0] === 'fillText').map((call) => call[1]);
@@ -1268,6 +1308,7 @@ test('canvas inspection: Research Desk card suppresses raw trend overlay text in
     bakedBackground: false,
     debug: false,
     bootPolicy: BACKGROUND_BOOT_POLICY.BAKED_READY,
+    hoveredHotspotId: 'researchMonitorHotspot',
   });
 
   const textCalls = ctx.calls.filter((call) => call[0] === 'fillText').map((call) => String(call[1]));
@@ -1275,6 +1316,59 @@ test('canvas inspection: Research Desk card suppresses raw trend overlay text in
   assert.ok(textCalls.some((text) => text.startsWith('Trend results: Polished summary is ready.')));
   assert.ok(!textCalls.some((text) => text.startsWith('Top Trends: raw keyword')));
   assert.ok(!textCalls.some((text) => text.includes('Raw overlay candidate')));
+});
+
+test('canvas inspection: Research Desk result card suppresses legacy normal popover', () => {
+  const ctx = createMockContext();
+  const component = {
+    ...makeResearchDeskCardComponent(),
+    label: 'Research Desk',
+    popoverViewModel: {
+      title: 'Research Desk',
+      lines: ['Trend results: legacy popover text'],
+    },
+  };
+
+  renderInspectionPopover(ctx, {
+    componentType: 'workstation-hotspot',
+    entityId: 'researchMonitorHotspot',
+    component,
+    bounds: { x: 100, y: 100, width: 80, height: 60 },
+  }, { debug: false, selected: true });
+
+  const textCalls = ctx.calls.filter((call) => call[0] === 'fillText').map((call) => String(call[1]));
+  assert.ok(!textCalls.includes('Research Desk'));
+  assert.ok(!textCalls.some((text) => text.includes('legacy popover text')));
+});
+
+test('canvas inspection: other workstation popovers still render normally', () => {
+  const ctx = createMockContext();
+  const component = {
+    componentType: 'workstation-hotspot',
+    id: 'renderMonitorHotspot',
+    label: 'Render Desk',
+    inspectionViewModel: {
+      title: 'Render Desk',
+      statusLabel: 'Idle',
+      lines: ['Render table is idle'],
+      taskSummaries: [],
+    },
+    popoverViewModel: {
+      title: 'Render Desk',
+      lines: ['Render table is idle'],
+    },
+  };
+
+  renderInspectionPopover(ctx, {
+    componentType: 'workstation-hotspot',
+    entityId: 'renderMonitorHotspot',
+    component,
+    bounds: { x: 100, y: 100, width: 80, height: 60 },
+  }, { debug: false, selected: true });
+
+  const textCalls = ctx.calls.filter((call) => call[0] === 'fillText').map((call) => String(call[1]));
+  assert.ok(textCalls.includes('Render Desk'));
+  assert.ok(textCalls.some((text) => text.startsWith('Render table')));
 });
 
 test('canvas inspection: fallback background mode still renders world composition layers', () => {
