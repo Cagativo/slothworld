@@ -24,6 +24,7 @@ import { createTaskExecutionWorker } from '../core/workers/taskExecutionWorker.j
 import { createDiscordNotificationWorker } from '../core/workers/discordNotificationWorker.js';
 import { createTaskEngine } from '../core/engine/taskEngine.js';
 import {
+  LOCAL_LLM_WORKER_ID,
   TREND_RESEARCH_WORKER_ID,
   getDefaultWorkerForTaskType,
   isWorkerEligibleForTaskType
@@ -34,6 +35,7 @@ import {
   TASK_TYPE_SHOPIFY,
   TASK_TYPE_IMAGE_RENDER,
   TASK_TYPE_TREND_RESEARCH,
+  TASK_TYPE_LOCAL_LLM,
   ACTION_REPLY_TO_MESSAGE,
   ACTION_PROCESS_ORDER,
   ACTION_START_PRODUCT_WORKFLOW,
@@ -68,6 +70,9 @@ const TREND_RESEARCH_DEFAULT_CHANNEL_ID = '1491500223288184964';
 const WORKER_CAPABILITY_POLICY = Object.freeze({
   [TASK_TYPE_TREND_RESEARCH]: Object.freeze([
     TREND_RESEARCH_WORKER_ID
+  ]),
+  [TASK_TYPE_LOCAL_LLM]: Object.freeze([
+    LOCAL_LLM_WORKER_ID
   ])
 });
 const TASK_CREATION_WINDOW_MS = 10_000;
@@ -952,8 +957,9 @@ function validateTaskInput(body) {
     && body.type !== TASK_TYPE_SHOPIFY
     && body.type !== TASK_TYPE_IMAGE_RENDER
     && body.type !== TASK_TYPE_TREND_RESEARCH
+    && body.type !== TASK_TYPE_LOCAL_LLM
   ) {
-    return "type must be 'discord', 'shopify', 'image_render', or 'TREND_RESEARCH'";
+    return "type must be 'discord', 'shopify', 'image_render', 'TREND_RESEARCH', or 'local_llm'";
   }
 
   if (body.title !== undefined && typeof body.title !== 'string') {
