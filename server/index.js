@@ -465,6 +465,26 @@ function getTrendResearchAssignedAgentId(task, resultPayload) {
   return null;
 }
 
+function getLocalLlmResultPayload(task) {
+  const output = task && task.lastResult && task.lastResult.output && typeof task.lastResult.output === 'object'
+    ? task.lastResult.output
+    : null;
+  const metadata = output && output.metadata && typeof output.metadata === 'object' ? output.metadata : {};
+  const payload = task && task.payload && typeof task.payload === 'object' ? task.payload : {};
+
+  return {
+    taskId: task && task.id ? task.id : null,
+    title: task && typeof task.title === 'string' ? task.title : '',
+    prompt: typeof payload.prompt === 'string' ? payload.prompt : '',
+    text: output && typeof output.text === 'string' ? output.text : '',
+    provider: output && typeof output.provider === 'string' ? output.provider : 'ollama',
+    model: typeof metadata.model === 'string' && metadata.model.trim()
+      ? metadata.model.trim()
+      : (typeof payload.model === 'string' ? payload.model : ''),
+    createdAt: output && Number.isFinite(output.createdAt) ? output.createdAt : null
+  };
+}
+
 function projectTaskForRead(task) {
   if (!task || !task.id) {
     return task;
@@ -1290,6 +1310,27 @@ const taskEngine = createTaskEngine({
           payload: {
             requestId,
             error: task.lastResult && task.lastResult.error ? task.lastResult.error : 'trend_research_failed'
+          }
+        });
+      }
+    }
+
+    if (task && task.type === TASK_TYPE_LOCAL_LLM) {
+      const resultPayload = getLocalLlmResultPayload(task);
+
+      if (task.status === 'acknowledged') {
+        emitBridgeEvent({
+          type: 'LOCAL_LLM_COMPLETED',
+          taskId: task.id,
+          payload: resultPayload
+        });
+      } else if (task.status === 'failed') {
+        emitBridgeEvent({
+          type: 'LOCAL_LLM_FAILED',
+          taskId: task.id,
+          payload: {
+            ...resultPayload,
+            error: task.lastResult && task.lastResult.error ? task.lastResult.error : 'local_llm_failed'
           }
         });
       }

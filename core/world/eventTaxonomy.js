@@ -23,7 +23,9 @@ export const AGENT_EVENTS = Object.freeze([
 
 export const WORKFLOW_EVENTS = Object.freeze([
   'TREND_RESEARCH_COMPLETED',
-  'TREND_RESEARCH_FAILED'
+  'TREND_RESEARCH_FAILED',
+  'LOCAL_LLM_COMPLETED',
+  'LOCAL_LLM_FAILED'
 ]);
 
 const lifecycleSet = new Set(LIFECYCLE_EVENTS);

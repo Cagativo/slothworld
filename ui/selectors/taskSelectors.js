@@ -11,7 +11,7 @@ function eventTaskId(event) {
     return null;
   }
 
-  const payload = event && typeof event.payload === 'object' ? event.payload : {};
+  const payload = event && event.payload && typeof event.payload === 'object' ? event.payload : {};
   return normalizeTaskId(event.taskId)
     || normalizeTaskId(payload.taskId)
     || normalizeTaskId(event && event.task && event.task.id);
@@ -34,6 +34,55 @@ function hashString(text) {
 function payloadValue(event, key) {
   const payload = event && typeof event.payload === 'object' ? event.payload : {};
   return Object.prototype.hasOwnProperty.call(payload, key) ? payload[key] : undefined;
+}
+
+function compactText(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeLocalBrainEvent(event) {
+  const eventType = event && typeof event.type === 'string' ? event.type : null;
+  if (eventType !== 'LOCAL_LLM_COMPLETED' && eventType !== 'LOCAL_LLM_FAILED') {
+    return null;
+  }
+
+  const payload = event && typeof event.payload === 'object' ? event.payload : {};
+  const timestamp = Number.isFinite(event && event.timestamp) ? Number(event.timestamp) : null;
+  const text = compactText(payload.text);
+  const prompt = compactText(payload.prompt);
+  const title = compactText(payload.title);
+  const error = compactText(payload.error);
+  const model = compactText(payload.model);
+  const provider = compactText(payload.provider) || 'ollama';
+
+  return {
+    status: eventType === 'LOCAL_LLM_FAILED' ? 'failed' : 'completed',
+    title,
+    prompt,
+    text,
+    error,
+    provider,
+    model,
+    updatedAt: timestamp,
+    createdAt: Number.isFinite(payload.createdAt) ? Number(payload.createdAt) : null
+  };
+}
+
+function getLocalBrainSnapshot(events) {
+  let latest = null;
+
+  for (const event of Array.isArray(events) ? events : []) {
+    const candidate = normalizeLocalBrainEvent(event);
+    if (!candidate) {
+      continue;
+    }
+
+    if (!latest || (Number(candidate.updatedAt) || 0) >= (Number(latest.updatedAt) || 0)) {
+      latest = candidate;
+    }
+  }
+
+  return latest;
 }
 
 function normalizeSeconds(value) {
@@ -172,6 +221,7 @@ export function getTaskSnapshot(indexedWorld, taskId) {
     return null;
   }
 
+  const rawEvents = getRawTaskEvents(indexedWorld, id);
   const events = getLifecycleTaskEvents(indexedWorld, id, 'getTaskSnapshot');
   if (!events.length) {
     return null;
@@ -180,6 +230,7 @@ export function getTaskSnapshot(indexedWorld, taskId) {
   const firstEvent = events[0];
   const lastEvent = events[events.length - 1];
   const status = getTaskStatus(indexedWorld, id);
+  const localBrain = getLocalBrainSnapshot(rawEvents);
 
   let title = id;
   let type = 'unknown';
@@ -224,14 +275,15 @@ export function getTaskSnapshot(indexedWorld, taskId) {
 
   return {
     id,
-    title,
+    title: localBrain && localBrain.title ? localBrain.title : title,
     type,
     status,
     assignedAgentId,
     deskId: deskId || `desk-${hashString(id) % 6}`,
     error,
     createdAt: Number.isFinite(firstEvent && firstEvent.timestamp) ? Number(firstEvent.timestamp) : null,
-    updatedAt: Number.isFinite(lastEvent && lastEvent.timestamp) ? Number(lastEvent.timestamp) : null
+    updatedAt: Number.isFinite(lastEvent && lastEvent.timestamp) ? Number(lastEvent.timestamp) : null,
+    localBrain
   };
 }
 

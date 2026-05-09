@@ -81,7 +81,8 @@ export function buildVisualWorldGraph(input, options) {
         queueTime:   (m && m.queueTime   != null) ? m.queueTime   : null,
         duration:    (m && m.duration    != null) ? m.duration    : null,
         ackLatency:  (m && m.ackLatency  != null) ? m.ackLatency  : null,
-        incidents:   incidentsByTaskId.get(task.id) || []
+        incidents:   incidentsByTaskId.get(task.id) || [],
+        localBrain:  task.localBrain && typeof task.localBrain === 'object' ? task.localBrain : null
       }
     };
   });

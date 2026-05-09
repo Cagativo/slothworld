@@ -152,6 +152,70 @@ function getTaskTitle(node) {
   return node && node.id ? String(node.id) : 'unknown task';
 }
 
+export function compactLocalBrainText(text, maxLines = 3, maxChars = 280) {
+  const normalized = typeof text === 'string' ? text.trim() : '';
+  if (!normalized) {
+    return '';
+  }
+
+  const lines = normalized
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, maxLines);
+  const compact = lines.join('\n');
+  return compact.length > maxChars ? `${compact.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…` : compact;
+}
+
+function summarizePrompt(prompt) {
+  const normalized = typeof prompt === 'string' ? prompt.trim() : '';
+  if (!normalized) {
+    return 'No prompt captured';
+  }
+
+  return normalized.length > 96 ? `${normalized.slice(0, 95).trimEnd()}…` : normalized;
+}
+
+export function buildLocalBrainModel(taskNodes) {
+  const localTasks = (Array.isArray(taskNodes) ? taskNodes : [])
+    .filter((node) => {
+      const meta = node && node.metadata && typeof node.metadata === 'object' ? node.metadata : {};
+      return meta.taskType === 'local_llm';
+    })
+    .sort((a, b) => getNodeTimestamp(b) - getNodeTimestamp(a));
+
+  const runningStatuses = new Set(['claimed', 'executing', 'awaiting_ack']);
+  const runningTask = localTasks.find((node) => runningStatuses.has(String(node && node.status || '').toLowerCase())) || null;
+  const latest = runningTask || localTasks[0] || null;
+
+  if (!latest) {
+    return {
+      status: 'idle',
+      title: 'No local brain task yet',
+      prompt: '',
+      reply: '',
+      error: ''
+    };
+  }
+
+  const meta = latest.metadata && typeof latest.metadata === 'object' ? latest.metadata : {};
+  const localBrain = meta.localBrain && typeof meta.localBrain === 'object' ? meta.localBrain : {};
+  const status = String(latest.status || 'unknown').toLowerCase();
+  const isFailed = status === 'failed' || localBrain.status === 'failed';
+  const isRunning = runningStatuses.has(status);
+  const displayStatus = isFailed ? 'failed' : (isRunning ? 'running' : (status === 'completed' || status === 'acknowledged' ? 'completed' : 'idle'));
+  const rawError = typeof meta.error === 'string' && meta.error ? meta.error : localBrain.error;
+  const displayError = rawError ? formatTaskErrorMessage(meta.taskType, rawError) : '';
+
+  return {
+    status: displayStatus,
+    title: getTaskTitle(latest),
+    prompt: summarizePrompt(localBrain.prompt),
+    reply: compactLocalBrainText(localBrain.text),
+    error: displayError || ''
+  };
+}
+
 function buildActiveWorkModel(taskNodes, workerNodes) {
   const activeStatuses = new Set(['claimed', 'executing', 'awaiting_ack']);
   const activeTasks = (Array.isArray(taskNodes) ? taskNodes : [])
@@ -288,6 +352,23 @@ function renderNormalCardRows(listElement, rows, formatter) {
   });
 }
 
+function renderLocalBrainCard(root, model) {
+  if (!root) {
+    return;
+  }
+
+  const safeModel = model || buildLocalBrainModel([]);
+  root.querySelector('[data-local-brain-status]').textContent = safeModel.status;
+  root.querySelector('[data-local-brain-title]').textContent = safeModel.title;
+  root.querySelector('[data-local-brain-prompt]').textContent = safeModel.prompt || 'No prompt captured';
+
+  const reply = root.querySelector('[data-local-brain-reply]');
+  const error = root.querySelector('[data-local-brain-error]');
+  reply.textContent = safeModel.reply || (safeModel.status === 'running' ? 'Waiting for reply…' : 'No reply yet');
+  error.textContent = safeModel.error || '';
+  error.hidden = !safeModel.error;
+}
+
 function renderTaskList(listElement, nodes, selectedTaskId) {
   listElement.innerHTML = '';
 
@@ -364,6 +445,17 @@ function createPanelRoot() {
           </header>
           <p class="ocp-normal-card-meta" data-card-meta="recent-results">Latest completed/acknowledged tasks</p>
           <ul class="ocp-list ocp-normal-card-list" data-card-list="recent-results"></ul>
+        </article>
+
+        <article class="ocp-normal-card" data-card="local-brain">
+          <header>
+            <h4>Local Brain</h4>
+            <span class="ocp-normal-card-count" data-local-brain-status>idle</span>
+          </header>
+          <p class="ocp-normal-card-meta" data-local-brain-title>No local brain task yet</p>
+          <p class="ocp-normal-card-meta" data-local-brain-prompt>No prompt captured</p>
+          <pre class="ocp-detail ocp-local-brain-reply" data-local-brain-reply>No reply yet</pre>
+          <p class="ocp-normal-card-meta ocp-local-brain-error" data-local-brain-error hidden></p>
         </article>
       </div>
       <div class="ocp-debug-actions ui-debug-only">
@@ -466,6 +558,7 @@ export function initOperatorControlPanel() {
   const recentResultsCount = panel.querySelector('[data-card-count="recent-results"]');
   const recentResultsMeta = panel.querySelector('[data-card-meta="recent-results"]');
   const recentResultsList = panel.querySelector('[data-card-list="recent-results"]');
+  const localBrainCard = panel.querySelector('[data-card="local-brain"]');
   const activeOnlyInput = panel.querySelector('[data-control="active-only"]');
   const recentSecondsSelect = panel.querySelector('[data-control="recent-seconds"]');
   const maxEventsSelect = panel.querySelector('[data-control="max-events"]');
@@ -548,6 +641,7 @@ export function initOperatorControlPanel() {
     const activeWorkModel = buildActiveWorkModel(taskNodes, workerNodes);
     const needsAttentionModel = buildNeedsAttentionModel(taskNodes);
     const recentResultsModel = buildRecentResultsModel(taskNodes, graphEdges);
+    const localBrainModel = buildLocalBrainModel(taskNodes);
 
     if (activeWorkCount) {
       activeWorkCount.textContent = String(activeWorkModel.count);
@@ -587,6 +681,7 @@ export function initOperatorControlPanel() {
       recentResultsModel.rows,
       (row) => `${taskIcon(row.status)} ${row.title} | ${row.status} | ${row.at}`
     );
+    renderLocalBrainCard(localBrainCard, localBrainModel);
 
     // Apply filters using already-computed node.status — no derivation from events.
     let filteredTaskNodes = taskNodes;
@@ -729,6 +824,7 @@ export function initOperatorControlPanel() {
           duration: meta.duration,
           ackLatency: meta.ackLatency,
           incidents: meta.incidents,
+          localBrain: meta.localBrain || null,
           executionTrace,
           timeline: timelineRows
         });
