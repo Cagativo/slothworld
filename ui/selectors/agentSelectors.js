@@ -111,6 +111,43 @@ function normalizeTrendPanelResults(items) {
     .filter((entry) => entry.item.length > 0);
 }
 
+function normalizeStringArray(value) {
+  return Array.isArray(value)
+    ? value
+        .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+        .filter(Boolean)
+    : [];
+}
+
+function normalizeTrendAnalysis(analysis) {
+  if (!analysis || typeof analysis !== 'object') {
+    return null;
+  }
+
+  const summary = typeof analysis.summary === 'string' ? analysis.summary.trim() : '';
+  const recommendation = typeof analysis.recommendation === 'string' ? analysis.recommendation.trim() : '';
+  const opportunities = normalizeStringArray(analysis.opportunities);
+  const risks = normalizeStringArray(analysis.risks);
+  const audienceSignals = normalizeStringArray(analysis.audienceSignals);
+  const contentAngles = normalizeStringArray(analysis.contentAngles);
+
+  if (!summary && !recommendation && opportunities.length === 0 && risks.length === 0) {
+    return null;
+  }
+
+  return {
+    summary,
+    recommendation,
+    opportunities,
+    risks,
+    audienceSignals,
+    contentAngles,
+    confidence: Number.isFinite(analysis.confidence) ? Number(analysis.confidence) : null,
+    provider: typeof analysis.provider === 'string' && analysis.provider.trim() ? analysis.provider.trim() : null,
+    model: typeof analysis.model === 'string' && analysis.model.trim() ? analysis.model.trim() : null
+  };
+}
+
 function resolveTrendResultPayload(payload) {
   if (payload && payload.result && typeof payload.result === 'object') {
     return payload.result;
@@ -122,6 +159,29 @@ function resolveTrendResultPayload(payload) {
 
   if (payload && payload.trendResult && typeof payload.trendResult === 'object') {
     return payload.trendResult;
+  }
+
+  return null;
+}
+
+function resolveLatestTrendAnalysis(taskEvents, agentId) {
+  for (let i = taskEvents.length - 1; i >= 0; i -= 1) {
+    const event = taskEvents[i];
+    if (!event || event.type !== 'TREND_RESEARCH_COMPLETED') {
+      continue;
+    }
+
+    const payload = event && typeof event.payload === 'object' ? event.payload : {};
+    const payloadAgentId = normalizeWorkerId(payload.assignedAgentId || payload.workerId || payload.agentId);
+    if (payloadAgentId && payloadAgentId !== agentId) {
+      continue;
+    }
+
+    const resultPayload = resolveTrendResultPayload(payload);
+    const analysis = normalizeTrendAnalysis(resultPayload && resultPayload.analysis);
+    if (analysis) {
+      return analysis;
+    }
   }
 
   return null;
@@ -197,6 +257,7 @@ export function getAgentTrendPanelState(indexedWorld, agentId) {
 
   const taskEvents = indexedWorld.eventsByTaskId.get(taskId) || [];
   let keyword = null;
+  let lastUpdated = null;
 
   for (let i = taskEvents.length - 1; i >= 0; i -= 1) {
     const event = taskEvents[i];
@@ -212,11 +273,25 @@ export function getAgentTrendPanelState(indexedWorld, agentId) {
 
     if (typeof payload.keyword === 'string' && payload.keyword.trim()) {
       keyword = payload.keyword.trim();
+      if (lastUpdated === null && Number.isFinite(event.timestamp)) {
+        lastUpdated = Number(event.timestamp);
+      }
       break;
     }
   }
 
   const results = resolveTrendResultItems(taskEvents);
+  const analysis = resolveLatestTrendAnalysis(taskEvents, id);
+
+  if (lastUpdated === null) {
+    for (let i = taskEvents.length - 1; i >= 0; i -= 1) {
+      const event = taskEvents[i];
+      if (event && event.type === 'TREND_RESEARCH_COMPLETED' && Number.isFinite(event.timestamp)) {
+        lastUpdated = Number(event.timestamp);
+        break;
+      }
+    }
+  }
 
   if (TREND_UI_DEBUG) {
     console.log('[TrendResearchUI][selector] trend panel state', {
@@ -229,7 +304,10 @@ export function getAgentTrendPanelState(indexedWorld, agentId) {
   return {
     taskId,
     keyword,
-    results
+    results,
+    analysis,
+    lastUpdated,
+    agentId: id
   };
 }
 

@@ -15,8 +15,8 @@ import { runSignalNormalizationWorker } from './signalNormalizationWorker.js';
 import { runScoreTrendsWorker } from './scoreTrendsWorker.js';
 import { runSelectCandidatesWorker } from './selectCandidatesWorker.js';
 import { runProduceFinalOutputWorker } from './produceFinalOutputWorker.js';
-import { runTrendResearchWorkflow } from '../engine/runTrendResearchWorkflow.js';
 import { runLocalLlmWorker } from './localLlmWorker.js';
+import { runTrendResearchTaskWorker } from './trendResearchWorker.js';
 
 import { assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
 
@@ -299,9 +299,7 @@ export function createTaskExecutionWorker({ getDiscordClient, taskTriggeredMessa
         }
 
         if (task.type === TASK_TYPE_TREND_RESEARCH) {
-          const result = await runTrendResearchWorkflow(task.payload);
-
-          return ok(result);
+          return runTrendResearchTaskWorker(task);
         }
 
         if (task.type === TASK_TYPE_LOCAL_LLM) {

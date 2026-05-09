@@ -169,6 +169,39 @@ function normalizeTrendRows(results) {
     .filter(Boolean);
 }
 
+function normalizeStringArray(value) {
+  return safeArray(value)
+    .map((entry) => safeString(entry))
+    .filter(Boolean);
+}
+
+function normalizeTrendAnalysis(analysis) {
+  if (!analysis || typeof analysis !== 'object') return null;
+
+  const summary = safeString(analysis.summary);
+  const recommendation = safeString(analysis.recommendation);
+  const opportunities = normalizeStringArray(analysis.opportunities);
+  const risks = normalizeStringArray(analysis.risks);
+  const audienceSignals = normalizeStringArray(analysis.audienceSignals);
+  const contentAngles = normalizeStringArray(analysis.contentAngles);
+
+  if (!summary && !recommendation && opportunities.length === 0 && risks.length === 0) {
+    return null;
+  }
+
+  return Object.freeze({
+    summary,
+    recommendation,
+    opportunities: Object.freeze(opportunities),
+    risks: Object.freeze(risks),
+    audienceSignals: Object.freeze(audienceSignals),
+    contentAngles: Object.freeze(contentAngles),
+    confidence: Number.isFinite(analysis.confidence) ? Number(analysis.confidence) : null,
+    provider: safeString(analysis.provider),
+    model: safeString(analysis.model),
+  });
+}
+
 function buildTrendResultModel(agent, tasksById) {
   const panel = agent?.trendPanelState && typeof agent.trendPanelState === 'object'
     ? agent.trendPanelState
@@ -177,7 +210,8 @@ function buildTrendResultModel(agent, tasksById) {
 
   const taskId = safeString(panel.taskId);
   const rows = normalizeTrendRows(panel.results);
-  if (!taskId || rows.length === 0) return null;
+  const analysis = normalizeTrendAnalysis(panel.analysis);
+  if (!taskId || (rows.length === 0 && !analysis)) return null;
 
   const task = tasksById.get(taskId) || null;
   return Object.freeze({
@@ -185,6 +219,7 @@ function buildTrendResultModel(agent, tasksById) {
     keyword: safeString(panel.keyword),
     status: normalizeStatus(panel.status || task?.status),
     updatedAt: safeTimestamp(panel.lastUpdated) ?? safeTimestamp(task?.updatedAt),
+    analysis,
     rows: Object.freeze(rows.slice(0, 5)),
   });
 }
@@ -245,7 +280,7 @@ function freezeSnapshot(snapshot) {
  *   currentWork: { count: number, items: ReadonlyArray<object> },
  *   lastResult: { title: string, status: string, summary: string, taskId: string|null, completedAt: number|null } | null,
  *   latestFailure: { title: string, summary: string, taskId: string|null } | null,
- *   trendResult: { taskId: string, keyword: string|null, status: string, updatedAt: number|null, rows: ReadonlyArray<object> } | null,
+ *   trendResult: { taskId: string, keyword: string|null, status: string, updatedAt: number|null, analysis: object|null, rows: ReadonlyArray<object> } | null,
  * }>>}
  */
 export function buildWorkstationStatusSnapshots(input = {}) {
