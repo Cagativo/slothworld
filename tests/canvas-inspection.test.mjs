@@ -1235,6 +1235,48 @@ test('canvas inspection: normal mode renders polished Research Desk analysis car
   assert.ok(ctx.calls.some((call) => call[0] === 'ellipse'), 'leaf/bullet accents should render');
 });
 
+test('canvas inspection: Research Desk card suppresses raw trend overlay text in normal mode', () => {
+  const ctx = createMockContext();
+  const components = [
+    {
+      componentType: 'agent-sprite',
+      id: 'agent-research',
+      x: 540,
+      y: 360,
+      visualState: 'working',
+      trendPanelState: {
+        taskId: 'task-raw-overlay',
+        keyword: 'raw keyword',
+        status: 'done',
+        results: [{ item: 'Raw overlay candidate', score: 0.77 }],
+      },
+    },
+    {
+      componentType: 'workstation-hotspot',
+      id: 'researchMonitorHotspot',
+      resultCardViewModel: {
+        title: 'Research Desk',
+        rows: [
+          { label: 'Trend results', text: 'Polished summary is ready.' },
+          { label: 'Recommendation', text: 'Use the card result.' },
+        ],
+      },
+    },
+  ];
+
+  renderUIOverlayLayer(ctx, components, new Map([['agent-research', { x: 540, y: 360 }]]), {
+    bakedBackground: false,
+    debug: false,
+    bootPolicy: BACKGROUND_BOOT_POLICY.BAKED_READY,
+  });
+
+  const textCalls = ctx.calls.filter((call) => call[0] === 'fillText').map((call) => String(call[1]));
+  assert.ok(textCalls.includes('Research Desk'));
+  assert.ok(textCalls.some((text) => text.startsWith('Trend results: Polished summary is ready.')));
+  assert.ok(!textCalls.some((text) => text.startsWith('Top Trends: raw keyword')));
+  assert.ok(!textCalls.some((text) => text.includes('Raw overlay candidate')));
+});
+
 test('canvas inspection: fallback background mode still renders world composition layers', () => {
   const ctx = createMockContext();
 

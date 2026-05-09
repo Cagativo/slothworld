@@ -34,7 +34,7 @@ import {
   getBackgroundBootPolicy,
   selectLoadedBackground,
 } from './background-config.js';
-import { traceRenderBoot } from './debug.js';
+import { traceRenderBoot, traceResearchCard } from './debug.js';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -310,6 +310,13 @@ function renderResearchDeskResultCard(ctx, model, options = {}) {
       padY * 2 + headerH + 24 * scale + bodyLines * lineH + (wrappedRows.length - 1) * rowGap
     )
   );
+  traceResearchCard('[RESEARCH_CARD_DRAW_CALLED]', {
+    x: cardX,
+    y: cardY,
+    width: cardW,
+    height: cardH,
+    rowsCount: rows.length,
+  });
 
   ctx.globalAlpha = options.alpha ?? 1;
   ctx.shadowColor = 'rgba(31, 249, 216, 0.42)';
@@ -1170,6 +1177,15 @@ export function renderUIOverlayLayer(ctx, components, entityPositions, options =
     && typeof options.stationSnapshots.research_desk.trendResult.taskId === 'string'
     ? options.stationSnapshots.research_desk.trendResult.taskId
     : null;
+  const researchCardModel = findResearchDeskCardModel(components);
+  const hasResearchCardModel = Boolean(researchCardModel);
+  traceResearchCard('[RESEARCH_CARD_RENDER_INPUT]', {
+    stationId: 'research_desk',
+    hasResultCardViewModel: hasResearchCardModel,
+    debugMode: options.debug === true,
+    selected: options.selectedHotspotId === 'researchMonitorHotspot',
+    hovered: options.hoveredHotspotId === 'researchMonitorHotspot',
+  });
 
   // ── Pass 1: collect panels currently reported by selectors ───────────────
   // taskId → { results, keyword, agentX, agentY, status }
@@ -1177,6 +1193,7 @@ export function renderUIOverlayLayer(ctx, components, entityPositions, options =
 
   for (const c of components) {
     if (c.componentType !== 'agent-sprite') continue;
+    if (hasResearchCardModel && options.debug !== true) continue;
 
     const panel = c.trendPanelState && typeof c.trendPanelState === 'object'
       ? c.trendPanelState
@@ -1232,7 +1249,7 @@ export function renderUIOverlayLayer(ctx, components, entityPositions, options =
   }
 
   if (options.debug !== true) {
-    renderResearchDeskResultCard(ctx, findResearchDeskCardModel(components));
+    renderResearchDeskResultCard(ctx, researchCardModel);
   }
 
   // ── Pass 2: update renderer-local state ──────────────────────────────────

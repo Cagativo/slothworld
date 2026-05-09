@@ -76,6 +76,30 @@ export function isRenderBootTraceEnabled() {
   }
 }
 
+export function isResearchCardTraceEnabled() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  if (window.__SLOTHWORLD_RESEARCH_CARD_DEBUG__ === true) {
+    return true;
+  }
+
+  try {
+    return window.localStorage?.getItem('slothworld.debugResearchCard') === '1';
+  } catch (_error) {
+    return false;
+  }
+}
+
+export function traceResearchCard(label, details = {}) {
+  if (!isResearchCardTraceEnabled()) {
+    return;
+  }
+
+  console.log(label, details);
+}
+
 function canvasSizeFrom(details) {
   if (details && details.canvasSize) {
     return details.canvasSize;
