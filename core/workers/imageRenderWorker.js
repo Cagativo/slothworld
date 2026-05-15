@@ -1,7 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ProviderRegistry } from '../../integrations/rendering/providers/providerRegistry.js';
+import {
+  generateImageViaProvider,
+  hasImageProvider
+} from '../../integrations/image-generation/imageProviderRegistry.js';
 import { assertProviderExecutionContext, assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -34,8 +37,7 @@ function sleep(ms) {
 
 async function runProvider(provider, prompt, context) {
   assertProviderExecutionContext();
-  const plugin = ProviderRegistry.get(provider);
-  return plugin.generate(prompt, context);
+  return generateImageViaProvider(prompt, context, provider);
 }
 
 async function runProviderWithTimeout(provider, prompt, context, timeoutMs) {
@@ -74,7 +76,7 @@ function buildProviderPlan(primaryProvider, context) {
       continue;
     }
 
-    if (!ProviderRegistry.has(providerName)) {
+    if (!hasImageProvider(providerName)) {
       continue;
     }
 
