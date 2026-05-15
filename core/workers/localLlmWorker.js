@@ -1,4 +1,4 @@
-import { ollamaProvider } from '../../integrations/llm/providers/ollamaProvider.js';
+import { generateTextViaLlmProvider } from '../../integrations/llm/llmProviderRegistry.js';
 import { assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
 
 function fail(error) {
@@ -31,7 +31,7 @@ export async function runLocalLlmWorker(task) {
   const payload = normalizePayload(task);
 
   try {
-    const result = await ollamaProvider.generateText({
+    const result = await generateTextViaLlmProvider({
       prompt: payload.prompt,
       system: payload.system,
       model: payload.model,

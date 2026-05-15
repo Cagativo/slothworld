@@ -1,4 +1,4 @@
-import { ollamaProvider } from '../../integrations/llm/providers/ollamaProvider.js';
+import { generateTextViaLlmProvider } from '../../integrations/llm/llmProviderRegistry.js';
 import { assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
 
 const MAX_CANDIDATES = 3;
@@ -287,7 +287,7 @@ export async function runAnalyzeTrendsWorker({
     });
 
     const timeoutMs = trendAnalysisTimeoutMs();
-    const providerResult = await withTimeout((signal) => ollamaProvider.generateText({
+    const providerResult = await withTimeout((signal) => generateTextViaLlmProvider({
       prompt,
       system: SYSTEM_PROMPT,
       model,
