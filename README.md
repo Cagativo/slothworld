@@ -98,6 +98,12 @@ provider-agnostic and UI/rendering code never imports provider implementations.
 Future local model integrations should add provider modules behind registries
 without changing TaskEngine lifecycle authority.
 
+Image render workers resolve image generation through
+`integrations/image-generation/imageProviderRegistry.js`. `IMAGE_RENDER` remains
+the canonical image-generation task type; the registry only selects the provider
+implementation. Future ComfyUI or Stable Diffusion backends should register
+behind this boundary without adding routes or lifecycle events.
+
 ### Persistence
 
 - Stores events and execution records
