@@ -92,6 +92,12 @@ Bridge, UI, Workers, and Providers must NOT:
 - No filesystem access
 - No orchestration responsibilities
 
+LLM workers resolve text generation through `integrations/llm/llmProviderRegistry.js`.
+The registry owns the default local text provider (`ollama`), while workers stay
+provider-agnostic and UI/rendering code never imports provider implementations.
+Future local model integrations should add provider modules behind registries
+without changing TaskEngine lifecycle authority.
+
 ### Persistence
 
 - Stores events and execution records

@@ -8,10 +8,17 @@ import {
   getOllamaConfig,
   ollamaProvider
 } from '../integrations/llm/providers/ollamaProvider.js';
+import {
+  DEFAULT_LLM_PROVIDER_ID,
+  generateTextViaLlmProvider,
+  resolveLlmProvider
+} from '../integrations/llm/llmProviderRegistry.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PROVIDER_PATH = join(ROOT, 'integrations', 'llm', 'providers', 'ollamaProvider.js');
 const UI_DIR = join(ROOT, 'ui');
+const RENDERING_DIR = join(ROOT, 'rendering');
+const WORKERS_DIR = join(ROOT, 'core', 'workers');
 
 function collectJs(dir) {
   const results = [];
@@ -155,6 +162,36 @@ test('Ollama provider handles failed responses as structured errors', async () =
   }));
 });
 
+test('LLM provider registry resolves Ollama as the default text provider', async () => {
+  const calls = [];
+
+  assert.equal(DEFAULT_LLM_PROVIDER_ID, 'ollama');
+  assert.equal(resolveLlmProvider(), ollamaProvider);
+
+  await withOllamaEnv({
+    OLLAMA_BASE_URL: 'http://ollama.local:11434',
+    OLLAMA_MODEL: 'llama3.1:8b'
+  }, async () => withFetch(async (url, options) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        model: 'llama3.1:8b',
+        response: 'registry response',
+        done: true
+      })
+    };
+  }, async () => {
+    const result = await generateTextViaLlmProvider({ prompt: 'hello registry' });
+
+    assert.equal(result.provider, 'ollama');
+    assert.equal(result.text, 'registry response');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'http://ollama.local:11434/api/generate');
+  }));
+});
+
 test('Ollama provider does not import TaskEngine', () => {
   const source = readFileSync(PROVIDER_PATH, 'utf8');
   assert.equal(/from\s+['"][^'"]*taskEngine\.js['"]/.test(source), false);
@@ -168,6 +205,34 @@ test('UI files do not import the Ollama provider', () => {
   for (const file of collectJs(UI_DIR)) {
     const source = readFileSync(file, 'utf8');
     if (/integrations\/llm\/providers\/ollamaProvider|ollamaProvider/.test(source)) {
+      hits.push(relative(ROOT, file));
+    }
+  }
+
+  assert.deepEqual(hits, []);
+});
+
+test('UI and rendering files do not import LLM providers or registry', () => {
+  const hits = [];
+
+  for (const dir of [UI_DIR, RENDERING_DIR]) {
+    for (const file of collectJs(dir)) {
+      const source = readFileSync(file, 'utf8');
+      if (/integrations\/llm|llmProviderRegistry|ollamaProvider/.test(source)) {
+        hits.push(relative(ROOT, file));
+      }
+    }
+  }
+
+  assert.deepEqual(hits, []);
+});
+
+test('workers do not import the Ollama provider directly', () => {
+  const hits = [];
+
+  for (const file of collectJs(WORKERS_DIR)) {
+    const source = readFileSync(file, 'utf8');
+    if (/from\s+['"][^'"]*integrations\/llm\/providers\/ollamaProvider\.js['"]|import\s+\{\s*ollamaProvider\s*\}/.test(source)) {
       hits.push(relative(ROOT, file));
     }
   }
