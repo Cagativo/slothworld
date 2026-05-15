@@ -51,6 +51,16 @@ function typeLabel(componentType) {
   return 'world-zone';
 }
 
+function shouldSuppressNormalPopoverForResultCard(hit, options = {}) {
+  return options.debug !== true
+    && hit?.componentType === 'workstation-hotspot'
+    && hit?.component?.id === 'researchMonitorHotspot'
+    && hit.component.resultCardViewModel
+    && typeof hit.component.resultCardViewModel === 'object'
+    && Array.isArray(hit.component.resultCardViewModel.rows)
+    && hit.component.resultCardViewModel.rows.length > 0;
+}
+
 function workstationViewModel(component) {
   const model = component?.popoverViewModel;
   if (model && typeof model === 'object' && Array.isArray(model.lines)) return model;
@@ -223,6 +233,7 @@ export function getFriendlyPopoverViewModelForTarget(hit, options = {}) {
 
 export function buildInspectionPopoverRows(hit, options = {}) {
   if (!hit || !hit.component) return null;
+  if (shouldSuppressNormalPopoverForResultCard(hit, options)) return null;
 
   const component = hit.component;
   const isDebug = Boolean(options.debug);

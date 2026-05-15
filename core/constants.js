@@ -12,6 +12,7 @@ export const TASK_TYPE_DISCORD = 'discord';
 export const TASK_TYPE_SHOPIFY = 'shopify';
 export const TASK_TYPE_IMAGE_RENDER = 'image_render';
 export const TASK_TYPE_TREND_RESEARCH = 'TREND_RESEARCH';
+export const TASK_TYPE_LOCAL_LLM = 'local_llm';
 
 // Task actions
 export const ACTION_REPLY_TO_MESSAGE = 'reply_to_message';

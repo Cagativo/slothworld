@@ -1,14 +1,23 @@
-import { TASK_TYPE_TREND_RESEARCH } from '../constants.js';
+import {
+  TASK_TYPE_LOCAL_LLM,
+  TASK_TYPE_TREND_RESEARCH
+} from '../constants.js';
 
 export const TREND_RESEARCH_WORKER_ID = 'trend-research-worker';
+export const LOCAL_LLM_WORKER_ID = 'local-llm-worker';
 
 export const DEFAULT_WORKER_CAPABILITY_POLICY = Object.freeze({
-  [TASK_TYPE_TREND_RESEARCH]: Object.freeze([TREND_RESEARCH_WORKER_ID])
+  [TASK_TYPE_TREND_RESEARCH]: Object.freeze([TREND_RESEARCH_WORKER_ID]),
+  [TASK_TYPE_LOCAL_LLM]: Object.freeze([LOCAL_LLM_WORKER_ID])
 });
 
 export function getDefaultWorkerForTaskType(taskType) {
   if (taskType === TASK_TYPE_TREND_RESEARCH) {
     return TREND_RESEARCH_WORKER_ID;
+  }
+
+  if (taskType === TASK_TYPE_LOCAL_LLM) {
+    return LOCAL_LLM_WORKER_ID;
   }
 
   return null;

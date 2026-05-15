@@ -190,6 +190,9 @@ export function renderFrame(renderView) {
   renderAllLayers(ctx, components, _frame, {
     calibration: isHotspotCalibrationEnabled(),
     stationSnapshots: _latestWorkstationSnapshots,
+    workstationHotspotComponents,
+    selectedHotspotId: canvasInspectionState.selectedHotspotId || null,
+    hoveredHotspotId: canvasInspectionState.hoveredHotspotId || null,
   });
   traceRenderBoot('renderer-loop.renderFrame:after-renderAllLayers', {
     ctx,

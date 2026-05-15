@@ -189,11 +189,16 @@ export function renderAllLayers(ctx, components, frame, options = {}) {
     bootPolicy,
     agentCount,
   });
-  renderUIOverlayLayer(ctx, components, entityPositions, {
+  const overlayComponents = Array.isArray(options.workstationHotspotComponents)
+    ? [...components, ...options.workstationHotspotComponents]
+    : components;
+  renderUIOverlayLayer(ctx, overlayComponents, entityPositions, {
     debug: isRenderDebug,
     bakedBackground: bakedBackgroundActive,
     bootPolicy,
     allowOverlayDuringBakedPending: options.allowOverlayDuringBakedPending === true,
     stationSnapshots: options.stationSnapshots || null,
+    selectedHotspotId: options.selectedHotspotId || null,
+    hoveredHotspotId: options.hoveredHotspotId || null,
   });
 }

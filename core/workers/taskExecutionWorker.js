@@ -1,9 +1,12 @@
 import {
   ACTION_SEND_CHANNEL_MESSAGE,
   ACTION_REPLY_TO_MESSAGE,
+  TASK_TYPE_DISCORD,
+  TASK_TYPE_SHOPIFY,
   TASK_TYPE_IMAGE_RENDER,
   ACTION_RENDER_PRODUCT_IMAGE,
-  TASK_TYPE_TREND_RESEARCH
+  TASK_TYPE_TREND_RESEARCH,
+  TASK_TYPE_LOCAL_LLM
 } from '../constants.js';
 import { normalizeDesignIntent, buildProviderPrompt } from '../../integrations/rendering/prompt-builder.js';
 import { runImageRenderWorker } from './imageRenderWorker.js';
@@ -12,7 +15,8 @@ import { runSignalNormalizationWorker } from './signalNormalizationWorker.js';
 import { runScoreTrendsWorker } from './scoreTrendsWorker.js';
 import { runSelectCandidatesWorker } from './selectCandidatesWorker.js';
 import { runProduceFinalOutputWorker } from './produceFinalOutputWorker.js';
-import { runTrendResearchWorkflow } from '../engine/runTrendResearchWorkflow.js';
+import { runLocalLlmWorker } from './localLlmWorker.js';
+import { runTrendResearchTaskWorker } from './trendResearchWorker.js';
 
 import { assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
 
@@ -295,9 +299,11 @@ export function createTaskExecutionWorker({ getDiscordClient, taskTriggeredMessa
         }
 
         if (task.type === TASK_TYPE_TREND_RESEARCH) {
-          const result = await runTrendResearchWorkflow(task.payload);
+          return runTrendResearchTaskWorker(task);
+        }
 
-          return ok(result);
+        if (task.type === TASK_TYPE_LOCAL_LLM) {
+          return runLocalLlmWorker(task);
         }
 
         if (action === 'research_product' || action === 'research.query') {

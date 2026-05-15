@@ -103,6 +103,7 @@ export function getWorkstationSemanticMetadata(hotspotId) {
 }
 
 const MAX_BODY_LINES = 2;
+const MAX_RESEARCH_CARD_ROWS = 3;
 
 function count(summary, key) {
   const value = summary?.[key];
@@ -115,6 +116,32 @@ function pushLine(lines, text) {
 
 function pushInspectionLine(lines, text) {
   if (text && lines.length < MAX_INSPECTION_LINES) lines.push(text);
+}
+
+function compactText(value) {
+  return typeof value === 'string'
+    ? value.replace(/\s+/g, ' ').trim()
+    : '';
+}
+
+function normalizeDedupeKey(value) {
+  return compactText(value)
+    .toLowerCase()
+    .replace(/^(analysis|summary|trend results|recommendation|top signal|trend):\s*/i, '')
+    .replace(/[.。]+$/g, '')
+    .trim();
+}
+
+function pushUniqueRow(rows, seen, label, value) {
+  const text = compactText(value);
+  if (!text || rows.length >= MAX_RESEARCH_CARD_ROWS) return;
+  const key = normalizeDedupeKey(text);
+  if (!key || seen.has(key)) return;
+  seen.add(key);
+  rows.push(Object.freeze({
+    label,
+    text,
+  }));
 }
 
 function plural(countValue, singular, pluralValue = `${singular}s`) {
@@ -175,12 +202,67 @@ function trendResultRows(snapshot, limit = 3) {
     .slice(0, limit);
 }
 
+function trendResultHasRows(snapshot) {
+  const trendResult = snapshot?.trendResult && typeof snapshot.trendResult === 'object'
+    ? snapshot.trendResult
+    : null;
+  return Array.isArray(trendResult?.rows) && trendResult.rows.length > 0;
+}
+
+export function buildResearchDeskResultCardViewModel(snapshot) {
+  const trendResult = snapshot?.trendResult && typeof snapshot.trendResult === 'object'
+    ? snapshot.trendResult
+    : null;
+  if (!trendResult) return null;
+
+  const analysis = trendResult.analysis && typeof trendResult.analysis === 'object'
+    ? trendResult.analysis
+    : null;
+  const rows = [];
+  const seen = new Set();
+  const hasRankedEvidence = trendResultHasRows(snapshot);
+
+  if (analysis) {
+    if (analysis.unavailable === true && hasRankedEvidence) {
+      pushUniqueRow(rows, seen, 'Trend results', 'Ranked evidence ready. Local AI summary unavailable.');
+    } else {
+      pushUniqueRow(rows, seen, 'Trend results', analysis.summary);
+      pushUniqueRow(rows, seen, 'Recommendation', analysis.recommendation);
+    }
+  }
+
+  for (const topSignal of trendResultRows(snapshot, MAX_RESEARCH_CARD_ROWS)) {
+    const previousCount = rows.length;
+    pushUniqueRow(rows, seen, 'Top signal', topSignal);
+    if (rows.length > previousCount || rows.length >= MAX_RESEARCH_CARD_ROWS) break;
+  }
+
+  if (rows.length === 0) return null;
+
+  return Object.freeze({
+    title: 'Research Desk',
+    tone: 'research',
+    rows: Object.freeze(rows),
+  });
+}
+
+function trendAnalysisLines(snapshot, limit = 2) {
+  const card = buildResearchDeskResultCardViewModel(snapshot);
+  if (!card) return [];
+  return card.rows
+    .map((row) => `${row.label}: ${row.text}`)
+    .slice(0, limit);
+}
+
 function snapshotTrendResultLines(snapshot) {
   const trendResult = snapshot?.trendResult && typeof snapshot.trendResult === 'object'
     ? snapshot.trendResult
     : null;
+  if (!trendResult) return [];
+  const analysisLines = trendAnalysisLines(snapshot, 2);
+  if (analysisLines.length > 0) return analysisLines;
   const rows = trendResultRows(snapshot, 1);
-  if (!trendResult || rows.length === 0) return [];
+  if (rows.length === 0) return [];
   const keyword = typeof trendResult.keyword === 'string' && trendResult.keyword.trim()
     ? trendResult.keyword.trim()
     : 'latest scan';
@@ -433,7 +515,17 @@ function buildInspectionLines(component, metadata, visualModelValue, taskSummari
   const trendRows = metadata?.stationKey === 'research_desk'
     ? trendResultRows(snapshot, MAX_TASK_SUMMARIES)
     : [];
+  const trendAnalysis = metadata?.stationKey === 'research_desk'
+    ? trendAnalysisLines(snapshot, MAX_INSPECTION_LINES)
+    : [];
   const lines = [];
+
+  if (trendAnalysis.length > 0) {
+    for (const line of trendAnalysis) {
+      pushInspectionLine(lines, line);
+    }
+    return lines.slice(0, MAX_INSPECTION_LINES);
+  }
 
   if (trendRows.length > 0) {
     const keyword = typeof snapshot?.trendResult?.keyword === 'string' && snapshot.trendResult.keyword.trim()
@@ -484,8 +576,13 @@ export function buildWorkstationInspectionViewModel(component) {
   const trendRows = metadata?.stationKey === 'research_desk'
     ? trendResultRows(snapshot, MAX_TASK_SUMMARIES)
     : [];
-  const taskSummaries = trendRows.length > 0
-    ? trendRows
+  const trendAnalysis = metadata?.stationKey === 'research_desk'
+    ? trendAnalysisLines(snapshot, MAX_TASK_SUMMARIES)
+    : [];
+  const taskSummaries = trendAnalysis.length > 0
+    ? trendAnalysis.concat(trendRows).slice(0, MAX_TASK_SUMMARIES)
+    : trendRows.length > 0
+      ? trendRows
     : buildTaskSummaries(component?.stationWorkItems, metadata);
   const lines = buildInspectionLines(component, metadata, visualState, taskSummaries);
 
@@ -493,7 +590,7 @@ export function buildWorkstationInspectionViewModel(component) {
     stationId: metadata?.stationKey || hotspotId,
     hotspotId,
     title: metadata?.title || component?.title || component?.label || 'Workstation',
-    statusLabel: trendRows.length > 0 ? 'Trend results' : statusLabelForInspection(hotspotId, visualState, summary),
+    statusLabel: (trendAnalysis.length > 0 || trendRows.length > 0) ? 'Trend results' : statusLabelForInspection(hotspotId, visualState, summary),
     tone: metadata?.tone || 'quiet',
     lines: Object.freeze(lines.slice(0, MAX_INSPECTION_LINES)),
     taskSummaries: Object.freeze(taskSummaries.slice(0, MAX_TASK_SUMMARIES)),

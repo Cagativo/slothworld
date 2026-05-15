@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildWorkstationStatusSnapshots } from '../ui/selectors/workstationStatusSelectors.js';
-import { buildWorkstationPopoverViewModel } from '../ui/hotspots/workstationSemantics.js';
+import {
+  buildResearchDeskResultCardViewModel,
+  buildWorkstationPopoverViewModel,
+} from '../ui/hotspots/workstationSemantics.js';
 import {
   WORKSTATION_HOTSPOTS,
   buildWorkstationHotspotComponents,
@@ -177,6 +180,41 @@ test('workstation status selectors: research_desk snapshot includes trend result
   assert.ok(!('buttons' in snapshots.research_desk));
 });
 
+test('workstation status selectors: research_desk snapshot exposes trend analysis', () => {
+  const snapshots = buildWorkstationStatusSnapshots({
+    tasks: [
+      { id: 'task-research-done', title: 'Trend report', type: 'TREND_RESEARCH', status: 'completed', updatedAt: 500 },
+    ],
+    agents: [
+      {
+        id: 'trend-research-worker',
+        trendPanelState: {
+          taskId: 'task-research-done',
+          keyword: 'cozy',
+          analysis: {
+            summary: 'Cozy home products are the strongest cluster.',
+            recommendation: 'Lead with compact room comfort.',
+            opportunities: ['Small apartment bundle'],
+            risks: ['Seasonality'],
+            confidence: 0.77,
+            provider: 'ollama',
+            model: 'llama3.1:8b',
+          },
+          results: [
+            { item: 'Tree lamp', score: 0.95 },
+          ],
+        },
+      },
+    ],
+  });
+
+  assert.equal(snapshots.research_desk.trendResult.analysis.summary, 'Cozy home products are the strongest cluster.');
+  assert.equal(snapshots.research_desk.trendResult.analysis.recommendation, 'Lead with compact room comfort.');
+  assert.deepEqual(snapshots.research_desk.trendResult.analysis.opportunities, ['Small apartment bundle']);
+  assert.equal(snapshots.research_desk.trendResult.analysis.provider, 'ollama');
+  assert.ok(Object.isFrozen(snapshots.research_desk.trendResult.analysis));
+});
+
 test('workstation popover: selected Research Desk renders trend result rows', () => {
   const hotspot = WORKSTATION_HOTSPOTS.find((candidate) => candidate.id === 'researchMonitorHotspot');
   const component = componentForHotspot(hotspot, [], {
@@ -199,13 +237,108 @@ test('workstation popover: selected Research Desk renders trend result rows', ()
     },
   });
 
-  assert.deepEqual(component.popoverViewModel.lines, ['Top trends: cozy', 'Tree lamp 0.95']);
+  assert.deepEqual(component.popoverViewModel.lines, ['Top signal: Tree lamp 0.95']);
   assert.equal(component.inspectionViewModel.statusLabel, 'Trend results');
-  assert.ok(component.inspectionViewModel.lines.includes('Trend: cozy'));
+  assert.ok(component.inspectionViewModel.lines.includes('Top signal: Tree lamp 0.95'));
   assert.ok(component.inspectionViewModel.taskSummaries.includes('Tree lamp 0.95'));
   assert.ok(component.inspectionViewModel.taskSummaries.includes('Moss shelf 0.82'));
   assert.ok(!('actions' in component.popoverViewModel));
   assert.ok(!('buttons' in component.popoverViewModel));
   assert.ok(!('actions' in component.inspectionViewModel));
   assert.ok(!('buttons' in component.inspectionViewModel));
+});
+
+test('workstation popover: Research Desk prioritizes trend analysis before ranked rows', () => {
+  const hotspot = WORKSTATION_HOTSPOTS.find((candidate) => candidate.id === 'researchMonitorHotspot');
+  const component = componentForHotspot(hotspot, [], {
+    stationSnapshots: {
+      research_desk: {
+        stationId: 'research_desk',
+        label: 'Research Desk',
+        currentWork: { count: 0, items: [] },
+        lastResult: null,
+        latestFailure: null,
+        trendResult: {
+          taskId: 'task-research-done',
+          keyword: 'cozy',
+          analysis: {
+            summary: 'Cozy home products are the strongest cluster.',
+            recommendation: 'Lead with compact room comfort.',
+            opportunities: ['Small apartment bundle'],
+          },
+          rows: [
+            { item: 'Tree lamp', score: 0.95 },
+            { item: 'Moss shelf', score: 0.82 },
+          ],
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(component.popoverViewModel.lines, [
+    'Trend results: Cozy home products are the strongest cluster.',
+    'Recommendation: Lead with compact room comfort.'
+  ]);
+  assert.equal(component.inspectionViewModel.statusLabel, 'Trend results');
+  assert.deepEqual(component.inspectionViewModel.lines, [
+    'Trend results: Cozy home products are the strongest cluster.',
+    'Recommendation: Lead with compact room comfort.',
+    'Top signal: Tree lamp 0.95'
+  ]);
+  assert.deepEqual(component.inspectionViewModel.taskSummaries, [
+    'Trend results: Cozy home products are the strongest cluster.',
+    'Recommendation: Lead with compact room comfort.',
+    'Top signal: Tree lamp 0.95'
+  ]);
+  assert.deepEqual(component.resultCardViewModel.rows.map((row) => `${row.label}: ${row.text}`), [
+    'Trend results: Cozy home products are the strongest cluster.',
+    'Recommendation: Lead with compact room comfort.',
+    'Top signal: Tree lamp 0.95'
+  ]);
+});
+
+test('workstation semantics: Research Desk result card deduplicates repeated analysis lines', () => {
+  const card = buildResearchDeskResultCardViewModel({
+    trendResult: {
+      taskId: 'task-research-done',
+      keyword: 'cozy',
+      analysis: {
+        summary: 'Mixed trends in fitness.',
+        recommendation: 'Mixed trends in fitness.',
+      },
+      rows: [
+        { item: 'Mixed trends in fitness.', score: null },
+        { item: 'Monitor growth and habits', score: 0.82 },
+      ],
+    },
+  });
+
+  assert.ok(card);
+  assert.deepEqual(card.rows.map((row) => `${row.label}: ${row.text}`), [
+    'Trend results: Mixed trends in fitness.',
+    'Top signal: Monitor growth and habits 0.82'
+  ]);
+});
+
+test('workstation semantics: Research Desk unavailable analysis falls back to ranked evidence', () => {
+  const card = buildResearchDeskResultCardViewModel({
+    trendResult: {
+      taskId: 'task-research-done',
+      keyword: 'cozy',
+      analysis: {
+        summary: 'Trend analysis was skipped because the local model did not respond in time.',
+        recommendation: 'Use ranked trend evidence for now, or retry with a smaller/faster local model.',
+        unavailable: true,
+      },
+      rows: [
+        { item: 'Tree lamp', score: 0.95 },
+      ],
+    },
+  });
+
+  assert.ok(card);
+  assert.deepEqual(card.rows.map((row) => `${row.label}: ${row.text}`), [
+    'Trend results: Ranked evidence ready. Local AI summary unavailable.',
+    'Top signal: Tree lamp 0.95'
+  ]);
 });

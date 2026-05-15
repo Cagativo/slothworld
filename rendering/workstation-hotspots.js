@@ -13,9 +13,11 @@ import {
   buildWorkstationNormalSummaryRows,
   buildWorkstationInspectionViewModel,
   buildWorkstationPopoverViewModel,
+  buildResearchDeskResultCardViewModel,
   buildWorkstationVisualStateViewModel,
   getWorkstationSemanticMetadata,
 } from '../ui/hotspots/workstationSemantics.js';
+import { traceResearchCard } from './debug.js';
 
 export { WORKSTATION_HOTSPOTS, getWorkstationHotspotById };
 export { buildWorkstationNormalSummaryRows };
@@ -149,10 +151,20 @@ export function componentForHotspot(hotspot, components, options = {}) {
     stationSnapshot,
   };
   const visualStateViewModel = buildWorkstationVisualStateViewModel(component);
+  const resultCardViewModel = buildResearchDeskResultCardViewModel(stationSnapshot);
+  if (hotspot.id === 'researchMonitorHotspot') {
+    traceResearchCard('[RESEARCH_CARD_VM_BUILT]', {
+      hasResultCardViewModel: Boolean(resultCardViewModel),
+      title: resultCardViewModel?.title || null,
+      rowsCount: Array.isArray(resultCardViewModel?.rows) ? resultCardViewModel.rows.length : 0,
+      rows: Array.isArray(resultCardViewModel?.rows) ? resultCardViewModel.rows : [],
+    });
+  }
   const enrichedComponent = {
     ...component,
     popoverViewModel: buildWorkstationPopoverViewModel(component),
     visualStateViewModel,
+    resultCardViewModel,
   };
   return Object.freeze({
     ...enrichedComponent,
