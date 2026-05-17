@@ -240,17 +240,22 @@ async function executeImageRenderTask(task) {
 
   const result = workerResult.result;
 
+  const asset = result.asset && typeof result.asset === 'object' ? result.asset : null;
+
   return ok({
-    assetId: result.asset.assetId,
-    productId: result.asset.productId,
-    url: result.asset.url,
+    assetId: asset ? asset.assetId : null,
+    productId: asset ? asset.productId : productId,
+    url: asset ? asset.url : null,
     provider: result.provider,
     prompt: result.prompt,
-    createdAt: result.asset.createdAt,
-    imageUrl: result.asset.url,
+    createdAt: asset ? asset.createdAt : result.createdAt,
+    imageUrl: asset ? asset.url : null,
     mimeType: result.mimeType || 'image/png',
     imageBase64: result.imageBase64,
-    manifestUrl: null
+    contentBase64: result.contentBase64 || result.imageBase64,
+    metadata: result.metadata && typeof result.metadata === 'object' ? result.metadata : {},
+    asset,
+    manifestUrl: asset ? asset.manifestUrl : null
   });
 }
 
