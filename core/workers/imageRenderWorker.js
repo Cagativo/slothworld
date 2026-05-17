@@ -1,35 +1,14 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   generateImageViaProvider,
   hasImageProvider
 } from '../../integrations/image-generation/imageProviderRegistry.js';
 import { assertProviderExecutionContext, assertWorkerExecutionContext } from '../engine/enforcementRuntime.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const ROOT_DIR = path.resolve(__dirname, '../../');
-const GENERATED_ASSETS_DIR = path.join(ROOT_DIR, 'assets', 'generated');
 const DEFAULT_PROVIDER_TIMEOUT_MS = Number(process.env.IMAGE_PROVIDER_TIMEOUT_MS || 60_000);
 const DEFAULT_PROVIDER_FALLBACKS = String(process.env.IMAGE_PROVIDER_FALLBACKS || 'huggingface')
   .split(',')
   .map((entry) => entry.trim().toLowerCase())
   .filter(Boolean);
-
-function sanitizePathSegment(value, fallback = 'item') {
-  const sanitized = String(value || fallback)
-    .trim()
-    .replace(/[^a-zA-Z0-9-_]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-
-  return sanitized || fallback;
-}
-
-function makeAssetId() {
-  return `asset-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
-}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -88,24 +67,6 @@ function buildProviderPlan(primaryProvider, context) {
   }
 
   return unique;
-}
-
-async function persistImage({ productId, contentBase64 }) {
-  const safeProductId = sanitizePathSegment(productId, 'product');
-  const assetId = makeAssetId();
-  const targetDir = path.join(GENERATED_ASSETS_DIR, safeProductId);
-  await mkdir(targetDir, { recursive: true });
-
-  const filename = `${assetId}.png`;
-  const assetPath = path.join(targetDir, filename);
-  await writeFile(assetPath, Buffer.from(contentBase64, 'base64'));
-
-  return {
-    assetId,
-    productId: safeProductId,
-    url: `/assets/generated/${safeProductId}/${filename}`,
-    createdAt: Date.now()
-  };
 }
 
 function ok(result) {
@@ -214,32 +175,27 @@ export async function runImageRenderWorker({ provider = 'openai', prompt = '', p
     return fail('provider_missing_content_base64');
   }
 
-  try {
-    const asset = await persistImage({
-      productId: typeof productId === 'string' && productId.trim()
-        ? productId
-        : (context && context.metadata && context.metadata.productId ? context.metadata.productId : 'product'),
-      contentBase64
-    });
+  const providerMetadata = providerResult && providerResult.metadata && typeof providerResult.metadata === 'object'
+    ? { ...providerResult.metadata }
+    : {};
 
-    return ok({
-      provider: providerResult.provider || normalizedProvider,
-      model: providerResult.model || null,
-      mimeType: providerResult.mimeType || 'image/png',
-      imageBase64: contentBase64,
-      prompt: normalizedPrompt,
-      path: asset.url,
-      imageUrl: asset.url,
-      createdAt: asset.createdAt,
-      asset
-    });
-  } catch (error) {
-    console.error('[IMAGE_RENDER_PERSIST_ERROR]', {
-      provider: normalizedProvider,
-      productId,
-      taskId: context && context.taskId ? context.taskId : null,
-      error: error instanceof Error ? error.message : String(error || 'persist_failed')
-    });
-    return fail(error || 'persist_failed');
+  if (providerResult && providerResult.promptId) {
+    providerMetadata.promptId = providerResult.promptId;
   }
+
+  if (providerResult && providerResult.image && typeof providerResult.image === 'object') {
+    providerMetadata.image = providerResult.image;
+  }
+
+  return ok({
+    provider: providerResult.provider || normalizedProvider,
+    model: providerResult.model || null,
+    mimeType: providerResult.mimeType || 'image/png',
+    imageBase64: contentBase64,
+    contentBase64,
+    prompt: normalizedPrompt,
+    createdAt: Date.now(),
+    metadata: providerMetadata,
+    asset: null
+  });
 }

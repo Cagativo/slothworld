@@ -101,8 +101,9 @@ without changing TaskEngine lifecycle authority.
 Image render workers resolve image generation through
 `integrations/image-generation/imageProviderRegistry.js`. `IMAGE_RENDER` remains
 the canonical image-generation task type; the registry only selects the provider
-implementation. Future ComfyUI or Stable Diffusion backends should register
-behind this boundary without adding routes or lifecycle events.
+implementation. OpenAI is the default image provider, Hugging Face remains
+available as fallback, and ComfyUI is registered as a local-provider skeleton via
+`COMFYUI_BASE_URL` (default `http://127.0.0.1:8188`) but is not the default yet.
 
 ### Persistence
 

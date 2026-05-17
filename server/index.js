@@ -22,6 +22,10 @@ import dotenv from 'dotenv';
 import { Client, GatewayIntentBits } from 'discord.js';
 import { createTaskExecutionWorker } from '../core/workers/taskExecutionWorker.js';
 import { createDiscordNotificationWorker } from '../core/workers/discordNotificationWorker.js';
+import {
+  persistImageRenderAssetAfterAck,
+  projectTaskForSafeAssetRead
+} from '../core/workers/assetPersistenceWorker.js';
 import { createTaskEngine } from '../core/engine/taskEngine.js';
 import {
   LOCAL_LLM_WORKER_ID,
@@ -493,11 +497,11 @@ function projectTaskForRead(task) {
   const engineTask = taskEngine.getTask(task.id);
   const projectedStatus = mapEngineStatusToPublic(engineTask ? engineTask.status : null);
 
-  return {
+  return projectTaskForSafeAssetRead({
     ...task,
     status: projectedStatus,
     engineStatus: engineTask ? engineTask.status : null
-  };
+  });
 }
 
 function mapCommandToAction(command) {
@@ -1273,6 +1277,15 @@ const taskEngine = createTaskEngine({
     };
   },
   onTaskAcked: async (task) => {
+    if (task && task.type === TASK_TYPE_IMAGE_RENDER && task.status === 'acknowledged') {
+      const asset = await persistImageRenderAssetAfterAck(task);
+      const storedTask = taskStore[task.id];
+      if (storedTask && asset && task.lastResult) {
+        storedTask.executionResult = mapTaskResultToExecution(task.lastResult);
+        saveStore();
+      }
+    }
+
     if (task && task.type === TASK_TYPE_TREND_RESEARCH) {
       const requestId = getTrendResearchRequestId(task);
       const resultPayload = getTrendResearchCompletedPayload(task);
