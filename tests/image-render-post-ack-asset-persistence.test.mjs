@@ -129,11 +129,11 @@ test('IMAGE_RENDER asset persistence happens only after ACK', async () => {
   assert.equal(projected.executionResult.result.contentBase64, undefined);
   assert.equal(projected.executionResult.result.imageBase64, undefined);
   assert.equal(projected.executionResult.result.assetId, projected.executionResult.result.asset.id);
-  assert.equal(projected.executionResult.result.imageUrl, projected.executionResult.result.asset.url);
-  assert.equal(projected.executionResult.result.path, projected.executionResult.result.asset.url);
+  assert.equal(projected.executionResult.result.imageUrl, null);
+  assert.equal(projected.executionResult.result.path, undefined);
   assert.deepEqual(projected.executionResult.result.asset, {
     id: output.asset.id,
-    url: output.asset.path,
+    url: null,
     mimeType: 'image/png',
     provider: providerId
   });

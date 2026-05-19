@@ -27,11 +27,13 @@ import {
 } from '../rendering/connection-renderer.js';
 import { renderWorldCompositionLayer } from '../rendering/world-background-composition.js';
 import {
+  computeGeneratedImageAssetDisplayLayout,
   computeResearchCardLayout,
   renderUIOverlayLayer,
   wrapResearchCardText,
 } from '../rendering/world-scene-asset-renderer.js';
 import { BACKGROUND_BOOT_POLICY } from '../rendering/background-config.js';
+import { SCENE_ANCHORS } from '../rendering/scene-anchors.js';
 import { initCanvasCursor } from '../rendering/canvas-cursor.js';
 import {
   WORKSTATION_HOTSPOTS,
@@ -149,6 +151,7 @@ function createMockContext() {
     bezierCurveTo: (...args) => calls.push(['bezierCurveTo', ...args]),
     quadraticCurveTo: (...args) => calls.push(['quadraticCurveTo', ...args]),
     closePath: () => calls.push(['closePath']),
+    clip: () => calls.push(['clip']),
     fill: () => calls.push(['fill']),
     stroke: () => calls.push(['stroke']),
     fillText: (...args) => calls.push(['fillText', ...args]),
@@ -1638,4 +1641,78 @@ test('canvas inspection: inspection modules do not access raw event sources', ()
       assert.ok(!re.test(source), `${file} must not match ${re}`);
     }
   }
+});
+
+
+test('canvas inspection: generated image asset renders inside Render Desk display anchor', () => {
+  const previousImage = globalThis.Image;
+  const imageInstances = [];
+  globalThis.Image = class MockImage {
+    constructor() {
+      this.complete = true;
+      this.naturalWidth = 160;
+      this.naturalHeight = 100;
+      imageInstances.push(this);
+    }
+  };
+
+  try {
+    const ctx = createMockContext();
+    const layout = computeGeneratedImageAssetDisplayLayout(ctx);
+    renderUIOverlayLayer(ctx, [], new Map(), {
+      debug: false,
+      bakedBackground: true,
+      bootPolicy: BACKGROUND_BOOT_POLICY.BAKED_READY,
+      stationSnapshots: {
+        render_desk: {
+          stationId: 'render_desk',
+          label: 'Render Desk',
+          currentWork: { count: 0, items: [] },
+          lastResult: null,
+          latestFailure: null,
+          trendResult: null,
+          generatedImageAsset: {
+            kind: 'generatedImageAsset',
+            taskId: 'task-render-image',
+            title: 'Product image',
+            status: 'done',
+            provider: 'comfyui',
+            asset: {
+              id: 'asset-render-image',
+              url: '/assets/generated/task-render-image/out.png',
+              mimeType: 'image/png',
+            },
+          },
+        },
+      },
+    });
+
+    const assetDraw = ctx.calls.find((call) => call[0] === 'drawImage' && call[1] === imageInstances[0]);
+    assert.ok(assetDraw, 'generated image should be drawn from the asset URL image object');
+    assert.equal(imageInstances[0].src, '/assets/generated/task-render-image/out.png');
+    assert.equal(assetDraw[6], layout.x);
+    assert.equal(assetDraw[7], layout.y);
+    assert.equal(assetDraw[8], layout.width);
+    assert.ok(assetDraw[9] < layout.height, 'image draw should leave room for tiny screen text');
+
+    const deskBounds = SCENE_ANCHORS.desks['desk-4'].bounds;
+    assert.ok(layout.x >= deskBounds.x, 'preview should start inside Render Desk bounds');
+    assert.ok(layout.y >= deskBounds.y, 'preview should be vertically in the lower Render Desk cluster');
+    assert.ok(layout.x + layout.width <= deskBounds.x + deskBounds.width, 'preview should remain inside Render Desk width');
+    assert.ok(layout.y + layout.height <= deskBounds.y + deskBounds.height, 'preview should remain inside Render Desk height');
+    assert.ok(layout.y > 360, 'preview must not render in the upper-right shelf area');
+  } finally {
+    if (previousImage === undefined) {
+      delete globalThis.Image;
+    } else {
+      globalThis.Image = previousImage;
+    }
+  }
+});
+
+test('canvas inspection: generated image asset renderer no longer uses floating card layout', () => {
+  const source = readFileSync(new URL('../rendering/world-scene-asset-renderer.js', import.meta.url), 'utf8');
+  assert.equal(source.includes('renderGeneratedImageAssetPanel'), false);
+  assert.equal(source.includes('canvasW - panelW - 70'), false);
+  assert.match(source, /renderDeskGeneratedImage/);
 });

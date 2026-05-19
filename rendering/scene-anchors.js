@@ -64,6 +64,9 @@ export const SCENE_ANCHORS = Object.freeze({
   indicators: Object.freeze({
     claimedMonitor: anchor({ x: 286, y: 246, scale: 0.78, depthY: 262, bounds: { x: 265, y: 225, width: 42, height: 42 } }),
   }),
+  displaySurfaces: Object.freeze({
+    renderDeskGeneratedImage: anchor({ x: 652, y: 426, scale: 1, depthY: 430, bounds: { x: 606, y: 397, width: 92, height: 58 } }),
+  }),
   decor: Object.freeze({
     foregroundVine: anchor({ x: 1008, y: 276, scale: 0.74, depthY: 512, bounds: { x: 968, y: 150, width: 76, height: 252 } }),
     smallPlants: anchor({ x: 708, y: 420, scale: 0.56, depthY: 432, bounds: { x: 684, y: 392, width: 48, height: 56 } }),

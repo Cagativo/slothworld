@@ -149,6 +149,7 @@ export function componentForHotspot(hotspot, components, options = {}) {
     summary,
     stationWorkItems,
     stationSnapshot,
+    generatedImageAsset: stationSnapshot?.generatedImageAsset || null,
   };
   const visualStateViewModel = buildWorkstationVisualStateViewModel(component);
   const resultCardViewModel = buildResearchDeskResultCardViewModel(stationSnapshot);

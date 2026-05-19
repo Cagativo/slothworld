@@ -244,6 +244,74 @@ function latestTrendResult(agents, tasksById) {
   return candidates[0] || null;
 }
 
+const IMAGE_RENDER_DONE_STATUSES = new Set(['completed', 'acknowledged', 'acked', 'done']);
+
+function isSafePublicAssetUrl(value) {
+  if (typeof value !== 'string') return false;
+  const url = value.trim();
+  if (!url) return false;
+  if (/^https?:\/\//i.test(url)) return true;
+  if (/^\/(?:assets|generated-assets)\//.test(url)) return true;
+  if (url.startsWith('/') || url.startsWith('file:')) return false;
+  if (/^[a-zA-Z]:[\/]/.test(url)) return false;
+  if (url.includes('..')) return false;
+  return true;
+}
+
+function safeAssetObject(value) {
+  return value && typeof value === 'object' ? value : {};
+}
+
+function imageRenderResult(task) {
+  const executionResult = task?.executionResult && typeof task.executionResult === 'object'
+    ? task.executionResult
+    : null;
+  return executionResult?.result && typeof executionResult.result === 'object'
+    ? executionResult.result
+    : {};
+}
+
+function buildGeneratedImageAssetViewModel(task) {
+  if (safeString(task?.type) !== 'image_render') return null;
+  if (!IMAGE_RENDER_DONE_STATUSES.has(normalizeStatus(task?.status))) return null;
+
+  const result = imageRenderResult(task);
+  const asset = safeAssetObject(result.asset);
+  const url = safeString(asset.url) || safeString(result.imageUrl);
+  if (!isSafePublicAssetUrl(url)) return null;
+
+  const provider = safeString(asset.provider) || safeString(result.provider) || safeString(task?.provider);
+
+  return Object.freeze({
+    kind: 'generatedImageAsset',
+    taskId: safeString(task?.id),
+    title: safeString(task?.title) || 'Generated image',
+    status: normalizeStatus(task?.status),
+    provider,
+    asset: Object.freeze({
+      id: safeString(asset.id) || safeString(result.assetId),
+      url,
+      mimeType: safeString(asset.mimeType) || safeString(result.mimeType) || 'image/png',
+    }),
+    createdAt: safeTimestamp(task?.createdAt),
+    updatedAt: safeTimestamp(task?.updatedAt),
+  });
+}
+
+export function selectLatestGeneratedImageAsset(tasks = []) {
+  const candidates = safeArray(tasks)
+    .map(buildGeneratedImageAssetViewModel)
+    .filter(Boolean)
+    .sort((a, b) => {
+      const at = safeTimestamp(a?.updatedAt) ?? safeTimestamp(a?.createdAt) ?? -1;
+      const bt = safeTimestamp(b?.updatedAt) ?? safeTimestamp(b?.createdAt) ?? -1;
+      if (at !== bt) return bt - at;
+      return String(a?.taskId || '').localeCompare(String(b?.taskId || ''));
+    });
+
+  return candidates[0] || null;
+}
+
 function sortByUpdatedDesc(a, b) {
   const at = safeTimestamp(a?.updatedAt) ?? -1;
   const bt = safeTimestamp(b?.updatedAt) ?? -1;
@@ -259,6 +327,7 @@ function emptySnapshot(def) {
     lastResult: null,
     latestFailure: null,
     trendResult: null,
+    generatedImageAsset: null,
   };
 }
 
@@ -273,6 +342,7 @@ function freezeSnapshot(snapshot) {
     lastResult: snapshot.lastResult || null,
     latestFailure: snapshot.latestFailure || null,
     trendResult: snapshot.trendResult || null,
+    generatedImageAsset: snapshot.generatedImageAsset || null,
   });
 }
 
@@ -371,6 +441,9 @@ export function buildWorkstationStatusSnapshots(input = {}) {
     snapshot.latestFailure = failed.length > 0 ? toFailureModel(failed[0]) : null;
     if (def.stationId === 'research_desk') {
       snapshot.trendResult = latestTrendResult(agents, tasksById);
+    }
+    if (def.stationId === 'render_desk') {
+      snapshot.generatedImageAsset = selectLatestGeneratedImageAsset(tasks);
     }
   }
 

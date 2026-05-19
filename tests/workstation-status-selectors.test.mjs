@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
-import { buildWorkstationStatusSnapshots } from '../ui/selectors/workstationStatusSelectors.js';
+import { buildWorkstationStatusSnapshots, selectLatestGeneratedImageAsset } from '../ui/selectors/workstationStatusSelectors.js';
 import {
   buildResearchDeskResultCardViewModel,
   buildWorkstationPopoverViewModel,
@@ -341,4 +342,163 @@ test('workstation semantics: Research Desk unavailable analysis falls back to ra
     'Trend results: Ranked evidence ready. Local AI summary unavailable.',
     'Top signal: Tree lamp 0.95'
   ]);
+});
+
+test('workstation status selectors: derives latest generated IMAGE_RENDER asset from safe task projection', () => {
+  const tasks = [
+    {
+      id: 'render-old',
+      title: 'Old image',
+      type: 'image_render',
+      status: 'done',
+      createdAt: 100,
+      updatedAt: 200,
+      executionResult: {
+        success: true,
+        result: {
+          contentBase64: 'must-not-project',
+          imageBase64: 'must-not-project',
+          path: '/home/continue/slothworld/assets/generated/render-old/old.png',
+          asset: {
+            id: 'asset-old',
+            url: '/assets/generated/render-old/old.png',
+            mimeType: 'image/png',
+            provider: 'comfyui',
+          },
+        },
+      },
+    },
+    {
+      id: 'render-new',
+      title: 'New image',
+      type: 'image_render',
+      status: 'acknowledged',
+      createdAt: 300,
+      updatedAt: 500,
+      executionResult: {
+        success: true,
+        result: {
+          imageUrl: '/assets/generated/render-new/new.png',
+          assetId: 'asset-new',
+          asset: {
+            id: 'asset-new',
+            url: '/assets/generated/render-new/new.png',
+            mimeType: 'image/png',
+            provider: 'comfyui',
+          },
+        },
+      },
+    },
+  ];
+
+  const model = selectLatestGeneratedImageAsset(tasks);
+  assert.equal(model.kind, 'generatedImageAsset');
+  assert.equal(model.taskId, 'render-new');
+  assert.equal(model.title, 'New image');
+  assert.equal(model.provider, 'comfyui');
+  assert.deepEqual(model.asset, {
+    id: 'asset-new',
+    url: '/assets/generated/render-new/new.png',
+    mimeType: 'image/png',
+  });
+  assert.equal(JSON.stringify(model).includes('contentBase64'), false);
+  assert.equal(JSON.stringify(model).includes('imageBase64'), false);
+  assert.equal(JSON.stringify(model).includes('/home/continue/slothworld'), false);
+});
+
+test('workstation status selectors: ignores IMAGE_RENDER tasks without a safe asset URL', () => {
+  const model = selectLatestGeneratedImageAsset([
+    {
+      id: 'render-no-url',
+      title: 'No URL',
+      type: 'image_render',
+      status: 'done',
+      updatedAt: 900,
+      executionResult: {
+        success: true,
+        result: {
+          asset: {
+            id: 'asset-no-url',
+            path: '/home/continue/slothworld/assets/generated/render-no-url/out.png',
+            mimeType: 'image/png',
+            provider: 'comfyui',
+          },
+        },
+      },
+    },
+  ]);
+
+  assert.equal(model, null);
+});
+
+test('workstation status selectors: attaches generated image asset to render_desk snapshot', () => {
+  const snapshots = buildWorkstationStatusSnapshots({
+    tasks: [
+      {
+        id: 'render-preview',
+        title: 'Preview image',
+        type: 'image_render',
+        status: 'done',
+        updatedAt: 700,
+        executionResult: {
+          success: true,
+          result: {
+            asset: {
+              id: 'asset-preview',
+              url: '/assets/generated/render-preview/preview.png',
+              mimeType: 'image/png',
+              provider: 'comfyui',
+            },
+          },
+        },
+      },
+    ],
+    agents: [],
+  });
+
+  assert.equal(snapshots.render_desk.generatedImageAsset.taskId, 'render-preview');
+  assert.equal(snapshots.render_desk.generatedImageAsset.asset.url, '/assets/generated/render-preview/preview.png');
+});
+
+test('workstation status selectors: graph metadata carries render_desk generated asset preview', () => {
+  const snapshots = buildWorkstationStatusSnapshots({
+    tasks: [
+      {
+        id: 'render-graph-preview',
+        title: 'Graph preview image',
+        type: 'image_render',
+        status: 'done',
+        updatedAt: 800,
+        executionResult: {
+          success: true,
+          result: {
+            asset: {
+              id: 'asset-graph-preview',
+              url: '/assets/generated/render-graph-preview/preview.png',
+              mimeType: 'image/png',
+              provider: 'comfyui',
+            },
+          },
+        },
+      },
+    ],
+    agents: [],
+  });
+
+  const graph = buildVisualWorldGraph(
+    { tasks: [], agents: [], transitions: {} },
+    { workstationSnapshots: snapshots }
+  );
+
+  assert.equal(
+    graph.metadata.workstationSnapshots.render_desk.generatedImageAsset.asset.url,
+    '/assets/generated/render-graph-preview/preview.png'
+  );
+});
+
+test('renderer source uses generated image asset URL without raw bytes or provider imports', () => {
+  const source = readFileSync(new URL('../rendering/world-scene-asset-renderer.js', import.meta.url), 'utf8');
+  assert.match(source, /model\?\.asset\?\.url|model\.asset\.url/);
+  assert.equal(/contentBase64|imageBase64/.test(source), false);
+  assert.equal(/imageProviderRegistry|comfyUiProvider|openAIImageProvider|huggingFaceImageProvider|\/prompt\b|\/comfyui\b/.test(source), false);
 });
