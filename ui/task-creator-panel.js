@@ -2,6 +2,25 @@ import { getGraphSnapshot } from './graph-snapshot.js';
 
 const LOCAL_BRAIN_DEFAULT_PROMPT = 'Reply with a short friendly hello from the local Slothworld brain.';
 const LOCAL_BRAIN_SYSTEM_PROMPT = 'You are a concise local assistant running inside Slothworld.';
+const IMAGE_RENDER_DEFAULTS = Object.freeze({
+  provider: 'comfyui',
+  width: 512,
+  height: 512,
+  steps: 20,
+  cfg: 8,
+  sampler: 'euler',
+  scheduler: 'normal',
+  negativePrompt: 'text, watermark, blurry, low quality, distorted'
+});
+
+function finiteNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function finiteInteger(value, fallback) {
+  return Math.max(1, Math.floor(finiteNumber(value, fallback)));
+}
 
 export function buildLocalBrainTaskPayload({ title = '', prompt = '' } = {}) {
   const normalizedTitle = typeof title === 'string' ? title.trim() : '';
@@ -17,6 +36,51 @@ export function buildLocalBrainTaskPayload({ title = '', prompt = '' } = {}) {
       prompt: normalizedPrompt,
       system: LOCAL_BRAIN_SYSTEM_PROMPT,
       model: ''
+    }
+  };
+}
+
+export function buildImageRenderTaskPayload({
+  title = '',
+  prompt = '',
+  negativePrompt = IMAGE_RENDER_DEFAULTS.negativePrompt,
+  width = IMAGE_RENDER_DEFAULTS.width,
+  height = IMAGE_RENDER_DEFAULTS.height,
+  steps = IMAGE_RENDER_DEFAULTS.steps,
+  cfg = IMAGE_RENDER_DEFAULTS.cfg,
+  sampler = IMAGE_RENDER_DEFAULTS.sampler,
+  scheduler = IMAGE_RENDER_DEFAULTS.scheduler
+} = {}) {
+  const normalizedPrompt = typeof prompt === 'string' ? prompt.trim() : '';
+  const normalizedTitle = typeof title === 'string' && title.trim()
+    ? title.trim()
+    : 'Generate Image Render';
+  const options = {
+    width: finiteInteger(width, IMAGE_RENDER_DEFAULTS.width),
+    height: finiteInteger(height, IMAGE_RENDER_DEFAULTS.height),
+    steps: finiteInteger(steps, IMAGE_RENDER_DEFAULTS.steps),
+    cfg: finiteNumber(cfg, IMAGE_RENDER_DEFAULTS.cfg),
+    sampler: typeof sampler === 'string' && sampler.trim() ? sampler.trim() : IMAGE_RENDER_DEFAULTS.sampler,
+    scheduler: typeof scheduler === 'string' && scheduler.trim() ? scheduler.trim() : IMAGE_RENDER_DEFAULTS.scheduler,
+    negativePrompt: typeof negativePrompt === 'string' && negativePrompt.trim()
+      ? negativePrompt.trim()
+      : IMAGE_RENDER_DEFAULTS.negativePrompt
+  };
+
+  return {
+    type: 'image_render',
+    action: 'render_product_image',
+    title: normalizedTitle,
+    payload: {
+      source: 'task_creator_panel',
+      provider: IMAGE_RENDER_DEFAULTS.provider,
+      prompt: normalizedPrompt,
+      designIntent: {
+        prompt: normalizedPrompt
+      },
+      context: {
+        metadata: options
+      }
     }
   };
 }
@@ -43,6 +107,7 @@ export function initTaskCreatorPanel() {
                 <option value="discord">Discord</option>
                 <option value="shopify">Shopify</option>
                 <option value="trendresearch">TrendResearch</option>
+                <option value="image_render">Image Render</option>
                 <option value="local_llm">Local Brain Test</option>
               </select>
               <span class="tcp-chevron" aria-hidden="true">&#9662;</span>
@@ -64,6 +129,31 @@ export function initTaskCreatorPanel() {
             <input type="text" id="tcp-channel-id" name="channelId" />
           </div>
 
+          <div class="tcp-image-options" id="tcp-image-options" hidden>
+            <div class="tcp-field">
+              <label for="tcp-negative-prompt" class="tcp-label">Negative Prompt</label>
+              <textarea id="tcp-negative-prompt" name="negativePrompt" rows="2"></textarea>
+            </div>
+            <div class="tcp-compact-grid">
+              <div class="tcp-field">
+                <label for="tcp-image-width" class="tcp-label">Width</label>
+                <input type="number" id="tcp-image-width" name="width" min="64" step="64" />
+              </div>
+              <div class="tcp-field">
+                <label for="tcp-image-height" class="tcp-label">Height</label>
+                <input type="number" id="tcp-image-height" name="height" min="64" step="64" />
+              </div>
+              <div class="tcp-field">
+                <label for="tcp-image-steps" class="tcp-label">Steps</label>
+                <input type="number" id="tcp-image-steps" name="steps" min="1" step="1" />
+              </div>
+              <div class="tcp-field">
+                <label for="tcp-image-cfg" class="tcp-label">CFG</label>
+                <input type="number" id="tcp-image-cfg" name="cfg" min="1" step="0.5" />
+              </div>
+            </div>
+          </div>
+
           <div class="tcp-actions">
             <button type="submit" class="tcp-submit">Create</button>
             <button type="button" id="tcp-cancel" class="tcp-cancel">Cancel</button>
@@ -79,23 +169,30 @@ export function initTaskCreatorPanel() {
     const selectWrap = typeSelect.closest('.tcp-select-wrap');
     const contentLabel = contentGroup.querySelector('label');
     const contentTextarea = contentGroup.querySelector('textarea');
+    const imageOptions = panel.querySelector('#tcp-image-options');
 
     function applyType(type) {
       const isTrendResearch = type === 'trendresearch';
       const isLocalBrain = type === 'local_llm';
+      const isImageRender = type === 'image_render';
       const isDiscord = type === 'discord';
-      contentGroup.style.display = (isDiscord || isTrendResearch || isLocalBrain) ? '' : 'none';
+      contentGroup.style.display = (isDiscord || isTrendResearch || isLocalBrain || isImageRender) ? '' : 'none';
       channelGroup.style.display = isDiscord ? '' : 'none';
+      if (imageOptions) {
+        imageOptions.hidden = !isImageRender;
+      }
       if (selectWrap) {
         selectWrap.dataset.type = type;
       }
       if (contentLabel) {
-        contentLabel.textContent = isTrendResearch ? 'Keyword' : (isLocalBrain ? 'Prompt' : 'Message');
+        contentLabel.textContent = isTrendResearch ? 'Keyword' : ((isLocalBrain || isImageRender) ? 'Prompt' : 'Message');
       }
       if (contentTextarea) {
         contentTextarea.placeholder = isTrendResearch
           ? 'enter keyword e.g. fitness supplements\u2026'
-          : (isLocalBrain ? LOCAL_BRAIN_DEFAULT_PROMPT : 'write message content\u2026');
+          : (isLocalBrain
+              ? LOCAL_BRAIN_DEFAULT_PROMPT
+              : (isImageRender ? 'describe the product image to generate\u2026' : 'write message content\u2026'));
       }
     }
 
@@ -127,8 +224,14 @@ export function initTaskCreatorPanel() {
     const cancelButton = panel.querySelector('#tcp-cancel');
     const contentGroup = panel.querySelector('#tcp-content-group');
     const channelGroup = panel.querySelector('#tcp-channel-group');
+    const imageOptions = panel.querySelector('#tcp-image-options');
+    const negativePromptInput = panel.querySelector('#tcp-negative-prompt');
+    const widthInput = panel.querySelector('#tcp-image-width');
+    const heightInput = panel.querySelector('#tcp-image-height');
+    const stepsInput = panel.querySelector('#tcp-image-steps');
+    const cfgInput = panel.querySelector('#tcp-image-cfg');
 
-    if (!form || !typeSelect || !titleInput || !contentInput || !channelIdInput || !statusDiv || !cancelButton || !contentGroup || !channelGroup) {
+    if (!form || !typeSelect || !titleInput || !contentInput || !channelIdInput || !statusDiv || !cancelButton || !contentGroup || !channelGroup || !imageOptions || !negativePromptInput || !widthInput || !heightInput || !stepsInput || !cfgInput) {
       return;
     }
 
@@ -158,16 +261,30 @@ export function initTaskCreatorPanel() {
       updatePendingTaskStatus();
     });
 
-    channelIdInput.value = FIXED_DISCORD_CHANNEL_ID;
-    channelIdInput.readOnly = true;
+    function applyImageDefaults() {
+      negativePromptInput.value = IMAGE_RENDER_DEFAULTS.negativePrompt;
+      widthInput.value = String(IMAGE_RENDER_DEFAULTS.width);
+      heightInput.value = String(IMAGE_RENDER_DEFAULTS.height);
+      stepsInput.value = String(IMAGE_RENDER_DEFAULTS.steps);
+      cfgInput.value = String(IMAGE_RENDER_DEFAULTS.cfg);
+    }
 
-    bindTypeSelectUI(panel, typeSelect, contentGroup, channelGroup);
-
-    cancelButton.addEventListener('click', () => {
+    function resetFormToDiscord() {
       form.reset();
       typeSelect.value = 'discord';
       typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
       channelIdInput.value = FIXED_DISCORD_CHANNEL_ID;
+      applyImageDefaults();
+    }
+
+    channelIdInput.value = FIXED_DISCORD_CHANNEL_ID;
+    channelIdInput.readOnly = true;
+    applyImageDefaults();
+
+    bindTypeSelectUI(panel, typeSelect, contentGroup, channelGroup);
+
+    cancelButton.addEventListener('click', () => {
+      resetFormToDiscord();
       statusDiv.textContent = '';
       statusDiv.className = 'tcp-status';
       panel.classList.remove('is-dropdown-open');
@@ -181,7 +298,7 @@ export function initTaskCreatorPanel() {
       const content = contentInput.value.trim();
       const channelId = FIXED_DISCORD_CHANNEL_ID;
 
-      if (!title && type !== 'trendresearch' && type !== 'local_llm') {
+      if (!title && type !== 'trendresearch' && type !== 'local_llm' && type !== 'image_render') {
         statusDiv.textContent = 'Error: Title is required';
         statusDiv.className = 'tcp-status tcp-error';
         return;
@@ -222,10 +339,7 @@ export function initTaskCreatorPanel() {
 
           statusDiv.textContent = `waiting for engine... task ${requestId}`;
           statusDiv.className = 'tcp-status';
-          form.reset();
-          typeSelect.value = 'discord';
-          typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-          channelIdInput.value = FIXED_DISCORD_CHANNEL_ID;
+          resetFormToDiscord();
           panel.classList.remove('is-dropdown-open');
           return;
         }
@@ -233,6 +347,53 @@ export function initTaskCreatorPanel() {
         statusDiv.textContent = `Error: ${trendResult && trendResult.error ? trendResult.error : 'Task creation failed'}`;
         statusDiv.className = 'tcp-status tcp-error';
         return;
+      }
+
+      if (type === 'image_render') {
+        const prompt = content;
+        if (!prompt) {
+          statusDiv.textContent = 'Error: Prompt is required';
+          statusDiv.className = 'tcp-status tcp-error';
+          return;
+        }
+
+        try {
+          statusDiv.textContent = 'sending...';
+          statusDiv.className = 'tcp-status';
+
+          const imageRenderResult = await window.controlAPI.injectTask(buildImageRenderTaskPayload({
+            title,
+            prompt,
+            negativePrompt: negativePromptInput.value,
+            width: widthInput.value,
+            height: heightInput.value,
+            steps: stepsInput.value,
+            cfg: cfgInput.value
+          }));
+
+          if (imageRenderResult && imageRenderResult.success) {
+            const taskId = imageRenderResult && imageRenderResult.data && imageRenderResult.data.id
+              ? String(imageRenderResult.data.id)
+              : null;
+            panelRuntime.pendingTaskId = taskId;
+
+            statusDiv.textContent = taskId
+              ? `waiting for engine... task ${taskId}`
+              : 'waiting for engine...';
+            statusDiv.className = 'tcp-status';
+            resetFormToDiscord();
+            panel.classList.remove('is-dropdown-open');
+            return;
+          }
+
+          statusDiv.textContent = `Error: ${imageRenderResult && imageRenderResult.error ? imageRenderResult.error : 'Task creation failed'}`;
+          statusDiv.className = 'tcp-status tcp-error';
+          return;
+        } catch (error) {
+          statusDiv.textContent = `Error: ${error.message}`;
+          statusDiv.className = 'tcp-status tcp-error';
+          return;
+        }
       }
 
       if (type === 'local_llm') {
@@ -254,10 +415,7 @@ export function initTaskCreatorPanel() {
               ? `waiting for engine... task ${taskId}`
               : 'waiting for engine...';
             statusDiv.className = 'tcp-status';
-            form.reset();
-            typeSelect.value = 'discord';
-            typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-            channelIdInput.value = FIXED_DISCORD_CHANNEL_ID;
+            resetFormToDiscord();
             panel.classList.remove('is-dropdown-open');
             return;
           }
@@ -310,10 +468,7 @@ export function initTaskCreatorPanel() {
             : 'waiting for engine...';
           statusDiv.className = 'tcp-status';
 
-          form.reset();
-          typeSelect.value = 'discord';
-          typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-          channelIdInput.value = FIXED_DISCORD_CHANNEL_ID;
+          resetFormToDiscord();
           panel.classList.remove('is-dropdown-open');
         } else {
           statusDiv.textContent = `Error: ${result.error || 'Task creation failed'}`;

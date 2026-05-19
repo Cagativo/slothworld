@@ -75,6 +75,18 @@ function getImageRenderOutput(task) {
   return output;
 }
 
+function isSafePublicAssetUrl(value) {
+  if (typeof value !== 'string') return false;
+  const url = value.trim();
+  if (!url) return false;
+  if (/^https?:\/\//i.test(url)) return true;
+  if (/^\/(?:assets|generated-assets)\//.test(url)) return true;
+  if (url.startsWith('/') || url.startsWith('file:')) return false;
+  if (/^[a-zA-Z]:[\/]/.test(url)) return false;
+  if (url.includes('..')) return false;
+  return true;
+}
+
 function buildSafeAssetProjection(asset) {
   if (!asset || typeof asset !== 'object') {
     return null;
@@ -82,7 +94,7 @@ function buildSafeAssetProjection(asset) {
 
   return {
     id: asset.id || asset.assetId || null,
-    url: asset.url || asset.path || null,
+    url: isSafePublicAssetUrl(asset.url) ? asset.url.trim() : null,
     mimeType: asset.mimeType || 'image/png',
     provider: asset.provider || null
   };
@@ -101,7 +113,11 @@ export function projectSafeImageRenderOutput(output) {
     projected.asset = buildSafeAssetProjection(projected.asset);
     projected.assetId = projected.asset ? projected.asset.id : null;
     projected.imageUrl = projected.asset ? projected.asset.url : null;
-    projected.path = projected.asset ? projected.asset.url : null;
+    if (projected.asset && projected.asset.url) {
+      projected.path = projected.asset.url;
+    } else {
+      delete projected.path;
+    }
   }
 
   return projected;

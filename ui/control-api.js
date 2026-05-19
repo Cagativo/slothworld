@@ -28,6 +28,10 @@ function toTaskPayload(task) {
     normalized.intent = task.intent.trim();
   }
 
+  if (typeof task.action === 'string' && task.action.trim()) {
+    normalized.action = task.action.trim();
+  }
+
   if (Number.isFinite(task && task.priority)) {
     normalized.priority = Number(task.priority);
   }

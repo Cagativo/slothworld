@@ -25,6 +25,7 @@
 
 import { ASSET_MAPPING, loadedAssets } from './assets.js';
 import { CENTRAL_STRUCTURE, DECORATIONS } from './world-scene.js';
+import { SCENE_ANCHORS, SCENE_CANVAS } from './scene-anchors.js';
 import { renderTreehouseBackdrop } from './world-background-composition.js';
 import { spriteConfigs } from '../core/constants.js';
 import { compareByDepthY } from './scene-anchors.js';
@@ -145,6 +146,7 @@ const RESEARCH_CARD_MAX_ROWS = 3;
 const RESEARCH_CARD_VISIBLE_ROWS = 2;
 const RESEARCH_CARD_MAX_LINES_PER_ROW = 2;
 const trendPanelUIState = new Map();
+const generatedImageAssetCache = new Map();
 
 /**
  * Resolve the canvas position of an entity component.
@@ -245,6 +247,122 @@ export function wrapResearchCardText(ctx, text, maxWidth, maxLines = RESEARCH_CA
   return lines;
 }
 
+function getGeneratedImageAssetImage(url) {
+  if (typeof url !== 'string' || !url.trim()) return null;
+  const src = url.trim();
+  if (generatedImageAssetCache.has(src)) {
+    return generatedImageAssetCache.get(src);
+  }
+  if (typeof Image === 'undefined') {
+    return null;
+  }
+  const img = new Image();
+  img.src = src;
+  generatedImageAssetCache.set(src, img);
+  return img;
+}
+
+export function computeGeneratedImageAssetDisplayLayout(ctx) {
+  const canvasW = Number.isFinite(ctx?.canvas?.width) ? ctx.canvas.width : SCENE_CANVAS.width;
+  const canvasH = Number.isFinite(ctx?.canvas?.height) ? ctx.canvas.height : SCENE_CANVAS.height;
+  const anchorBounds = SCENE_ANCHORS.displaySurfaces.renderDeskGeneratedImage.bounds;
+  const scaleX = canvasW / SCENE_CANVAS.width;
+  const scaleY = canvasH / SCENE_CANVAS.height;
+
+  return Object.freeze({
+    x: anchorBounds.x * scaleX,
+    y: anchorBounds.y * scaleY,
+    width: anchorBounds.width * scaleX,
+    height: anchorBounds.height * scaleY,
+  });
+}
+
+function drawImageCover(ctx, img, x, y, width, height) {
+  const naturalW = Number.isFinite(img?.naturalWidth) && img.naturalWidth > 0 ? img.naturalWidth : width;
+  const naturalH = Number.isFinite(img?.naturalHeight) && img.naturalHeight > 0 ? img.naturalHeight : height;
+  const sourceRatio = naturalW / naturalH;
+  const targetRatio = width / height;
+  let sx = 0;
+  let sy = 0;
+  let sw = naturalW;
+  let sh = naturalH;
+
+  if (sourceRatio > targetRatio) {
+    sw = naturalH * targetRatio;
+    sx = (naturalW - sw) / 2;
+  } else if (sourceRatio < targetRatio) {
+    sh = naturalW / targetRatio;
+    sy = (naturalH - sh) / 2;
+  }
+
+  ctx.drawImage(img, sx, sy, sw, sh, x, y, width, height);
+}
+
+function renderGeneratedImageAssetDisplay(ctx, model, options = {}) {
+  const url = typeof model?.asset?.url === 'string' ? model.asset.url.trim() : '';
+  if (!url) return;
+
+  const layout = computeGeneratedImageAssetDisplayLayout(ctx);
+  const x = layout.x;
+  const y = layout.y;
+  const width = layout.width;
+  const height = layout.height;
+  const labelH = Math.max(10, height * 0.22);
+  const imageH = Math.max(1, height - labelH);
+
+  ctx.save();
+  ctx.globalAlpha = options.alpha ?? 1;
+  roundRect(ctx, x - 2, y - 2, width + 4, height + 4, 5);
+  ctx.fillStyle = 'rgba(5, 14, 16, 0.78)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(113, 239, 205, 0.72)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.save();
+  roundRect(ctx, x, y, width, imageH, 4);
+  ctx.clip();
+  ctx.fillStyle = 'rgba(12, 28, 30, 0.96)';
+  ctx.fillRect(x, y, width, imageH);
+  const img = getGeneratedImageAssetImage(url);
+  if (img && img.complete !== false) {
+    drawImageCover(ctx, img, x, y, width, imageH);
+  } else {
+    ctx.fillStyle = 'rgba(84, 229, 197, 0.18)';
+    ctx.fillRect(x, y, width, imageH);
+  }
+  ctx.restore();
+
+  const title = cleanCardText(model.title) || 'Generated image';
+  const status = cleanCardText(model.status) || 'done';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = '8px sans-serif';
+  ctx.fillStyle = '#dffcf2';
+  ctx.fillText(truncateText(ctx, title, width - 4), x + 2, y + imageH + labelH * 0.35);
+  ctx.fillStyle = '#8ff0d6';
+  ctx.fillText(truncateText(ctx, status, width - 4), x + 2, y + imageH + labelH * 0.78);
+
+  if (options.debug === true) {
+    ctx.font = '8px monospace';
+    ctx.fillStyle = '#f4fff9';
+    const provider = cleanCardText(model.provider);
+    const debugRows = [
+      model.taskId ? 'task ' + model.taskId : null,
+      model.asset?.id ? 'asset ' + model.asset.id : null,
+      provider || null,
+      model.asset?.mimeType || null,
+      url,
+    ].filter(Boolean);
+    let rowY = y + height + 10;
+    for (const row of debugRows.slice(0, 5)) {
+      ctx.fillText(truncateText(ctx, row, Math.max(width, 130)), x, rowY);
+      rowY += 10;
+    }
+  }
+
+  ctx.restore();
+}
 function findResearchDeskCardComponent(components) {
   if (!Array.isArray(components)) return null;
   return components.find((entry) => entry
@@ -1326,6 +1444,17 @@ export function renderUIOverlayLayer(ctx, components, entityPositions, options =
   if (options.debug !== true) {
     renderResearchDeskResultCard(ctx, researchCardModel);
   }
+  const generatedImageAssetModel = options.stationSnapshots
+    && options.stationSnapshots.render_desk
+    && options.stationSnapshots.render_desk.generatedImageAsset
+    && options.stationSnapshots.render_desk.generatedImageAsset.kind === 'generatedImageAsset'
+    ? options.stationSnapshots.render_desk.generatedImageAsset
+    : null;
+
+  if (generatedImageAssetModel) {
+    renderGeneratedImageAssetDisplay(ctx, generatedImageAssetModel, { debug: options.debug === true });
+  }
+
 
   // ── Pass 2: update renderer-local state ──────────────────────────────────
 
